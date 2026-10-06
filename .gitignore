@@ -1,0 +1,28 @@
+# Node / сборка
+node_modules/
+dist/
+dev-dist/
+*.local
+
+# Зависимости инструментов
+.cache/
+.vite/
+
+# Резервные копии (не для git)
+backups/
+
+# Служебное
+*.log
+.visible-*
+.vis-test*
+.zcode/
+Thumbs.db
+.DS_Store
+
+# Тесты
+coverage/
+playwright-report/
+test-results/
+
+# Файлы интерфейса ZCode, не относящиеся к проекту
+.zcodeignore
