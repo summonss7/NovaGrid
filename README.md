@@ -3,8 +3,10 @@
 **Простая кроссплатформенная программа для работы с таблицами.**
 Откройте xls/xlsx/csv на любом устройстве, найдите, отфильтруйте, сложите — без изучения Excel.
 
-> Статус проекта: **Этап 0 «Фундамент»** — каркас приложения и CI заложены (карточка novagrid-003),
-> документация на согласовании. GitHub Pages заблокирован планом GitHub — см. раздел «CI и GitHub Pages».
+> Статус проекта: **Этап 0 «Фундамент» завершается** — полный каркас приложения готов (карточка
+> novagrid-004): фирменные дизайн-токены, self-host шрифты, SVG-логотип, каркас главного экрана,
+> Playwright e2e в CI. Осталось согласование документации (0.1); GitHub Pages заблокирован планом
+> GitHub — см. раздел «CI и GitHub Pages».
 
 ---
 
@@ -36,7 +38,9 @@
 | Surface | ⬜ нейтральный | `#EDEDEB` | панели, заголовки таблицы |
 | Mint | 🟪 мятный | `#E8F8EC` | подсветка найденного, чипы фильтров |
 
-Шрифты: **Montserrat** (заголовки, логотип) + **Open Sans** (таблицы, интерфейс). Полная система — в [docs/DESIGN-SYSTEM.md](docs/DESIGN-SYSTEM.md).
+Шрифты: **Montserrat** (заголовки, логотип) + **Open Sans** (таблицы, интерфейс) — self-host
+(переменные woff2 лежат в `src/ui/assets/fonts/`, без внешних CDN). Все значения собраны в
+дизайн-токены `src/ui/tokens.css`. Полная система — в [docs/DESIGN-SYSTEM.md](docs/DESIGN-SYSTEM.md).
 
 ## Документация
 
@@ -61,7 +65,7 @@
 
 ### CI и GitHub Pages (карточка novagrid-003)
 
-- **CI** — [.github/workflows/ci.yml](.github/workflows/ci.yml): на каждый пуш в `main` и на каждый PR выполняется ESLint → typecheck (`tsc`) → юнит-тесты (Vitest) → сборка (Vite).
+- **CI** — [.github/workflows/ci.yml](.github/workflows/ci.yml): на каждый пуш в `main` и на каждый PR выполняется ESLint → typecheck (`tsc`) → юнит-тесты (Vitest) → **e2e (Playwright, Chromium: стартовый экран, фирменные цвета, self-host шрифты)** → сборка (Vite).
 - **Деплой** — [.github/workflows/deploy-pages.yml](.github/workflows/deploy-pages.yml): на каждый пуш в `main` собирает приложение и публикует на GitHub Pages (Source: GitHub Actions; сборка с относительными путями `base: './'`, поэтому работает из подкаталога `/NovaGrid/`).
 - **Сейчас деплой пропускается**: репозиторий приватный, а Pages для приватных репозиториев доступен только на платных планах GitHub (API отвечает «plan does not support»). Workflow сам проверяет доступность Pages и пропускает шаги деплоя с пометкой в логе — рант не краснеет.
 - **Как включить Pages** (решение владельца, карточка novagrid-003 заблокирована на этом пункте): перевести репозиторий в public (запланировано на КТ-5 вместе с v1.0) **или** перейти на платный план; затем в Settings → Pages выбрать Source: **GitHub Actions**. После этого деплой пойдёт автоматически на следующий пуш в `main`; адрес сайта: **https://summonss7.github.io/NovaGrid/**.
@@ -76,12 +80,20 @@ NovaGrid/
 ├── docs/                   # концепция, архитектура, дизайн, карта создания
 ├── CARDS/                  # карточки задач диспетчера
 ├── backup.bat / backup.ps1 # резервная копия проекта (в backups/)
-├── .github/workflows/      # ci.yml (линт·тесты·сборка) и deploy-pages.yml (деплой)
+├── .github/workflows/      # ci.yml (линт·тесты·e2e·сборка) и deploy-pages.yml (деплой)
 ├── index.html              # точка входа веб-приложения
-├── src/                    # код приложения (каркас Этапа 0)
-│   ├── core/               # чистая логика без DOM — покрывается юнит-тестами
-│   ├── App.tsx / app.css   # стартовый экран в фирменных цветах
-│   └── main.tsx            # входная точка React
-├── package.json            # скрипты: dev / build / lint / typecheck / test
+├── public/favicon.svg      # фирменный знак «N» (фавикон)
+├── src/                    # код приложения — слои по ARCHITECTURE.md §6
+│   ├── app/                # точка входа, компоновка единственного экрана
+│   ├── core/               # модель книги — чистый TS без DOM, юнит-тесты
+│   ├── formula/            # движок формул (заполняется на Этапе 4)
+│   ├── grid/               # канвас-грид (заполняется на Этапе 1)
+│   ├── io/                 # чтение/запись xls/xlsx/csv (заполняется на Этапе 2)
+│   ├── storage/            # IndexedDB-сессии (заполняется на Этапе 2)
+│   ├── i18n/               # ru/en словари интерфейса
+│   └── ui/                 # React-компоненты каркаса, дизайн-токены, self-host шрифты
+├── tests/                  # Playwright e2e (стартовый экран; сценарии ТЗ — с Этапов 1–3)
+├── playwright.config.ts    # e2e против dev-сервера, Chromium
+├── package.json            # скрипты: dev / build / lint / typecheck / test / e2e
 └── vite.config.ts          # Vite + Vitest (base './' под GitHub Pages)
 ```

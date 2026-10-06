@@ -26,5 +26,9 @@ jobs:
         run: npm run typecheck
       - name: Unit tests (Vitest)
         run: npm run test
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+      - name: E2e (Playwright)
+        run: npm run e2e
       - name: Build (Vite)
         run: npm run build

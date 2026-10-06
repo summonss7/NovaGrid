@@ -6,3 +6,8 @@ promt.txt
 README.md
 ROADMAP.md
 package-lock.json
+
+# Артефакты Playwright
+playwright-report/
+test-results/
+ AGENTS.md

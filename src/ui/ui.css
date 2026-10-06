@@ -1,0 +1,320 @@
+/*
+ * Стили UI-компонентов NovaGrid — собственный CSS на дизайн-токенах
+ * (стек: без UI-кита, ARCHITECTURE §2). Все цвета/радиусы/тени — только
+ * через --nv-* из tokens.css.
+ */
+
+/* ── Кнопки ──────────────────────────────────────────────────────────── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 14px;
+  border: none;
+  border-radius: var(--nv-radius-btn);
+  font-family: var(--nv-font-display);
+  font-size: var(--nv-size-ui);
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.btn-primary {
+  background: var(--nv-primary-deep);
+  color: var(--nv-bg);
+}
+
+.btn-primary:hover {
+  background: var(--nv-primary-deep-hover);
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--nv-ink);
+}
+
+.btn-ghost:hover {
+  background: rgba(43, 43, 43, 0.07);
+}
+
+.btn-icon {
+  padding: 8px;
+}
+
+/* ── Логотип ─────────────────────────────────────────────────────────── */
+.logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.logo-mark {
+  display: block;
+  filter: drop-shadow(var(--nv-shadow));
+}
+
+.logo-word {
+  font-family: var(--nv-font-display);
+  font-weight: 700;
+  font-size: var(--nv-size-title);
+  color: var(--nv-ink);
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+
+.logo-word-grid {
+  color: var(--nv-primary-deep);
+}
+
+/* ── Поиск ───────────────────────────────────────────────────────────── */
+.search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 260px;
+  max-width: 32vw;
+  padding: 7px 10px;
+  background: var(--nv-bg);
+  border: 1.5px solid var(--nv-grid-line);
+  border-radius: var(--nv-radius-btn);
+  color: var(--nv-ink-soft);
+  transition: border-color 0.15s;
+}
+
+.search:focus-within {
+  border-color: var(--nv-accent);
+}
+
+.search-input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-family: var(--nv-font-text);
+  font-size: var(--nv-size-ui);
+  color: var(--nv-ink);
+}
+
+.search-input::placeholder {
+  color: var(--nv-ink-soft);
+}
+
+.search-kbd {
+  font-family: var(--nv-font-text);
+  font-size: 11px;
+  color: var(--nv-ink-soft);
+  border: 1px solid var(--nv-grid-line);
+  border-radius: 5px;
+  padding: 1px 5px;
+  white-space: nowrap;
+}
+
+/* ── Большая кнопка Σ (§6: 56 px, оранжевая, всегда на виду) ────────── */
+.sum-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  width: 56px;
+  height: 56px;
+  border: none;
+  border-radius: var(--nv-radius-panel);
+  background: var(--nv-accent);
+  color: var(--nv-bg);
+  cursor: pointer;
+  box-shadow: var(--nv-shadow);
+}
+
+.sum-btn:hover {
+  background: var(--nv-accent-deep);
+}
+
+.sum-symbol {
+  font-family: var(--nv-font-display);
+  font-size: var(--nv-size-sum-symbol);
+  font-weight: 700;
+  line-height: 1;
+}
+
+.sum-caption {
+  font-family: var(--nv-font-display);
+  font-size: 7.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: 1;
+}
+
+/* ── Строка формул ───────────────────────────────────────────────────── */
+.formula-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 14px;
+  background: var(--nv-bg);
+  border-bottom: 1px solid var(--nv-grid-line);
+}
+
+.formula-badge {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-style: italic;
+  font-size: 13px;
+  color: var(--nv-ink-soft);
+}
+
+.formula-input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-family: var(--nv-font-text);
+  font-size: var(--nv-size-ui);
+  color: var(--nv-ink);
+  cursor: default;
+}
+
+.formula-input::placeholder {
+  color: var(--nv-ink-soft);
+}
+
+/* ── Скелет грида ────────────────────────────────────────────────────── */
+.grid-skeleton {
+  display: grid;
+  grid-template-columns: 44px repeat(6, minmax(96px, 1fr));
+  grid-auto-rows: 30px;
+  width: 100%;
+  border-right: 1px solid var(--nv-grid-line);
+}
+
+.grid-cell {
+  border-bottom: 1px solid var(--nv-grid-line);
+  border-left: 1px solid var(--nv-grid-line);
+  background: var(--nv-bg);
+}
+
+.grid-head {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--nv-surface);
+  font-family: var(--nv-font-text);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--nv-ink-soft);
+}
+
+.grid-corner {
+  border-right: 1px solid var(--nv-grid-line);
+}
+
+.grid-rowhead {
+  font-variant-numeric: tabular-nums;
+}
+
+.grid-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  padding: 24px;
+}
+
+.grid-overlay-card {
+  max-width: 380px;
+  padding: 26px 30px;
+  background: var(--nv-bg);
+  border-radius: var(--nv-radius-panel);
+  border: 1px solid var(--nv-grid-line);
+  box-shadow: var(--nv-shadow);
+  text-align: center;
+}
+
+.grid-overlay-title {
+  font-family: var(--nv-font-display);
+  font-weight: 700;
+  font-size: 16px;
+  color: var(--nv-ink);
+  margin-bottom: 8px;
+}
+
+.grid-overlay-text {
+  margin: 0;
+  font-family: var(--nv-font-text);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--nv-ink-soft);
+}
+
+/* ── Панель листов ───────────────────────────────────────────────────── */
+.sheets-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 5px 10px;
+  background: var(--nv-surface);
+  border-top: 1px solid var(--nv-grid-line);
+}
+
+.sheets-tabs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sheet-tab {
+  padding: 5px 16px;
+  border: 1px solid var(--nv-grid-line);
+  border-radius: var(--nv-radius-btn) var(--nv-radius-btn) 0 0;
+  background: var(--nv-bg);
+  font-family: var(--nv-font-text);
+  font-size: 13px;
+  color: var(--nv-ink-soft);
+  cursor: pointer;
+}
+
+.sheet-tab-active {
+  color: var(--nv-ink);
+  font-weight: 600;
+  border-top: 2px solid var(--nv-primary);
+  border-bottom-color: var(--nv-bg);
+  margin-bottom: -6px; /* «приклеить» вкладку к гриду */
+}
+
+.sheets-note {
+  font-family: var(--nv-font-text);
+  font-size: 12px;
+  color: var(--nv-ink-soft);
+}
+
+/* ── Статус-бар ──────────────────────────────────────────────────────── */
+.status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 5px 14px;
+  background: var(--nv-surface);
+  border-top: 1px solid var(--nv-grid-line);
+  font-family: var(--nv-font-text);
+  font-size: 12px;
+  color: var(--nv-ink-soft);
+}
+
+.status-phase {
+  font-weight: 600;
+}
+
+.status-metrics {
+  display: flex;
+  gap: 16px;
+  font-variant-numeric: tabular-nums;
+}
+
+.status-metric {
+  white-space: nowrap;
+}
