@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   ci:
-    name: 'lint · typecheck · test · build'
+    name: 'lint · typecheck · test · e2e · build'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
