@@ -42,8 +42,8 @@ graph LR
 ### Этап 0 — Фундамент (≈ 1 неделя)
 **Цель:** согласованная документация + скелет приложения.
 - 0.1 Согласование: пользователь читает `docs/`, отвечает на открытые вопросы (CONCEPT.md §6) ✅ *документы готовы — жду согласования*
-- 0.2 Репозиторий: git + GitHub remote + CI (Actions: lint/typecheck/test/build)
-- 0.3 Каркас: Vite + React + TS, ESLint/Prettier, Vitest + Playwright пустые прогоны
+- 0.2 Репозиторий: git + GitHub remote + CI (Actions: lint/typecheck/test/build) ✅ *CI зелёный (novagrid-003); Pages подготовлен, но заблокирован планом GitHub до решения владельца*
+- 0.3 Каркас: Vite + React + TS, ESLint/Prettier, Vitest + Playwright пустые прогоны 🟡 *минимальный каркас заложен в novagrid-003 (субстрат для CI); полный каркас + Playwright — карточка CARDS/004*
 - 0.4 Дизайн-токены (палитра, шрифты self-host), SVG-логотип по макету
 - 0.5 Каркас UI: тулбар, строка формул (заглушка), панель листов, статус-бар, стартовый экран
 

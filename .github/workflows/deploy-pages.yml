@@ -1,0 +1,58 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    # Деплой сам определяет, доступен ли GitHub Pages: репозиторий сейчас приватный
+    # на бесплатном плане, и Pages для него выключен (API отвечает 422 "plan does not
+    # support"). Пока Pages не включён владельцем (перевод репозитория в public по КТ-5
+    # или апгрейд плана + Settings → Pages → Source: GitHub Actions), шаги деплоя
+    # пропускаются с пометкой в логе; после включения деплой пойдёт на каждый пуш в main.
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    permissions:
+      pages: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Build
+        run: npm run build
+      - name: Check GitHub Pages availability
+        id: pages-check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh api "repos/$GITHUB_REPOSITORY/pages" > /dev/null 2>&1; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "GitHub Pages не включён для репозитория — деплой пропущен (см. README, раздел «CI и GitHub Pages»)."
+          fi
+      - uses: actions/configure-pages@v6
+        if: steps.pages-check.outputs.available == 'true'
+      - uses: actions/upload-pages-artifact@v5
+        if: steps.pages-check.outputs.available == 'true'
+        with:
+          path: dist
+      - id: deployment
+        uses: actions/deploy-pages@v5
+        if: steps.pages-check.outputs.available == 'true'

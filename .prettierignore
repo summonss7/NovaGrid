@@ -1,0 +1,8 @@
+# Код форматируем, документы проекта — не трогаем
+backups/
+CARDS/
+docs/
+promt.txt
+README.md
+ROADMAP.md
+package-lock.json
