@@ -54,3 +54,18 @@
 Окончание выполнения: 06.10.2026, 15:55:00
 Полный журнал и критерии — в карточке CARDS/002-настроить-удалённый-репозиторий-GitHub-и-пуш.md.
 
+## 06.10.2026 16:21 — CI (GitHub Actions) и деплой GitHub Pages (карточка novagrid-003)
+- Что сделано:
+  - Перед изменениями снят бэкап: backups/NovaGrid-backup-2026-10-06_161041.zip (234 КБ).
+  - Кода в проекте ещё не было — для осмысленного CI заложен минимальный каркас (стек по docs/ARCHITECTURE.md): Vite 6 + React 18 + TypeScript strict; ESLint 9 (flat-конфиг) + Prettier; Vitest — 4 юнит-теста чистого ядра src/core/stats (sum/average); стартовый экран в фирменных цветах (макет «таблица + большая кнопка Σ»); сборка с base './' для отдачи из подкаталога GitHub Pages /NovaGrid/. Конфликт типов двойного vite (vitest@2 нёс свой vite@5) решён апгрейдом vitest до ^3 — vite один на всех (6.4.4).
+  - .github/workflows/ci.yml: на каждый пуш в main и каждый PR — npm ci → ESLint → typecheck (tsc) → юнит-тесты (Vitest) → сборка (Vite); Node 24, ubuntu-latest, кэш npm; версии экшенов (checkout@v7, setup-node@v7) сверены с API GitHub.
+  - .github/workflows/deploy-pages.yml: на пуш в main — сборка и деплой на GitHub Pages официальными экшенами (configure-pages@v6 / upload-pages-artifact@v5 / deploy-pages@v5); шаги публикации защищены авто-проверкой доступности Pages (gh api), поэтому пока Pages не включён рант завершается успехом с пропуском деплоя и пометкой в логе — CI не краснеет.
+  - Включить GitHub Pages не удалось (случай из задачи): репозиторий приватный на бесплатном плане — API GitHub отвечает 422 «Your current plan does not support GitHub Pages for this repository». Решение за владельцем: перевод репозитория в public (запланирован на КТ-5) или платный план; после этого выбрать Settings → Pages → Source: GitHub Actions — деплой пойдёт автоматически на следующий пуш, адрес https://summonss7.github.io/NovaGrid/. Способ задокументирован в README, раздел «Как ведётся работа» → «CI и GitHub Pages».
+  - Документация: README — статус проекта (Этап 0), раздел «CI и GitHub Pages», фактическая структура репозитория; ROADMAP — статус Этапа 0, риск №8 (Pages на приватном репо), запись в истории изменений; docs/CREATION-MAP.md — отметки по пунктам 0.2 (✅) и 0.3 (🟡). Создана карточка CARDS/004 — полный каркас Этапа 0 (0.3–0.5: Playwright, дизайн-токены, self-host шрифты, SVG-логотип, каркас UI).
+- Как проверено: локально весь конвейер зелёный — lint 0 ошибок, typecheck чисто, тесты 4/4 passed, vite build собирает dist с относительными путями (проверено по dist/index.html). На GitHub: прогон 1 — CI success (ран id 37469702904), а деплой упал на checkout (job-level permissions pages/id-token затирали contents: read); исправлено коммитом 6938e97. Прогон 2 — CI success (id 37469899270) и Deploy to GitHub Pages success (id 37469899092): сборка выполняется, шаги публикации пропущены by design, пока Pages не включён. Доступность Pages проверена API (422 — план не поддерживает).
+- Коммит: a34164d «feat(novagrid-003): каркас Vite+React+TS с ESLint/Vitest и CI GitHub Actions», 6938e97 «fix(novagrid-003): deploy-pages — contents: read» + закрывающий коммит с карточкой 003 (blocked) и этим отчётом; всё запушено в origin/main.
+- Что дальше: решение владельца по Pages (перевод репозитория в public на КТ-5 или платный план) — единственный незакрытый критерий карточки novagrid-003 (status: blocked). Дальше по плану CARDS/004 — полный каркас Этапа 0.
+Начало выполнения: 06.10.2026, 16:09:00
+Окончание выполнения: 06.10.2026, 16:21:00
+Полный журнал и критерии — в карточке CARDS/003-этап-0-CI-GitHub-Actions-и-GitHub-Pages.md.
+

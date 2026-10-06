@@ -1,7 +1,7 @@
 ---
 id: novagrid-003
 title: Этап 0 — включить CI (GitHub Actions) и GitHub Pages для NovaGrid
-status: todo
+status: blocked
 priority: 3
 created: 2026-10-06
 updated: 2026-10-06
@@ -19,9 +19,19 @@ session: ""
    репозитория в public (запланировано на КТ-5, v1.0) или использование плана.
 
 ## Критерии готовности
-- [ ] workflow CI в .github/workflows запускается и зелёный на пуше в main
-- [ ] GitHub Pages отдаёт собранное приложение по публичному URL
-- [ ] способ деплоя задокументирован в README (раздел «Как ведётся работа»)
+- [x] workflow CI в .github/workflows запускается и зелёный на пуше в main
+- [ ] GitHub Pages отдаёт собранное приложение по публичному URL — **блокер: план GitHub**
+- [x] способ деплоя задокументирован в README (раздел «Как ведётся работа»)
 
 ## Журнал
 - 06.10.2026: карточка создана из опционального пункта novagrid-002 (CI/Pages отложены до Этапа 0).
+
+
+- 06.10.2026, 16:08:42: диспетчер взял задачу в работу (новый запуск).
+- 06.10.2026: бэкап до изменений (backups/NovaGrid-backup-2026-10-06_161041.zip). Кода в проекте ещё не было — для осмысленного CI заложен минимальный каркас (стек по docs/ARCHITECTURE.md): Vite 6 + React 18 + TS strict, ESLint 9 (flat) + Prettier, Vitest (4 юнит-теста чистого ядра src/core/stats), стартовый экран в фирменных цветах; сборка с base './' под подкаталог Pages. Конфликт типов vite@6/vitest@2 (двойной vite) решён апгрейдом vitest до ^3.
+- 06.10.2026: созданы .github/workflows/ci.yml (checkout@v7/setup-node@v7, Node 24, npm ci → lint → typecheck → test → build; триггеры: пуш в main + PR; версии экшенов сверены с API GitHub) и deploy-pages.yml (деплой сборки официальными экшенами configure-pages/upload-pages-artifact/deploy-pages; шаги публикации за условием авто-проверки доступности Pages через gh api — рант не краснеет, пока Pages не включён).
+- 06.10.2026: включить Pages не удалось — репозиторий приватный на бесплатном плане: API отвечает 422 «Your current plan does not support GitHub Pages for this repository» (случай, предусмотренный задачей). Решение за владельцем: перевод репозитория в public (КТ-5) или платный план → затем Settings → Pages → Source: GitHub Actions; деплой пойдёт автоматически на следующий пуш, адрес https://summonss7.github.io/NovaGrid/.
+- 06.10.2026: прогон 1 после пуша: CI success (ран id 37469702904); Deploy to GitHub Pages — failure: job-level permissions (pages/id-token) затирали contents: read, checkout падал. Исправлено коммитом 6938e97.
+- 06.10.2026: прогон 2: CI success (id 37469899270); Deploy to GitHub Pages success (id 37469899092) — сборка выполняется, шаги публикации корректно пропущены с пометкой в логе, пока Pages не включён.
+- 06.10.2026: документация обновлена: README (раздел «CI и GitHub Pages», фактическая структура репозитория, статус), ROADMAP (статус Этапа 0, риск №8, история изменений), docs/CREATION-MAP.md (отметки 0.2 ✅ / 0.3 🟡). Создана карточка CARDS/004 на полный каркас Этапа 0 (0.3–0.5: Playwright, дизайн-токены, self-host шрифты, SVG-логотип, каркас UI).
+- 06.10.2026: СТАТУС blocked — единственный незакрытый критерий «Pages отдаёт приложение по публичному URL» невозможен на приватном репозитории с бесплатным планом; остальное готово и проверено по факту. После решения владельца включить Pages и закрыть карточку, отметив критерий по факту.
