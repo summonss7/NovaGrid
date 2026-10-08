@@ -111,12 +111,7 @@ export function GridCanvas() {
   useEffect(() => {
     themeRef.current = themeFromCSS()
 
-    // стартовый режим: демо-данные или стресс (?stress=100000 — проверка 100k×30)
-    const params = new URLSearchParams(window.location.search)
-    const stress = params.get('stress')
-    if (stress) gridStore.getState().seedStress(Math.max(1, Math.trunc(Number(stress)) || 1000), 30)
-    else gridStore.getState().seedDemo()
-
+    // стартовый режим (демо/стресс) выбирает App — грид только рисует
     installTestHook({
       main: () => mainRef.current,
       scroll: () => scrollRef.current,

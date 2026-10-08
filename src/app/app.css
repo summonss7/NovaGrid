@@ -21,6 +21,11 @@ body {
   height: 100%;
 }
 
+/* Корень App (стартовый экран или книга) — всегда на всю высоту вьюпорта */
+.app-root {
+  height: 100%;
+}
+
 .app-shell {
   display: flex;
   flex-direction: column;

@@ -5,7 +5,7 @@
  */
 
 import { normalize, type Range, type Selection } from '../core/selection'
-import { getCell, isNumericCell, type SheetModel } from '../core/sheet'
+import { cellKey, getCell, isNumericCell, type SheetModel } from '../core/sheet'
 import type { EditState } from '../core/store'
 import { colName, METRICS, visibleCols, visibleRows } from './geometry'
 
@@ -21,6 +21,7 @@ export interface GridTheme {
   altBorder: string
   greenBorder: string
   fontCell: string
+  fontCellBold: string
   fontHeader: string
 }
 
@@ -41,6 +42,7 @@ export function themeFromCSS(): GridTheme {
     altBorder: v('--nv-accent', '#f26b21'),
     greenBorder: v('--nv-primary-deep', '#2ba84a'),
     fontCell: `13.5px ${FALLBACK_FONT}`,
+    fontCellBold: `600 13.5px ${FALLBACK_FONT}`,
     fontHeader: `600 12px ${FALLBACK_FONT}`,
   }
 }
@@ -94,6 +96,20 @@ export function drawGrid(input: DrawInput): VisibleRegion {
   ctx.rect(m.rowHeaderW, m.headerH, width - m.rowHeaderW, height - m.headerH)
   ctx.clip()
 
+  // ── заливки стилей из .xlsx (Этап 2): до сетки — линии остаются поверх ──
+  for (let r = rows.first; r <= lastRow; r++) {
+    const y = m.headerH + r * m.rowH - scrollY
+    if (y + m.rowH <= m.headerH || y >= height) continue
+    for (let c = cols.first; c <= lastCol; c++) {
+      const bg = sheet.styles.get(cellKey(r, c))?.bg
+      if (!bg) continue
+      const x = m.rowHeaderW + c * m.colW - scrollX
+      if (x + m.colW <= m.rowHeaderW || x >= width) continue
+      ctx.fillStyle = `#${bg}`
+      ctx.fillRect(x, y, m.colW, m.rowH)
+    }
+  }
+
   // ── линии сетки ──
   ctx.strokeStyle = theme.gridLine
   ctx.lineWidth = 1
@@ -110,10 +126,8 @@ export function drawGrid(input: DrawInput): VisibleRegion {
   }
   ctx.stroke()
 
-  // ── текст ячеек (числа — вправо, текст — влево) ──
-  ctx.font = theme.fontCell
+  // ── текст ячеек (числа — вправо, текст — влево; стиль .xlsx — поверх) ──
   ctx.textBaseline = 'middle'
-  ctx.fillStyle = theme.ink
   ctx.textAlign = 'left'
   const pad = 6
   for (let r = rows.first; r <= lastRow; r++) {
@@ -123,17 +137,26 @@ export function drawGrid(input: DrawInput): VisibleRegion {
       if (raw === '') continue
       if (edit && edit.row === r && edit.col === c) continue
       const x = m.rowHeaderW + c * m.colW - scrollX
+      const style = sheet.styles.get(cellKey(r, c))
       const numeric = isNumericCell(sheet, r, c)
+      ctx.font = style?.bold ? theme.fontCellBold : theme.fontCell
+      ctx.fillStyle = style?.fg ? `#${style.fg}` : theme.ink
       const text = ellipsize(ctx, raw, m.colW - pad * 2)
-      if (numeric) {
+      const align = style?.align ?? (numeric ? 'right' : 'left')
+      if (align === 'right') {
         ctx.textAlign = 'right'
         ctx.fillText(text, x + m.colW - pad, cy)
+        ctx.textAlign = 'left'
+      } else if (align === 'center') {
+        ctx.textAlign = 'center'
+        ctx.fillText(text, x + m.colW / 2, cy)
         ctx.textAlign = 'left'
       } else {
         ctx.fillText(text, x + pad, cy)
       }
     }
   }
+  ctx.font = theme.fontCell
 
   // ── заливки и рамки выделения (Ф5: каждая область со своей рамкой) ──
   for (const rg of selection.ranges) {

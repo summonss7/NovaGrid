@@ -11,9 +11,24 @@ export type CellRaw = string
 export const MIN_ROWS = 100
 export const MIN_COLS = 26
 
+/**
+ * Минимальный стиль ячейки, который честно переносится файл⇄модель (Этап 2):
+ * жирность, выравнивание, заливка и цвет текста. Форматы чисел — Этап 4+.
+ */
+export interface CellStyle {
+  bold?: boolean
+  align?: 'left' | 'center' | 'right'
+  /** заливка RRGGBB (без альфы и решётки) */
+  bg?: string
+  /** цвет текста RRGGBB */
+  fg?: string
+}
+
 export interface SheetModel {
   /** ключ `${row}:${col}`, индексация с 0 */
   cells: Map<string, CellRaw>
+  /** стили только заполненных ячеек — тем же ключом (переносятся из .xlsx) */
+  styles: Map<string, CellStyle>
   /** логический размер листа (в пределах можно навигироваться) */
   rows: number
   cols: number
@@ -27,7 +42,7 @@ export function cellKey(row: number, col: number): string {
 }
 
 export function createSheet(rows = MIN_ROWS, cols = MIN_COLS): SheetModel {
-  return { cells: new Map(), rows, cols, maxRow: -1, maxCol: -1 }
+  return { cells: new Map(), styles: new Map(), rows, cols, maxRow: -1, maxCol: -1 }
 }
 
 export function getCell(sheet: SheetModel, row: number, col: number): CellRaw {
@@ -46,6 +61,7 @@ export function withCell(sheet: SheetModel, row: number, col: number, value: Cel
   const touched = value !== ''
   return {
     cells,
+    styles: sheet.styles,
     rows: Math.max(sheet.rows, row + 1),
     cols: Math.max(sheet.cols, col + 1),
     maxRow: touched ? Math.max(sheet.maxRow, row) : sheet.maxRow,
@@ -63,6 +79,24 @@ export function parseNumber(raw: CellRaw): number | null {
   if (!/^[+-]?\d+([.,]\d+)?$/.test(s)) return null
   const n = Number(s.replace(',', '.'))
   return Number.isFinite(n) ? n : null
+}
+
+export function getStyle(sheet: SheetModel, row: number, col: number): CellStyle | undefined {
+  return sheet.styles.get(cellKey(row, col))
+}
+
+/** Иммутабельная установка стиля (аналог withCell). */
+export function withStyle(
+  sheet: SheetModel,
+  row: number,
+  col: number,
+  style: CellStyle | undefined,
+): SheetModel {
+  const key = cellKey(row, col)
+  const styles = new Map(sheet.styles)
+  if (!style || Object.keys(style).length === 0) styles.delete(key)
+  else styles.set(key, style)
+  return { ...sheet, styles }
 }
 
 export function isNumericCell(sheet: SheetModel, row: number, col: number): boolean {

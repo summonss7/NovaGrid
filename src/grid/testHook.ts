@@ -1,7 +1,7 @@
 /*
- * Тест-хук e2e: устанавливается только при ?test=1 — в обычном режиме в
- * приложении его нет. Даёт Playwright доступ к состоянию грида (значения
- * ячеек канваса недоступны DOM-локаторами) и к статистике кадров.
+ * Тест-хук e2e: устанавливается только при ?test=1 / ?testui=1 — в обычном
+ * режиме в приложении его нет. Даёт Playwright доступ к состоянию грида
+ * (значения ячеек канваса недоступны DOM-локаторам) и к статистике кадров.
  */
 
 import { normalize } from '../core/selection'
@@ -10,8 +10,19 @@ import { gridStore, selectionMetrics, type EditState } from '../core/store'
 import { cellRefName, cellRect } from './geometry'
 import { drawStats, type VisibleRegion } from './renderer'
 
+export interface NvBookInfo {
+  fileName: string | null
+  dirty: boolean
+  tabs: string[]
+  activeTab: number
+  rows: number
+  cols: number
+}
+
 export interface NvTestApi {
   cell: (row: number, col: number) => string
+  /** ячейка произвольного листа по индексу вкладки (многолистовые проверки) */
+  cellIn: (tab: number, row: number, col: number) => string
   activeRef: () => string
   metrics: () => { total: number; count: number; mean: number; filled: number }
   ranges: () => string[]
@@ -21,6 +32,7 @@ export interface NvTestApi {
   scrollTo: (x: number, y: number) => void
   cellCenter: (row: number, col: number) => { x: number; y: number }
   editor: () => EditState | null
+  book: () => NvBookInfo
 }
 
 declare global {
@@ -36,9 +48,15 @@ export interface TestHookRefs {
 }
 
 export function installTestHook(refs: TestHookRefs): void {
-  if (!new URLSearchParams(window.location.search).has('test')) return
+  const params = new URLSearchParams(window.location.search)
+  if (!params.has('test') && !params.has('testui')) return
   window.__nv = {
     cell: (row, col) => getCell(gridStore.getState().sheet, row, col),
+    cellIn: (tab, row, col) => {
+      const st = gridStore.getState()
+      const t = st.tabs[Math.min(Math.max(tab, 0), st.tabs.length - 1)]
+      return t ? getCell(t.sheet, row, col) : ''
+    },
     activeRef: () => {
       const { active } = gridStore.getState().selection
       return cellRefName(active.row, active.col)
@@ -79,5 +97,16 @@ export function installTestHook(refs: TestHookRefs): void {
       return { x: mainRect.left + r.x + r.w / 2, y: mainRect.top + r.y + r.h / 2 }
     },
     editor: () => gridStore.getState().edit,
+    book: () => {
+      const st = gridStore.getState()
+      return {
+        fileName: st.fileName,
+        dirty: st.dirty,
+        tabs: st.tabs.map((t) => t.name),
+        activeTab: st.activeTab,
+        rows: st.sheet.rows,
+        cols: st.sheet.cols,
+      }
+    },
   }
 }

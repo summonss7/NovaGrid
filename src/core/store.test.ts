@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { getCell } from './sheet'
+import { createSheet, getCell, withCell } from './sheet'
 import { gridStore, selectionMetrics } from './store'
 
 const s = () => gridStore.getState()
@@ -124,5 +124,98 @@ describe('store: стресс-режим', () => {
     // границы и история сброшены
     s().undo()
     expect(getCell(s().sheet, 99999, 0)).toBe('100000')
+  })
+})
+
+describe('store: книга и вкладки (Этап 2.2)', () => {
+  it('loadBook загружает листы из IO с метаданными файла', () => {
+    s().loadBook(
+      {
+        sheets: [
+          {
+            name: 'Данные',
+            sheet: (() => {
+              let sh = createSheet()
+              sh = withCell(sh, 0, 0, 'A1')
+              return sh
+            })(),
+          },
+          { name: 'Справка', sheet: createSheet() },
+        ],
+      },
+      { fileName: 'отчёт.xlsx', fileFormat: 'xlsx' },
+    )
+    expect(s().tabs.map((t) => t.name)).toEqual(['Данные', 'Справка'])
+    expect(s().activeTab).toBe(0)
+    expect(getCell(s().sheet, 0, 0)).toBe('A1')
+    expect(s().fileName).toBe('отчёт.xlsx')
+    expect(s().fileFormat).toBe('xlsx')
+    expect(s().dirty).toBe(false)
+  })
+
+  it('addTab добавляет уникальное имя и активирует новую вкладку', () => {
+    expect(s().tabs).toHaveLength(1)
+    s().addTab()
+    expect(s().tabs).toHaveLength(2)
+    expect(s().activeTab).toBe(1)
+    expect(s().tabs[1].name).toBe('Лист 2')
+    s().renameTab(1, 'Лист 1') // дубль имени → уникализация
+    expect(s().tabs[1].name).toBe('Лист 1 (2)')
+    expect(s().dirty).toBe(true)
+  })
+
+  it('duplicateTab копирует контент, история копии независима', () => {
+    s().duplicateTab(0)
+    expect(s().tabs).toHaveLength(2)
+    expect(s().tabs[1].name).toBe('Лист 1 (2)')
+    expect(getCell(s().tabs[1].sheet, 1, 0)).toBe('Иванов')
+    // правка на копии не трогает оригинал
+    s().clickCell(1, 0)
+    s().beginEdit('X')
+    s().commitEdit('none')
+    expect(getCell(s().tabs[1].sheet, 1, 0)).toBe('X')
+    expect(getCell(s().tabs[0].sheet, 1, 0)).toBe('Иванов')
+  })
+
+  it('removeTab не удаляет единственную вкладку, активная переходит к соседу', () => {
+    expect(s().removeTab(0)).toBe(false) // единственная
+    s().addTab() // активна 1
+    s().clickCell(1, 0)
+    s().beginEdit('Z')
+    s().commitEdit('none')
+    expect(s().removeTab(1)).toBe(true)
+    expect(s().tabs).toHaveLength(1)
+    expect(s().activeTab).toBe(0)
+    expect(getCell(s().sheet, 1, 0)).toBe('Иванов')
+  })
+
+  it('undo изолирован по вкладкам', () => {
+    s().addTab()
+    // правка на вкладке 1
+    s().clickCell(0, 0)
+    s().beginEdit('новый')
+    s().commitEdit('none')
+    expect(getCell(s().sheet, 0, 0)).toBe('новый')
+    // переключились на вкладку 0 — undo там пусто
+    s().activateTab(0)
+    s().undo()
+    expect(getCell(s().sheet, 1, 2)).toBe('10000') // ничего не откатилось
+    // вернулись — undo работает
+    s().activateTab(1)
+    s().undo()
+    expect(getCell(s().sheet, 0, 0)).toBe('')
+  })
+
+  it('правки ставят dirty, markSaved снимает и запоминает формат', () => {
+    expect(s().dirty).toBe(false)
+    s().clickCell(1, 2)
+    s().beginEdit('555')
+    s().commitEdit('none')
+    expect(s().dirty).toBe(true)
+    s().markSaved('книга.csv', { fileFormat: 'csv', csvDelimiter: ',' })
+    expect(s().dirty).toBe(false)
+    expect(s().fileName).toBe('книга.csv')
+    expect(s().fileFormat).toBe('csv')
+    expect(s().csvDelimiter).toBe(',')
   })
 })

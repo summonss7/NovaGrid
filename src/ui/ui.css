@@ -245,6 +245,7 @@
 
 /* ── Панель листов ───────────────────────────────────────────────────── */
 .sheets-bar {
+  position: relative; /* контейнер для меню вкладки (ПКМ) */
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -311,4 +312,484 @@
 
 .status-metric {
   white-space: nowrap;
+}
+
+/* ── Файлы (Этап 2): индикатор имени файла и правок ──────────────────── */
+.file-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 30vw;
+  padding: 6px 12px;
+  background: var(--nv-bg);
+  border: 1.5px solid var(--nv-grid-line);
+  border-radius: var(--nv-radius-btn);
+  font-family: var(--nv-font-text);
+  font-size: 12.5px;
+  color: var(--nv-ink);
+  white-space: nowrap;
+}
+
+.file-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file-dirty {
+  color: var(--nv-accent);
+  font-size: 14px;
+  line-height: 1;
+}
+
+.btn-lg {
+  padding: 11px 20px;
+  font-size: 15px;
+}
+
+.btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+/* ── Панель листов: переименование и меню вкладки ────────────────────── */
+.sheet-tab-wrap {
+  display: inline-flex;
+}
+
+.sheet-tab-rename {
+  width: 110px;
+  padding: 4px 10px;
+  border: 2px solid var(--nv-primary-deep);
+  border-radius: var(--nv-radius-btn) var(--nv-radius-btn) 0 0;
+  background: var(--nv-bg);
+  font-family: var(--nv-font-text);
+  font-size: 13px;
+  color: var(--nv-ink);
+  outline: none;
+}
+
+.menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+}
+
+.tab-menu {
+  position: absolute;
+  z-index: 41;
+  bottom: calc(100% - 6px);
+  display: flex;
+  flex-direction: column;
+  min-width: 170px;
+  padding: 5px;
+  background: var(--nv-bg);
+  border: 1px solid var(--nv-grid-line);
+  border-radius: var(--nv-radius-panel);
+  box-shadow: var(--nv-shadow-pop);
+}
+
+.tab-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  font-family: var(--nv-font-text);
+  font-size: 13px;
+  color: var(--nv-ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.tab-menu-item:hover:not(:disabled) {
+  background: rgba(58, 223, 99, 0.14);
+}
+
+.tab-menu-item:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.tab-menu-danger {
+  color: var(--nv-danger, #e8481c);
+}
+
+/* ── Стартовый экран «Недавние» (Этап 2.4) ───────────────────────────── */
+.start-screen {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100%;
+  padding: 32px 20px;
+  background:
+    radial-gradient(1100px 500px at 85% -10%, rgba(58, 223, 99, 0.14), transparent 60%),
+    radial-gradient(900px 420px at 0% 110%, rgba(242, 107, 33, 0.1), transparent 55%), var(--nv-bg);
+}
+
+.start-card {
+  width: min(660px, 100%);
+  padding: 40px 44px 30px;
+  background: var(--nv-bg);
+  border: 1px solid var(--nv-grid-line);
+  border-radius: 18px;
+  box-shadow: var(--nv-shadow);
+}
+
+.start-logo .logo-word {
+  font-size: 30px;
+}
+
+.start-tagline {
+  margin: 10px 0 26px;
+  font-size: 15px;
+  color: var(--nv-ink-soft);
+}
+
+.start-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.start-section {
+  margin-top: 26px;
+}
+
+.start-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+  font-family: var(--nv-font-display);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--nv-ink-soft);
+}
+
+.start-recent-skeleton {
+  height: 46px;
+  border-radius: var(--nv-radius-btn);
+  background: linear-gradient(
+    90deg,
+    var(--nv-surface) 25%,
+    var(--nv-bg) 50%,
+    var(--nv-surface) 75%
+  );
+  background-size: 200% 100%;
+  animation: nv-skeleton 1.2s infinite linear;
+}
+
+@keyframes nv-skeleton {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+.start-empty {
+  margin: 0;
+  padding: 12px 14px;
+  border: 1.5px dashed var(--nv-grid-line);
+  border-radius: var(--nv-radius-btn);
+  font-size: 13px;
+  color: var(--nv-ink-soft);
+}
+
+.start-recent-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.start-recent-item {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+}
+
+.start-recent-open {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  flex: 1;
+  min-width: 0;
+  padding: 10px 14px;
+  border: 1px solid var(--nv-grid-line);
+  border-radius: var(--nv-radius-btn);
+  background: var(--nv-bg);
+  cursor: pointer;
+  text-align: left;
+}
+
+.start-recent-open:hover:not(:disabled) {
+  border-color: var(--nv-primary);
+  background: var(--nv-mint, #e8f8ec);
+}
+
+.start-recent-open:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.start-recent-open svg {
+  color: var(--nv-primary-deep);
+  flex: none;
+}
+
+.start-recent-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+  font-size: 13.5px;
+  color: var(--nv-ink);
+}
+
+.start-recent-meta {
+  margin-left: auto;
+  flex: none;
+  font-size: 12px;
+  color: var(--nv-ink-soft);
+  white-space: nowrap;
+}
+
+.start-recent-forget {
+  align-self: center;
+}
+
+.start-demo-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+@media (max-width: 560px) {
+  .start-demo-row {
+    grid-template-columns: 1fr;
+  }
+
+  .start-card {
+    padding: 28px 22px 22px;
+  }
+}
+
+.start-demo-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 16px 18px;
+  border: 1.5px solid var(--nv-grid-line);
+  border-radius: var(--nv-radius-panel);
+  background: var(--nv-bg);
+  cursor: pointer;
+  text-align: left;
+}
+
+.start-demo-card:hover:not(:disabled) {
+  border-color: var(--nv-primary);
+}
+
+.start-demo-card:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.start-demo-card svg {
+  color: var(--nv-accent);
+}
+
+.start-demo-title {
+  font-family: var(--nv-font-display);
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--nv-ink);
+}
+
+.start-demo-hint {
+  font-size: 12px;
+  color: var(--nv-ink-soft);
+}
+
+.start-privacy {
+  margin: 26px 0 0;
+  padding-top: 16px;
+  border-top: 1px solid var(--nv-grid-line);
+  font-size: 12px;
+  color: var(--nv-ink-soft);
+}
+
+/* ── Диалог «Сохранить как…» ─────────────────────────────────────────── */
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(43, 43, 43, 0.42);
+}
+
+.dialog {
+  width: min(440px, calc(100vw - 32px));
+  padding: 22px 24px;
+  background: var(--nv-bg);
+  border-radius: var(--nv-radius-panel);
+  box-shadow: var(--nv-shadow-pop);
+}
+
+.dialog-title {
+  margin: 0 0 16px;
+  font-family: var(--nv-font-display);
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--nv-ink);
+}
+
+.dialog-row {
+  display: flex;
+  gap: 12px;
+}
+
+.dialog-row .dialog-field {
+  flex: 1;
+}
+
+.dialog-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-bottom: 14px;
+}
+
+.dialog-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--nv-ink-soft);
+}
+
+.dialog-input,
+.dialog-select {
+  padding: 9px 11px;
+  border: 1.5px solid var(--nv-grid-line);
+  border-radius: var(--nv-radius-btn);
+  background: var(--nv-bg);
+  font-family: var(--nv-font-text);
+  font-size: 13.5px;
+  color: var(--nv-ink);
+  outline: none;
+}
+
+.dialog-input:focus,
+.dialog-select:focus {
+  border-color: var(--nv-accent);
+}
+
+.dialog-note {
+  margin: -4px 0 12px;
+  font-size: 12px;
+  color: var(--nv-ink-soft);
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+/* ── Оверлеи: занятость, перетаскивание, тост ────────────────────────── */
+.busy-overlay {
+  position: fixed;
+  z-index: 70;
+  left: 50%;
+  bottom: 58px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 18px;
+  background: var(--nv-ink);
+  color: var(--nv-bg);
+  font-family: var(--nv-font-display);
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: var(--nv-radius-panel);
+  box-shadow: var(--nv-shadow-pop);
+}
+
+.busy-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--nv-primary);
+  animation: nv-pulse 0.9s infinite ease-in-out;
+}
+
+@keyframes nv-pulse {
+  0%,
+  100% {
+    transform: scale(0.8);
+    opacity: 0.6;
+  }
+  50% {
+    transform: scale(1.25);
+    opacity: 1;
+  }
+}
+
+.drop-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 65;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(58, 223, 99, 0.1);
+  border: 3px dashed var(--nv-primary);
+  pointer-events: none;
+}
+
+.drop-overlay span {
+  padding: 14px 26px;
+  background: var(--nv-bg);
+  border-radius: var(--nv-radius-panel);
+  box-shadow: var(--nv-shadow-pop);
+  font-family: var(--nv-font-display);
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--nv-primary-deep);
+}
+
+.toast {
+  position: fixed;
+  z-index: 75;
+  right: 18px;
+  bottom: 52px;
+  max-width: min(420px, calc(100vw - 36px));
+  padding: 11px 16px;
+  border-radius: var(--nv-radius-btn);
+  font-family: var(--nv-font-text);
+  font-size: 13px;
+  box-shadow: var(--nv-shadow-pop);
+}
+
+.toast-ok {
+  background: var(--nv-primary-deep);
+  color: var(--nv-bg);
+}
+
+.toast-error {
+  background: var(--nv-accent-deep, #e8481c);
+  color: var(--nv-bg);
 }

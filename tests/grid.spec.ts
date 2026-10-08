@@ -1,28 +1,16 @@
 import { expect, test, type Page } from '@playwright/test'
+import type { NvTestApi } from '../src/grid/testHook'
 
 /*
  * Этап 1 «Ядро таблицы» (КТ-2): e2e водит выделение и редактирование,
  * Alt-лассо живой суммы, undo/redo и прокрутку стресс-листа 100k×30.
  * Значения канваса недоступны DOM-локаторами, поэтому состояние читается
- * через тест-хук window.__nv (устанавливается только при ?test=1).
+ * через тест-хук window.__nv (устанавливается только при ?test=1/?testui=1).
+ * Объявление типа общее для всех спеков (NvTestApi из src/grid/testHook).
  */
-
-// Контракт тест-хука (реализация — src/grid/testHook.ts); в программе тестов
-// src не участвует, поэтому тип объявлен здесь независимо.
 declare global {
   interface Window {
-    __nv?: {
-      cell: (row: number, col: number) => string
-      activeRef: () => string
-      metrics: () => { total: number; count: number; mean: number; filled: number }
-      ranges: () => string[]
-      visible: () => { firstRow: number; lastRow: number; firstCol: number; lastCol: number } | null
-      draw: () => { frames: number; avgMs: number; lastMs: number }
-      resetDrawStats: () => void
-      scrollTo: (x: number, y: number) => void
-      cellCenter: (row: number, col: number) => { x: number; y: number }
-      editor: () => { row: number; col: number; value: string } | null
-    }
+    __nv?: NvTestApi
   }
 }
 
