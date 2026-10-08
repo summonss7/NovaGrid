@@ -163,6 +163,19 @@
   color: var(--nv-ink-soft);
 }
 
+.formula-ref {
+  min-width: 52px;
+  padding: 2px 8px;
+  border: 1px solid var(--nv-grid-line);
+  border-radius: 5px;
+  font-family: var(--nv-font-text);
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--nv-ink);
+  text-align: center;
+}
+
 .formula-input {
   flex: 1;
   min-width: 0;
@@ -179,74 +192,55 @@
   color: var(--nv-ink-soft);
 }
 
-/* ── Скелет грида ────────────────────────────────────────────────────── */
-.grid-skeleton {
-  display: grid;
-  grid-template-columns: 44px repeat(6, minmax(96px, 1fr));
-  grid-auto-rows: 30px;
-  width: 100%;
-  border-right: 1px solid var(--nv-grid-line);
-}
-
-.grid-cell {
-  border-bottom: 1px solid var(--nv-grid-line);
-  border-left: 1px solid var(--nv-grid-line);
-  background: var(--nv-bg);
-}
-
-.grid-head {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--nv-surface);
-  font-family: var(--nv-font-text);
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--nv-ink-soft);
-}
-
-.grid-corner {
-  border-right: 1px solid var(--nv-grid-line);
-}
-
-.grid-rowhead {
-  font-variant-numeric: tabular-nums;
-}
-
-.grid-overlay {
+/* ── Канвас-грид (Этап 1) ─────────────────────────────────────────────── */
+.grid-scroll {
   position: absolute;
   inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  pointer-events: none;
-  padding: 24px;
+  overflow: auto;
+  scrollbar-width: thin;
 }
 
-.grid-overlay-card {
-  max-width: 380px;
-  padding: 26px 30px;
+.grid-spacer {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.grid-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none; /* события ловит .grid-area; колесо проходит в прокрутку */
+}
+
+.grid-editor {
+  position: absolute;
+  z-index: 2;
+  border: 2px solid var(--nv-primary-deep);
+  border-radius: 0;
   background: var(--nv-bg);
-  border-radius: var(--nv-radius-panel);
-  border: 1px solid var(--nv-grid-line);
-  box-shadow: var(--nv-shadow);
-  text-align: center;
+  font-family: var(--nv-font-text);
+  font-size: var(--nv-size-table);
+  color: var(--nv-ink);
+  padding: 0 5px;
+  outline: none;
+  box-shadow: var(--nv-shadow-pop);
 }
 
-.grid-overlay-title {
+.alt-sum-label {
+  position: absolute;
+  z-index: 3;
+  padding: 6px 14px;
+  background: var(--nv-accent);
+  color: var(--nv-bg);
   font-family: var(--nv-font-display);
   font-weight: 700;
-  font-size: 16px;
-  color: var(--nv-ink);
-  margin-bottom: 8px;
-}
-
-.grid-overlay-text {
-  margin: 0;
-  font-family: var(--nv-font-text);
-  font-size: 13px;
-  line-height: 1.5;
-  color: var(--nv-ink-soft);
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+  border-radius: var(--nv-radius-btn);
+  box-shadow: var(--nv-shadow-pop);
+  pointer-events: none;
+  white-space: nowrap;
 }
 
 /* ── Панель листов ───────────────────────────────────────────────────── */

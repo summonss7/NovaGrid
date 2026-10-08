@@ -1,23 +1,20 @@
-import { average, sum } from '../core/stats'
+import { useStore } from 'zustand'
+import { gridStore, selectionMetrics } from '../core/store'
 import { ru } from '../i18n/ru'
 
-/**
- * Статус-бар метрик (§6): Σ · n · x̄ по выделению. Пока данных нет (Этап 0),
- * метрики считаются честной функцией core/stats по пустому набору — и оживут
- * с появлением выделения на Этапе 1.
- */
+/** Статус-бар метрик (§6): Σ · n · x̄ по выделению — живьём при любом изменении. */
 export function StatusBar() {
-  const values: readonly number[] = []
-  const total = sum(values)
-  const count = values.length
-  const mean = average(values)
+  // три примитивные подписки вместо одной объектной — без пересоздания снапшота
+  const total = useStore(gridStore, (s) => selectionMetrics(s.sheet, s.selection).total)
+  const count = useStore(gridStore, (s) => selectionMetrics(s.sheet, s.selection).count)
+  const mean = useStore(gridStore, (s) => selectionMetrics(s.sheet, s.selection).mean)
 
   return (
     <footer className="status-bar">
       <span className="status-phase">{ru.statusPhase}</span>
-      <span className="status-metrics">
+      <span className="status-metrics" aria-live="polite">
         <span className="status-metric">Σ {total.toLocaleString('ru-RU')}</span>
-        <span className="status-metric">n {count}</span>
+        <span className="status-metric">n {count.toLocaleString('ru-RU')}</span>
         <span className="status-metric">x̄ {mean.toLocaleString('ru-RU')}</span>
       </span>
     </footer>

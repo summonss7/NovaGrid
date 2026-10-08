@@ -1,9 +1,8 @@
 import { expect, test } from '@playwright/test'
 
-// Этап 0 (КТ-1): каркас главного экрана открывается в фирменных цветах,
-// со self-host шрифтами и SVG-логотипом. По мере этапов здесь появятся
-// сценарии ТЗ (поиск, ПКМ-фильтр, Σ) — CREATION-MAP §2.
-test.describe('стартовый экран — каркас Этапа 0', () => {
+// Каркас �тапа 0 + живой грид �тапа 1: экран открывается в фирменных цветах,
+// со self-host шрифтами и SVG-логотипом; сцена�рии ядра таблицы — grid.spec.ts.
+test.describe('стартовый экран — каркас �тапа 0', () => {
   test('главный экран собирается из всех панелей каркаса', async ({ page }) => {
     await page.goto('/')
 
@@ -15,7 +14,9 @@ test.describe('стартовый экран — каркас Этапа 0', () 
     await expect(page.getByRole('button', { name: 'Сумма выделенного' })).toBeVisible()
     await expect(page.getByLabel('Строка формул')).toBeVisible()
     await expect(page.getByRole('tab', { name: 'Лист 1' })).toBeVisible()
-    await expect(page.getByText('Здесь появится таблица')).toBeVisible()
+    // вместо заглушки �тапа 0 — настоящий канвас-грид (role=grid)
+    await expect(page.getByRole('grid', { name: 'Таблица' })).toBeVisible()
+    await expect(page.locator('canvas.grid-canvas')).toBeVisible()
   })
 
   test('SVG-логотип «N» и словесная часть отрисованы', async ({ page }) => {

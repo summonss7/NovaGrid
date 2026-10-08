@@ -1,5 +1,5 @@
 import { FormulaBar } from '../ui/FormulaBar'
-import { GridPlaceholder } from '../ui/GridPlaceholder'
+import { GridCanvas } from '../grid/GridCanvas'
 import { SheetsBar } from '../ui/SheetsBar'
 import { StatusBar } from '../ui/StatusBar'
 import { Toolbar } from '../ui/Toolbar'
@@ -14,7 +14,7 @@ export default function App() {
     <div className="app-shell">
       <Toolbar />
       <FormulaBar />
-      <GridPlaceholder />
+      <GridCanvas />
       <SheetsBar />
       <StatusBar />
     </div>

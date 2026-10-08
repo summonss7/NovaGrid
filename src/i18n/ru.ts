@@ -13,13 +13,14 @@ export const ru = {
   sumLabel: 'СУММА',
   sumTitle: 'Сумма выделенного',
   formulaLabel: 'fx',
-  formulaPlaceholder: 'Выберите ячейку — её формула появится здесь (Этап 4)',
-  gridTitle: 'Здесь появится таблица',
-  gridText: 'Грид с виртуализацией, редактированием и выделением — Этап 1 «Ядро таблицы».',
+  formulaPlaceholder: 'Значение выбранной ячейки (формулы — Этап 4)',
+  gridArea: 'Таблица',
+  cellEditorLabel: 'Редактор ячейки',
+  altSum: 'Σ',
   sheet: 'Лист 1',
   addSheetLabel: 'Добавить лист',
   sheetsEmpty: 'Файлы .xls/.xlsx/.csv откроются здесь — Этап 2',
-  statusPhase: 'Этап 0 · каркас',
+  statusPhase: 'Этап 1 · ядро таблицы',
 } as const
 
 export type RuDict = typeof ru
