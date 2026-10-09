@@ -1,12 +1,14 @@
 ---
 id: novagrid-010
 title: NovaGrid: Этап 6 «Полировка и релиз v1.0» по docs/CREATION-MAP.md — финал версии
-status: todo
+status: in_progress
 priority: 8
 created: 2026-10-08
-updated: 2026-10-08
+updated: 2026-10-09
 session: ""
 src: TASKS
+head: 0bcf5b59184d27f7042f5b87da2ff4fe62fdff32
+reportSize: 65619
 ---
 ## Задача
 NovaGrid: Этап 6 «Полировка и релиз v1.0» по docs/CREATION-MAP.md — финал версии
@@ -31,3 +33,6 @@ NovaGrid: Этап 6 «Полировка и релиз v1.0» по docs/CREATIO
 - [ ] Документация обновлена (README / ROADMAP.md — если задача их касается)
 ## Журнал
 - 08.10.2026, 21:11:35: карточка создана диспетчером.
+
+
+- 09.10.2026, 21:08:35: диспетчер взял задачу в работу (новый запуск).
