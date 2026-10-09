@@ -10,13 +10,16 @@
  */
 
 import { normalize, type Range, type Selection } from '../core/selection'
-import { cellKey, getCell, isNumericCell, type SheetModel } from '../core/sheet'
+import { cellKey, type SheetModel } from '../core/sheet'
 import type { EditState } from '../core/store'
+import { cellError, cellIsFrozen, cellNumber, cellText } from '../formula/engine'
 import { colName, METRICS, type RowLayout, visibleCols, visibleRows } from './geometry'
 
 export interface GridTheme {
   ink: string
   inkSoft: string
+  /** ошибки формул — тёплый оранжевый глубокой тональности (Ф6) */
+  errInk: string
   bg: string
   surface: string
   gridLine: string
@@ -39,6 +42,7 @@ export function themeFromCSS(): GridTheme {
   return {
     ink: v('--nv-ink', '#2b2b2b'),
     inkSoft: v('--nv-ink-soft', '#9a9a9a'),
+    errInk: v('--nv-accent-deep', '#e8481c'),
     bg: v('--nv-bg', '#ffffff'),
     surface: v('--nv-surface', '#ededeb'),
     gridLine: v('--nv-grid-line', '#e4e4e1'),
@@ -174,7 +178,8 @@ export function drawGrid(input: DrawInput): VisibleRegion {
     }
   }
 
-  // ── текст ячеек (числа — вправо, текст — влево; стиль .xlsx — поверх) ──
+  // ── текст ячеек: формулы показывают вычисленное значение (Этап 4),
+  // ошибки — тёплым цветом, чужие формулы — с меткой «∛ не пересчитывается» ──
   ctx.textBaseline = 'middle'
   ctx.textAlign = 'left'
   const pad = 6
@@ -182,26 +187,39 @@ export function drawGrid(input: DrawInput): VisibleRegion {
     const r = layout.rowAt(i)
     const cy = m.headerH + i * m.rowH - scrollY + m.rowH / 2
     for (let c = cols.first; c <= lastCol; c++) {
-      const raw = getCell(sheet, r, c)
-      if (raw === '') continue
-      if (edit && edit.row === r && edit.col === c) continue
+      const raw = sheet.cells.get(cellKey(r, c))
+      if (raw === undefined) continue
+      // правка ячейки рисуется редактором; правка из строки формул — нет
+      if (edit && edit.row === r && edit.col === c && edit.source !== 'bar') continue
       const x = m.rowHeaderW + c * m.colW - scrollX
       const style = sheet.styles.get(cellKey(r, c))
-      const numeric = isNumericCell(sheet, r, c)
+      const isFormula = raw.startsWith('=') && raw.trim().length > 1
+      const text = isFormula ? cellText(sheet, r, c) : raw
+      if (text === '') continue
+      const numeric = cellNumber(sheet, r, c) !== null
+      const err = isFormula ? cellError(sheet, r, c) : null
+      const frozen = isFormula ? cellIsFrozen(sheet, r, c) : false
       ctx.font = style?.bold ? theme.fontCellBold : theme.fontCell
-      ctx.fillStyle = style?.fg ? `#${style.fg}` : theme.ink
-      const text = ellipsize(ctx, raw, m.colW - pad * 2)
+      ctx.fillStyle = style?.fg ? `#${style.fg}` : err ? theme.errInk : theme.ink
+      const shown = ellipsize(ctx, text, m.colW - pad * 2)
       const align = style?.align ?? (numeric ? 'right' : 'left')
       if (align === 'right') {
         ctx.textAlign = 'right'
-        ctx.fillText(text, x + m.colW - pad, cy)
+        ctx.fillText(shown, x + m.colW - pad, cy)
         ctx.textAlign = 'left'
       } else if (align === 'center') {
         ctx.textAlign = 'center'
-        ctx.fillText(text, x + m.colW / 2, cy)
+        ctx.fillText(shown, x + m.colW / 2, cy)
         ctx.textAlign = 'left'
       } else {
-        ctx.fillText(text, x + pad, cy)
+        ctx.fillText(shown, x + pad, cy)
+      }
+      // метка чужой формулы (∛) — маленький знак в правом верхнем углу
+      if (frozen) {
+        ctx.font = '10px ' + FALLBACK_FONT.slice(FALLBACK_FONT.indexOf('"'))
+        ctx.fillStyle = theme.inkSoft
+        ctx.fillText('∛', x + m.colW - 10, m.headerH + i * m.rowH - scrollY + 9)
+        ctx.font = theme.fontCell
       }
     }
   }

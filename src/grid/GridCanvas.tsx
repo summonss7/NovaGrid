@@ -16,6 +16,8 @@ import { normalize, inSelection } from '../core/selection'
 import { gridStore, rangeMetrics } from '../core/store'
 import type { SheetModel } from '../core/sheet'
 import { ru } from '../i18n/ru'
+import { AssistPopup } from '../ui/AssistPopup'
+import { useFormulaAssist } from '../ui/useFormulaAssist'
 import { ContextMenu } from '../ui/ContextMenu'
 import { ColumnMenu } from '../ui/ColumnMenu'
 import {
@@ -68,6 +70,14 @@ export function GridCanvas() {
 
   const edit = useStore(gridStore, (s) => s.edit)
   const sheet = useStore(gridStore, (s) => s.sheet)
+  // правка ячейки (не из строки формул) с «=» — подсказки функций (4.4)
+  const cellEdit = edit !== null && edit.source !== 'bar' ? edit : null
+  const assistApply = (next: { value: string; caret: number }) => {
+    gridStore.getState().setEditValue(next.value)
+    const el = editorRef.current
+    if (el) requestAnimationFrame(() => el.setSelectionRange(next.caret, next.caret))
+  }
+  const assist = useFormulaAssist(cellEdit ? cellEdit.value : '', assistApply)
   const filters = useStore(gridStore, (s) => s.filters)
   const rows = useStore(gridStore, (s) => s.sheet.rows)
   const cols = useStore(gridStore, (s) => s.sheet.cols)
@@ -457,6 +467,11 @@ export function GridCanvas() {
   // ── редактор ячейки ───────────────────────────────────────────────────
   const onEditorKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     e.stopPropagation()
+    // открыт попап подсказок: стрелки/Tab/Enter выбирают, Esc закрывает
+    if (assist.handleKeys(e.key)) {
+      e.preventDefault()
+      return
+    }
     const st = gridStore.getState()
     // после размонтирования редактора Chrome не бросает blur — фокус вернём сами,
     // иначе Ctrl+Z/стрелки уйдут в body и навигация «залипнет»
@@ -513,17 +528,29 @@ export function GridCanvas() {
         <div className="grid-spacer" style={{ width: size.w, height: size.h }} />
       </div>
       <canvas className="grid-canvas" ref={canvasRef} />
-      {edit && (
+      {cellEdit && (
         <input
           ref={editorRef}
           className="grid-editor"
           style={editorStyle}
-          value={edit.value}
-          onChange={(e) => gridStore.getState().setEditValue(e.target.value)}
+          value={cellEdit.value}
+          onChange={(e) => {
+            gridStore.getState().setEditValue(e.target.value)
+            assist.sync(e.target.selectionStart ?? 0)
+          }}
+          onSelect={(e) => assist.sync(e.currentTarget.selectionStart ?? 0)}
           onKeyDown={onEditorKeyDown}
           onBlur={onEditorBlur}
           aria-label={ru.cellEditorLabel}
           spellCheck={false}
+        />
+      )}
+      {cellEdit && assist.assist && (
+        <AssistPopup
+          anchor={editorRef}
+          assist={assist.assist}
+          activeIdx={assist.activeIdx}
+          onPick={assist.pick}
         />
       )}
       {altLabel && (

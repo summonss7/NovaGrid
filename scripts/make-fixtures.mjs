@@ -159,8 +159,34 @@ async function makeLegacyXls() {
   }
 }
 
+/* ── книга формул (Этап 4): свои и чужие формулы с кэшем результатов ─── */
+
+async function makeFormulaBook() {
+  const wb = new ExcelJS.Workbook()
+  const ws = wb.addWorksheet('Формулы')
+  // A: товар, B: количество, C: цена, D: наши формулы, E: чужая (SUMPRODUCT)
+  ws.addRow(['Товар', 'Кол-во', 'Цена'])
+  ws.addRow(['Стол', 4, 2500])
+  ws.addRow(['Стул', 10, 900])
+  ws.addRow(['Полка', 6, 1200])
+  ws.getCell(5, 1).value = 'Сумма'
+  ws.getCell(5, 2).value = { formula: 'SUM(B2:B4)', result: 20 }
+  ws.getCell(5, 3).value = { formula: 'AVERAGE(C2:C4)', result: 1533.3333333333333 }
+  ws.getCell(6, 1).value = 'Стоимость'
+  // SUMPRODUCT наш движок не считает — ячейка покажет кэш 28600 с меткой ∛
+  ws.getCell(6, 2).value = { formula: 'SUMPRODUCT(B2:B4,C2:C4)', result: 28600 }
+  ws.getColumn(1).width = 14
+  ws.getColumn(2).width = 12
+  ws.getColumn(3).width = 12
+  const path = join(outDir, 'formula-book.xlsx')
+  await wb.xlsx.writeFile(path)
+  return path
+}
+
 const demo = await makeDemoBook()
 console.log(`OK: ${demo}`)
+const formulas = await makeFormulaBook()
+console.log(`OK: ${formulas}`)
 const stress = await makeStressCsv()
 console.log(`OK: ${stress}`)
 const legacy = await makeLegacyXls()

@@ -1,20 +1,49 @@
+import { useRef } from 'react'
 import { useStore } from 'zustand'
 import { gridStore } from '../core/store'
 import { getCell } from '../core/sheet'
+import { cellError, cellIsFrozen } from '../formula/engine'
 import { cellRefName } from '../grid/geometry'
 import { ru } from '../i18n/ru'
+import { AssistPopup } from './AssistPopup'
+import { useFormulaAssist } from './useFormulaAssist'
 
 /**
- * Строка формул: адрес активной ячейки + её значение. Живое редактирование
- * и показ формул — Этап 4 (4.3); сейчас значение readOnly.
+ * Строка формул (Этап 4.3, Ф6): показывает формулу активной ячейки (или её
+ * значение), редактируется на месте — правка через beginBarEdit живёт в
+ * edit-состоянии стора, Enter фиксирует, Esc отменяет. Ошибки формул —
+ * человеческим языком справа; чужие формулы помечаются «∛ не пересчитывается».
+ * При вводе «=» — автодополнение функций и подсказки аргументов (4.4).
  */
 export function FormulaBar() {
+  const inputRef = useRef<HTMLInputElement>(null)
   const ref = useStore(gridStore, (s) =>
     cellRefName(s.selection.active.row, s.selection.active.col),
   )
-  const value = useStore(gridStore, (s) =>
+  const raw = useStore(gridStore, (s) =>
     getCell(s.sheet, s.selection.active.row, s.selection.active.col),
   )
+  const error = useStore(gridStore, (s) =>
+    cellError(s.sheet, s.selection.active.row, s.selection.active.col),
+  )
+  const frozen = useStore(gridStore, (s) =>
+    cellIsFrozen(s.sheet, s.selection.active.row, s.selection.active.col),
+  )
+  const edit = useStore(gridStore, (s) => s.edit)
+  const active = useStore(gridStore, (s) => s.selection.active)
+  const editingThis = edit !== null && edit.row === active.row && edit.col === active.col
+  const value = editingThis ? edit.value : raw
+
+  const apply = (next: { value: string; caret: number }) => {
+    gridStore.getState().setEditValue(next.value)
+    const el = inputRef.current
+    if (el) requestAnimationFrame(() => el.setSelectionRange(next.caret, next.caret))
+  }
+  const assist = useFormulaAssist(editingThis && edit?.source === 'bar' ? value : '', apply)
+
+  const focusGrid = () => {
+    document.querySelector<HTMLElement>('.grid-area')?.focus({ preventScroll: true })
+  }
 
   return (
     <div className="formula-bar">
@@ -25,12 +54,60 @@ export function FormulaBar() {
         {ref}
       </span>
       <input
+        ref={inputRef}
         className="formula-input"
-        readOnly
         value={value}
         placeholder={ru.formulaPlaceholder}
-        aria-label="Строка формул"
+        aria-label={ru.formulaBarLabel}
+        spellCheck={false}
+        onFocus={() => {
+          if (!editingThis) gridStore.getState().beginBarEdit()
+        }}
+        onChange={(e) => {
+          if (!gridStore.getState().edit) gridStore.getState().beginBarEdit()
+          gridStore.getState().setEditValue(e.target.value)
+          assist.sync(e.target.selectionStart ?? 0)
+        }}
+        onKeyUp={(e) => assist.sync(e.currentTarget.selectionStart ?? 0)}
+        onClick={(e) => assist.sync(e.currentTarget.selectionStart ?? 0)}
+        onKeyDown={(e) => {
+          if (assist.handleKeys(e.key)) {
+            e.preventDefault()
+            e.stopPropagation()
+            return
+          }
+          if (e.key === 'Enter') {
+            e.preventDefault()
+            if (gridStore.getState().edit) gridStore.getState().commitEdit('none')
+            focusGrid()
+          } else if (e.key === 'Escape') {
+            e.preventDefault()
+            if (gridStore.getState().edit) gridStore.getState().cancelEdit()
+          }
+        }}
+        onBlur={() => {
+          // уход фокуса фиксирует правку — как в Excel
+          if (gridStore.getState().edit?.source === 'bar') gridStore.getState().commitEdit('none')
+        }}
       />
+      {frozen && !editingThis && (
+        <span className="formula-frozen" title={ru.formulaFrozenHint}>
+          {ru.formulaFrozen}
+        </span>
+      )}
+      {error && !editingThis && (
+        <span className="formula-error" role="alert" title={error}>
+          {error}
+        </span>
+      )}
+      {edit?.source === 'bar' && assist.assist && (
+        <AssistPopup
+          anchor={inputRef}
+          assist={assist.assist}
+          activeIdx={assist.activeIdx}
+          onPick={assist.pick}
+        />
+      )}
     </div>
   )
 }

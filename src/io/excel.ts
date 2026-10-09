@@ -13,6 +13,7 @@ import ExcelJS from 'exceljs'
 import * as XLSX from 'xlsx'
 import { parseNumber, type CellStyle, type SheetModel, cellKey } from '../core/sheet'
 import { MIN_COLS, MIN_ROWS } from '../core/sheet'
+import { formulaResultForSave, isFormulaRaw } from '../formula/engine'
 import { sanitizeSheetName, uniqueTabName } from '../core/workbook'
 
 export interface SheetWire {
@@ -87,12 +88,45 @@ export async function xlsxToSheets(buffer: ArrayBuffer): Promise<SheetWire[]> {
 
     const cells = new Map<string, string>()
     const styles = new Map<string, CellStyle>()
+    // кэш результатов формул — для тех, что наш движок не считает (∛, Ф6)
+    let formulaCache: Map<string, string> | undefined
     let maxRow = -1
     let maxCol = -1
     ws.eachRow({ includeEmpty: false }, (row, rn) => {
       row.eachCell({ includeEmpty: false }, (cell, cn) => {
-        const raw = cellValueToString(cell.value)
         const key = cellKey(rn - 1, cn - 1)
+        const v = cell.value
+        let raw: string
+        if (
+          v &&
+          typeof v === 'object' &&
+          !Array.isArray(v) &&
+          ('formula' in v || 'sharedFormula' in v)
+        ) {
+          // формула: текст — в модель, результат Excel — в кэш; поддерживаемые
+          // функции посчитаются заново, остальные покажут кэш с меткой ∛
+          const fv = v as { formula?: string; sharedFormula?: string; result?: unknown }
+          let formula = fv.formula
+          if (!formula && typeof fv.sharedFormula === 'string') {
+            try {
+              const master = ws.getCell(fv.sharedFormula).value as
+                | { formula?: string }
+                | undefined
+              if (master && typeof master === 'object' && typeof master.formula === 'string')
+                formula = master.formula
+            } catch {
+              // кривой адрес ведущей ячейки — остаёмся на кэше значения
+            }
+          }
+          const cached = cellValueToString(fv.result)
+          raw = formula ? `=${formula}` : cached
+          if (formula && cached !== '') {
+            formulaCache ??= new Map<string, string>()
+            formulaCache.set(key, cached)
+          }
+        } else {
+          raw = cellValueToString(v)
+        }
         if (raw !== '') {
           cells.set(key, raw)
           maxRow = Math.max(maxRow, rn - 1)
@@ -107,6 +141,7 @@ export async function xlsxToSheets(buffer: ArrayBuffer): Promise<SheetWire[]> {
       sheet: {
         cells,
         styles,
+        ...(formulaCache ? { formulaCache } : {}),
         rows: Math.max(MIN_ROWS, maxRow + 1),
         cols: Math.max(MIN_COLS, maxCol + 1),
         maxRow,
@@ -185,18 +220,34 @@ export async function sheetsToXlsx(sheets: readonly SheetWire[]): Promise<ArrayB
 
     const lastRow = Math.max(sheet.maxRow, 0)
     const lastCol = Math.max(sheet.maxCol, 0)
-    // матрица значений: числа — числами, пусто — null (не пустая строка)
+    // матрица значений: числа — числами, пусто — null (не пустая строка);
+    // формулы — null в матрице (записываются ниже объектом {formula, result})
     const matrix: (string | number | null)[][] = []
+    const formulaCells: { r: number; c: number }[] = []
     for (let r = 0; r <= lastRow; r++) {
       const row: (string | number | null)[] = []
       for (let c = 0; c <= lastCol; c++) {
         const raw = sheet.cells.get(cellKey(r, c)) ?? ''
+        if (isFormulaRaw(raw)) {
+          formulaCells.push({ r, c })
+          row.push(null)
+          continue
+        }
         const num = parseNumber(raw)
         row.push(raw === '' ? null : num !== null ? num : raw)
       }
       matrix.push(row)
     }
     ws.addRows(matrix)
+
+    // формулы: канонический текст («,» между аргументами) + вычисленный
+    // результат; чужие (∛) сохраняются как есть со значением из файла
+    for (const fc of formulaCells) {
+      const cell = ws.getCell(fc.r + 1, fc.c + 1)
+      const { result, canonical } = formulaResultForSave(sheet, fc.r, fc.c)
+      const raw = sheet.cells.get(cellKey(fc.r, fc.c)) ?? '='
+      cell.value = { formula: canonical ?? raw.slice(1), result }
+    }
 
     // стили применяются координатно после значений
     for (const [key, style] of sheet.styles) {

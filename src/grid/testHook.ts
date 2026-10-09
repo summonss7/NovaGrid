@@ -10,6 +10,7 @@ import { normalize } from '../core/selection'
 import type { ColumnFilter } from '../core/filter'
 import { visibleRowsOf } from '../core/filter'
 import { getCell } from '../core/sheet'
+import { cellText, formulaStateAt } from '../formula/engine'
 import { gridStore, selectionMetrics, type EditState } from '../core/store'
 import { cellRefName, cellRect, type RowLayout } from './geometry'
 import { drawStats, type VisibleRegion } from './renderer'
@@ -31,8 +32,19 @@ export interface NvSearchInfo {
   index: number
 }
 
+export interface NvFormulaInfo {
+  source: string
+  display: string
+  error: string | null
+  frozen: boolean
+}
+
 export interface NvTestApi {
   cell: (row: number, col: number) => string
+  /** отображаемое значение ячейки: формула → вычисленное (Этап 4) */
+  cellText: (row: number, col: number) => string
+  /** состояние формулы в ячейке; null — не формула */
+  formulaInfo: (row: number, col: number) => NvFormulaInfo | null
   /** ячейка произвольного листа по индексу вкладки (многолистовые проверки) */
   cellIn: (tab: number, row: number, col: number) => string
   activeRef: () => string
@@ -72,6 +84,18 @@ export function installTestHook(refs: TestHookRefs): void {
   if (!params.has('test') && !params.has('testui')) return
   window.__nv = {
     cell: (row, col) => getCell(gridStore.getState().sheet, row, col),
+    cellText: (row, col) => cellText(gridStore.getState().sheet, row, col),
+    formulaInfo: (row, col) => {
+      const st = gridStore.getState()
+      const state = formulaStateAt(st.sheet, row, col)
+      if (!state) return null
+      return {
+        source: getCell(st.sheet, row, col),
+        display: state.display,
+        error: state.error,
+        frozen: state.frozen,
+      }
+    },
     cellIn: (tab, row, col) => {
       const st = gridStore.getState()
       const t = st.tabs[Math.min(Math.max(tab, 0), st.tabs.length - 1)]

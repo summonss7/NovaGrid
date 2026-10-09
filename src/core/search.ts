@@ -6,6 +6,7 @@
  * совпадение должно быть видимым (WYSIWYG).
  */
 
+import { cellText } from '../formula/engine'
 import { visibleIndexOf, visibleRowsOf, type ColumnFilter } from './filter'
 import type { SheetModel } from './sheet'
 
@@ -38,11 +39,14 @@ export function searchSheet(
   const needle = opts.caseSensitive ? query : query.toLowerCase()
   const hits: SearchHit[] = []
   for (const [key, raw] of sheet.cells) {
-    if (raw === '' || !matches(raw, needle, opts)) continue
     const i = key.indexOf(':')
     const row = Number(key.slice(0, i))
+    const col = Number(key.slice(i + 1))
+    // формулы ищутся по вычисленному значению — как то, что видно в гриде
+    const text = raw.startsWith('=') ? cellText(sheet, row, col) : raw
+    if (text === '' || !matches(text, needle, opts)) continue
     if (visible && visibleIndexOf(visible, row) < 0) continue
-    hits.push({ tab: -1, row, col: Number(key.slice(i + 1)) })
+    hits.push({ tab: -1, row, col })
   }
   hits.sort((a, b) => a.row - b.row || a.col - b.col)
   return hits

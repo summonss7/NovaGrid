@@ -3,7 +3,7 @@ import { useEffect } from 'react'
 import { useStore } from 'zustand'
 import { colName } from '../grid/geometry'
 import { gridStore } from '../core/store'
-import { getCell } from '../core/sheet'
+import { cellText } from '../formula/engine'
 import { ru } from '../i18n/ru'
 import { copyText } from './clipboard'
 
@@ -31,7 +31,8 @@ export function ContextMenu(props: {
   }, [props])
 
   const st = gridStore.getState()
-  const raw = getCell(st.sheet, props.row, props.col)
+  // отображаемое значение: фильтры сравнивают то, что видно (формулы вычислены)
+  const raw = cellText(st.sheet, props.row, props.col)
   const value = raw === '' ? ru.filterBlanks : raw
   const letter = colName(props.col)
   const colFilter = filters.find((f) => f.col === props.col)
@@ -50,7 +51,7 @@ export function ContextMenu(props: {
 
   // строка для «Копировать строку»: значения колонок контента через таб
   const rowText = Array.from({ length: st.sheet.maxCol + 1 }, (_, c) =>
-    getCell(st.sheet, props.row, c),
+    cellText(st.sheet, props.row, c),
   ).join('\t')
 
   // не вылезать за пределы окна

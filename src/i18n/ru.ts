@@ -14,14 +14,15 @@ export const ru = {
   sumLabel: 'СУММА',
   sumTitle: 'Сумма выделенного',
   formulaLabel: 'fx',
-  formulaPlaceholder: 'Значение выбранной ячейки (формулы — Этап 4)',
+  formulaBarLabel: 'Строка формул',
+  formulaPlaceholder: 'Значение или формула — начните с =',
   gridArea: 'Таблица',
   cellEditorLabel: 'Редактор ячейки',
   altSum: 'Σ',
   sheet: 'Лист 1',
   addSheetLabel: 'Добавить лист',
   sheetsEmpty: 'Файлы .xlsx/.xls/.csv откроются здесь',
-  statusPhase: 'Этап 3 · поиск · фильтры · Σ',
+  statusPhase: 'Этап 4 · формулы · справка',
 
   // поиск (Ф2, Этап 3)
   searchScopeSheet: 'Этот лист',
@@ -123,6 +124,25 @@ export const ru = {
   tabDeleteConfirm: (name: string) => `Удалить лист «${name}»? Отменить будет нельзя.`,
   tabMenuLabel: 'Меню листа',
   xlsSaveNote: 'Файл .xls сохранится как .xlsx (современный формат)',
+
+  // формулы (Ф6, Этап 4)
+  formulaFrozen: '∛ не пересчитывается',
+  formulaFrozenHint:
+    'Формула вне списка поддерживаемых: показано последнее значение из файла, сама формула сохранится как есть',
+  assistLabel: 'Подсказки формул',
+
+  // справочник «?» (4.5)
+  helpTitle: 'Справка NovaGrid',
+  helpTabFunctions: 'Формулы',
+  helpTabKeys: 'Горячие клавиши',
+  helpTabHow: 'Приёмы',
+  helpSearchPlaceholder: 'Найти функцию…',
+  helpExampleLabel: 'Например',
+  helpClose: 'Закрыть справку',
+  helpKeysColAction: 'Действие',
+  helpKeysColKey: 'Клавиши',
+  helpFunctionsHint:
+    'Примеры считаются на вашей таблице — откройте файл или начните с новой',
 } as const
 
 function formatRelative(d: Date): string {

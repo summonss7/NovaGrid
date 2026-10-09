@@ -40,6 +40,7 @@ import {
   parseNumber,
   withCell,
 } from './sheet'
+import { applyFormulaChanges, cellNumber, recalcSheet } from '../formula/engine'
 import { average, sum } from './stats'
 import { type SearchHit, type SearchOptions, searchBook, searchSheet } from './search'
 import {
@@ -72,6 +73,8 @@ export interface EditState {
   value: string
   /** replace — ввод с заменой (выделить всё); append — F2 (каретка в конец) */
   mode: 'replace' | 'append'
+  /** 'bar' — правка из строки формул: редактор ячейки не показывается (4.3) */
+  source?: 'cell' | 'bar'
 }
 
 export interface SelectionMetrics {
@@ -167,6 +170,8 @@ export interface GridState {
   /** Delete/Backspace — очистить ячейки выделения (одна транзакция истории) */
   deleteSelection: () => void
   beginEdit: (initial?: string) => void
+  /** правка активной ячейки из строки формул (4.3) */
+  beginBarEdit: () => void
   setEditValue: (value: string) => void
   commitEdit: (move: EditMove) => void
   cancelEdit: () => void
@@ -209,7 +214,8 @@ export function cellsMetrics(
   for (let i = 0; i < rows.length; i++) {
     const raw = getCell(sheet, rows[i], cols[i])
     if (raw !== '') filled++
-    const n = parseNumber(raw)
+    // формулы дают результат движка: Sigma в статус-баре видит вычисленное (Этап 4)
+    const n = raw.startsWith('=') ? cellNumber(sheet, rows[i], cols[i]) : parseNumber(raw)
     if (n !== null) values.push(n)
   }
   let min = null as number | null
@@ -381,6 +387,15 @@ export const gridStore = createStore<GridState>((set, get) => {
     set({ tabs: tabs.map((t, i) => (i === activeTab ? { ...t, sheet } : t)), sheet })
   }
 
+  /**
+   * Правка листа с пересчётом формул (4.2): значения вычисляются ДО set —
+   * канвас и панели читают готовое; инкрементально, по зависимостям.
+   */
+  const commitSheet = (prev: SheetModel, next: SheetModel, changes: readonly CellChange[]) => {
+    applyFormulaChanges(prev, next, changes)
+    patchSheet(next)
+  }
+
   /** Сохранить фильтры активной вкладки в её ячейку хранилища (перед сменой). */
   const saveFilters = () => {
     const { tabs, activeTab, filters } = get()
@@ -447,6 +462,7 @@ export const gridStore = createStore<GridState>((set, get) => {
     loadBook: (wire, meta) => {
       const tabs = tabsFromWire(wire)
       const sheets = tabs.length > 0 ? tabs : [createTab(DEFAULT_SHEET_NAME)]
+      sheets.forEach((t) => recalcSheet(t.sheet))
       clearHistories()
       set({
         tabs: sheets,
@@ -562,12 +578,16 @@ export const gridStore = createStore<GridState>((set, get) => {
         sheet: {
           cells: new Map(src.sheet.cells),
           styles: new Map(src.sheet.styles),
+          formulaCache: src.sheet.formulaCache
+            ? new Map(src.sheet.formulaCache)
+            : undefined,
           rows: src.sheet.rows,
           cols: src.sheet.cols,
           maxRow: src.sheet.maxRow,
           maxCol: src.sheet.maxCol,
         },
       }
+      recalcSheet(copy.sheet)
       if (get().edit) get().commitEdit('none')
       saveFilters()
       set({
@@ -737,7 +757,7 @@ export const gridStore = createStore<GridState>((set, get) => {
       }
       if (changes.length === 0) return
       historyOf(tabs[activeTab].id).push({ label: 'clear', changes })
-      patchSheet(applyChanges(sheet, changes, 'after'))
+      commitSheet(sheet, applyChanges(sheet, changes, 'after'), changes)
       set({ dirty: true })
       refreshSearch()
     },
@@ -752,6 +772,25 @@ export const gridStore = createStore<GridState>((set, get) => {
           col,
           value: given ? initial : getCell(sheet, row, col),
           mode: given ? 'replace' : 'append',
+        },
+      })
+    },
+
+    beginBarEdit: () => {
+      const state = get()
+      if (state.edit) {
+        if (state.edit.source === 'bar') return
+        state.commitEdit('none') // правка ячейки фиксируется, как в Excel
+      }
+      const st = get()
+      const { row, col } = st.selection.active
+      set({
+        edit: {
+          row,
+          col,
+          value: getCell(st.sheet, row, col),
+          mode: 'append',
+          source: 'bar',
         },
       })
     },
@@ -771,7 +810,7 @@ export const gridStore = createStore<GridState>((set, get) => {
         const changes: CellChange[] = [{ row: edit.row, col: edit.col, before, after: edit.value }]
         historyOf(tabs[activeTab].id).push({ label: 'edit', changes })
         next = applyChanges(sheet, changes, 'after')
-        patchSheet(next)
+        commitSheet(sheet, next, changes)
         set({ dirty: true })
       }
       const [dr, dc] = MOVE_DELTA[move]
@@ -787,7 +826,7 @@ export const gridStore = createStore<GridState>((set, get) => {
       const { sheet, tabs, activeTab } = state
       const entry = historyOf(tabs[activeTab].id).undo()
       if (!entry) return
-      patchSheet(applyChanges(sheet, entry.changes, 'before'))
+      commitSheet(sheet, applyChanges(sheet, entry.changes, 'before'), entry.changes)
       set({ edit: null, altRange: null, dirty: true })
       refreshSearch()
     },
@@ -797,7 +836,7 @@ export const gridStore = createStore<GridState>((set, get) => {
       const { sheet, tabs, activeTab } = state
       const entry = historyOf(tabs[activeTab].id).redo()
       if (!entry) return
-      patchSheet(applyChanges(sheet, entry.changes, 'after'))
+      commitSheet(sheet, applyChanges(sheet, entry.changes, 'after'), entry.changes)
       set({ edit: null, altRange: null, dirty: true })
       refreshSearch()
     },
@@ -876,7 +915,7 @@ export const gridStore = createStore<GridState>((set, get) => {
       }
       if (changes.length === 0) return
       historyOf(tabs[activeTab].id).push({ label: 'sort', changes })
-      patchSheet(applyChanges(sheet, changes, 'after'))
+      commitSheet(sheet, applyChanges(sheet, changes, 'after'), changes)
       set({ dirty: true })
       refreshSearch()
     },

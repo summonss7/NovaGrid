@@ -1,10 +1,11 @@
 import { FileDown, FolderOpen, HelpCircle, Save } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useStore } from 'zustand'
 import { visibleRowsOf } from '../core/filter'
 import { normalize } from '../core/selection'
 import { gridStore, rangeMetrics } from '../core/store'
 import { ru } from '../i18n/ru'
+import { HelpDialog } from './HelpDialog'
 import { Logo } from './Logo'
 import { SearchBox } from './SearchBox'
 import { SumCard } from './SumCard'
@@ -19,6 +20,19 @@ export function Toolbar(props: { onOpen: () => void; onSave: () => void; onSaveA
   const fileName = useStore(gridStore, (s) => s.fileName)
   const dirty = useStore(gridStore, (s) => s.dirty)
   const [sumOpen, setSumOpen] = useState(false)
+  const [helpOpen, setHelpOpen] = useState(false)
+
+  // F1 открывает справочник — как в настольных офисных приложениях
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'F1') {
+        e.preventDefault()
+        setHelpOpen(true)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   // Alt-лассо: сумма крупно в зоне кнопки Σ, пока тянется рамка (Ф4)
   const altSum = useStore(gridStore, (s) =>
@@ -70,7 +84,9 @@ export function Toolbar(props: { onOpen: () => void; onSave: () => void; onSaveA
         type="button"
         className="btn btn-ghost btn-icon"
         aria-label={ru.helpLabel}
-        title={ru.helpLabel}
+        title={`${ru.helpLabel} (F1)`}
+        aria-expanded={helpOpen}
+        onClick={() => setHelpOpen(true)}
       >
         <HelpCircle size={18} strokeWidth={1.5} aria-hidden />
       </button>
@@ -103,6 +119,8 @@ export function Toolbar(props: { onOpen: () => void; onSave: () => void; onSaveA
         </button>
         {sumOpen && <SumCard onClose={() => setSumOpen(false)} />}
       </span>
+
+      {helpOpen && <HelpDialog onClose={() => setHelpOpen(false)} />}
     </header>
   )
 }

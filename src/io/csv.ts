@@ -5,6 +5,7 @@
  */
 
 import { MIN_COLS, MIN_ROWS, type SheetModel, cellKey } from '../core/sheet'
+import { cellText } from '../formula/engine'
 
 export const CSV_DELIMITERS = [',', ';', '\t'] as const
 export type CsvDelimiter = (typeof CSV_DELIMITERS)[number]
@@ -190,6 +191,7 @@ function quoteField(value: string, delimiter: string): string {
 /**
  * Лист → CSV (CRLF + BOM: Excel открывает такой файл в UTF-8 без танцев).
  * Числа пишутся как есть (канонической строкой) — Excel распознаёт их числами.
+ * Формулы пишутся вычисленным значением: CSV не хранит формулы.
  */
 export function sheetToCsv(sheet: SheetModel, delimiter: string): string {
   const lines: string[] = []
@@ -198,7 +200,7 @@ export function sheetToCsv(sheet: SheetModel, delimiter: string): string {
   for (let r = 0; r <= lastRow; r++) {
     const fields: string[] = []
     for (let c = 0; c <= lastCol; c++) {
-      fields.push(quoteField(sheet.cells.get(cellKey(r, c)) ?? '', delimiter))
+      fields.push(quoteField(cellText(sheet, r, c), delimiter))
     }
     lines.push(fields.join(delimiter))
   }

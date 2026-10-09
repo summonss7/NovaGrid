@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import ExcelJS from 'exceljs'
 import * as XLSX from 'xlsx'
 import { cellKey, createSheet, getCell, withCell } from '../core/sheet'
+import { cellText, cellIsFrozen, recalcSheet } from '../formula/engine'
 import { type SheetWire, sheetsToXlsx, xlsToSheets, xlsxToSheets } from './excel'
 
 /* exceljs в Node отдаёт Buffer (view над пулом) — копируем в чистый ArrayBuffer */
@@ -18,7 +19,7 @@ describe('excel: чтение .xlsx (значения и кэш формул)', 
     ws.addRow(['Иванов', 10000])
     ws.addRow(['Петров', 12500])
     ws.getCell(4, 1).value = 'Итог'
-    ws.getCell(4, 2).value = { formula: 'SUM(C2:C3)', result: 22500 }
+    ws.getCell(4, 2).value = { formula: 'SUM(B2:B3)', result: 22500 }
     ws.getCell(5, 1).value = true
     const ref = wb.addWorksheet('Справка')
     ref.addRow(['Текст', 42])
@@ -28,7 +29,13 @@ describe('excel: чтение .xlsx (значения и кэш формул)', 
     const data = sheets[0].sheet
     expect(getCell(data, 0, 0)).toBe('Фамилия')
     expect(getCell(data, 1, 1)).toBe('10000')
-    expect(getCell(data, 3, 1)).toBe('22500') // формула → кэш значений (CONCEPT Ф1)
+    // формула хранится текстом (строка формул, Этап 4.3), результат Excel —
+    // в кэше; SUM поддерживается — движок пересчитает его сам (4.6)
+    expect(getCell(data, 3, 1)).toBe('=SUM(B2:B3)')
+    expect(data.formulaCache?.get(cellKey(3, 1))).toBe('22500')
+    recalcSheet(data)
+    expect(cellText(data, 3, 1)).toBe('22500')
+    expect(cellIsFrozen(data, 3, 1)).toBe(false)
     expect(getCell(data, 4, 0)).toBe('ИСТИНА')
     expect(getCell(data, 4, 1)).toBe('') // пусто не хранится
     expect(sheets[1].sheet.cells.get(cellKey(0, 1))).toBe('42')

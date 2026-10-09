@@ -29,6 +29,12 @@ export interface SheetModel {
   cells: Map<string, CellRaw>
   /** стили только заполненных ячеек — тем же ключом (переносятся из .xlsx) */
   styles: Map<string, CellStyle>
+  /**
+   * Кэш значений чужих формул из файла (Этап 4.6): то, что вычислил Excel.
+   * Показывается с индикатором «∛ не пересчитывается», если нашу функцию
+   * движок не знает; поддерживаемые формулы считаются заново и кэш не нужен.
+   */
+  formulaCache?: Map<string, CellRaw>
   /** логический размер листа (в пределах можно навигироваться) */
   rows: number
   cols: number
@@ -62,6 +68,7 @@ export function withCell(sheet: SheetModel, row: number, col: number, value: Cel
   return {
     cells,
     styles: sheet.styles,
+    formulaCache: sheet.formulaCache,
     rows: Math.max(sheet.rows, row + 1),
     cols: Math.max(sheet.cols, col + 1),
     maxRow: touched ? Math.max(sheet.maxRow, row) : sheet.maxRow,

@@ -1304,3 +1304,293 @@
 .filter-reset:hover {
   text-decoration: underline;
 }
+
+/* ── Этап 4: формулы, подсказки, справочник ──────────────────────────── */
+.formula-input {
+  cursor: text;
+}
+
+/* чужая формула: ∛ не пересчитывается */
+.formula-frozen {
+  flex: none;
+  padding: 2px 8px;
+  border-radius: 5px;
+  background: var(--nv-surface);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--nv-ink-soft);
+  white-space: nowrap;
+}
+
+/* ошибка формулы человеческим языком (Ф6) */
+.formula-error {
+  flex: none;
+  max-width: 34%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--nv-accent-deep);
+}
+
+/* попап автодополнения формул (4.4) */
+.assist-popup {
+  position: fixed;
+  z-index: 70;
+  max-height: 300px;
+  overflow: auto;
+  background: var(--nv-bg);
+  border: 1px solid var(--nv-grid-line);
+  border-radius: var(--nv-radius-panel);
+  box-shadow: var(--nv-shadow-pop);
+}
+
+.assist-args {
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--nv-grid-line);
+  font-family: var(--nv-font-text);
+  font-size: 12px;
+  color: var(--nv-ink);
+  background: var(--nv-mint);
+}
+
+.assist-args-name {
+  font-weight: 700;
+}
+
+.assist-arg-current {
+  font-weight: 700;
+  color: var(--nv-primary-deep);
+}
+
+.assist-list {
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+}
+
+.assist-list li {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 5px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.assist-list li:hover,
+.assist-item-active {
+  background: var(--nv-mint);
+}
+
+.assist-item-name {
+  flex: none;
+  font-family: var(--nv-font-text);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--nv-ink);
+}
+
+.assist-item-desc {
+  font-size: 12px;
+  color: var(--nv-ink-soft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* справочник «?» (4.5) */
+.help-dialog {
+  display: flex;
+  flex-direction: column;
+  width: min(760px, calc(100vw - 32px));
+  height: min(640px, calc(100vh - 48px));
+  background: var(--nv-bg);
+  border-radius: var(--nv-radius-panel);
+  box-shadow: var(--nv-shadow-pop);
+  overflow: hidden;
+}
+
+.help-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--nv-grid-line);
+}
+
+.help-header h2 {
+  margin: 0;
+  font-family: var(--nv-font-display);
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--nv-ink);
+  white-space: nowrap;
+}
+
+.help-tabs {
+  display: flex;
+  gap: 4px;
+  flex: 1;
+}
+
+.help-tab {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  font-family: var(--nv-font-text);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--nv-ink-soft);
+  cursor: pointer;
+}
+
+.help-tab:hover {
+  background: var(--nv-mint);
+}
+
+.help-tab-active {
+  background: var(--nv-mint-deep);
+  color: var(--nv-ink);
+}
+
+.help-body {
+  flex: 1;
+  overflow: auto;
+  padding: 16px 18px;
+}
+
+.help-search {
+  width: 100%;
+  margin-bottom: 14px;
+  padding: 8px 12px;
+  border: 1px solid var(--nv-grid-line);
+  border-radius: 7px;
+  font-family: var(--nv-font-text);
+  font-size: 13px;
+  color: var(--nv-ink);
+  outline: none;
+}
+
+.help-search:focus {
+  border-color: var(--nv-primary);
+}
+
+.help-empty {
+  color: var(--nv-ink-soft);
+}
+
+.help-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 12px;
+}
+
+.help-card {
+  padding: 12px 14px;
+  border: 1px solid var(--nv-grid-line);
+  border-radius: 9px;
+  background: var(--nv-bg);
+}
+
+.help-card-name {
+  margin: 0 0 4px;
+  font-family: var(--nv-font-text);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--nv-primary-deep);
+}
+
+.help-card-sig {
+  display: block;
+  margin-bottom: 6px;
+  font-family: var(--nv-font-text);
+  font-size: 12px;
+  color: var(--nv-ink);
+}
+
+.help-card-desc {
+  margin: 0 0 8px;
+  font-size: 12.5px;
+  color: var(--nv-ink);
+}
+
+.help-card-example {
+  margin: 0;
+  padding-top: 8px;
+  border-top: 1px dashed var(--nv-grid-line);
+  font-size: 12px;
+  color: var(--nv-ink-soft);
+}
+
+.help-card-example code {
+  color: var(--nv-ink);
+}
+
+.help-card-result {
+  font-weight: 700;
+  color: var(--nv-primary-deep);
+}
+
+.help-keys {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.help-keys th {
+  text-align: left;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--nv-ink-soft);
+  border-bottom: 1px solid var(--nv-grid-line);
+}
+
+.help-keys td {
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--nv-grid-line);
+  font-size: 13px;
+  color: var(--nv-ink);
+}
+
+.help-keys kbd {
+  display: inline-block;
+  padding: 2px 7px;
+  border: 1px solid var(--nv-grid-line);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: var(--nv-surface);
+  font-family: var(--nv-font-text);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--nv-ink);
+  white-space: nowrap;
+}
+
+.help-tips {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 640px;
+}
+
+.help-tip {
+  padding: 12px 14px;
+  border: 1px solid var(--nv-grid-line);
+  border-radius: 9px;
+}
+
+.help-tip h3 {
+  margin: 0 0 6px;
+  font-family: var(--nv-font-text);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--nv-ink);
+}
+
+.help-tip p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--nv-ink);
+}

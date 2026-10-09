@@ -3,12 +3,13 @@
  * фильтров объединяются по «И». Фильтрация недеструктивна — данные не
  * трогаются, вычисляется лишь список видимых строк контента (0..maxRow).
  *
- * Значение ячейки сравнивается как сырая строка (то, что видно в гридe);
+ * Значение ячейки — отображаемая строка (формулы уже вычислены);
  * '' кодирует пустую ячейку — «(Пустые)» в UI. Сортировка (Ф8) переставляет
  * значения в позициях видимых строк: скрытые строки остаются скрытыми.
  */
 
-import { getCell, parseNumber, type SheetModel } from './sheet'
+import { cellText } from '../formula/engine'
+import { parseNumber, type SheetModel } from './sheet'
 
 export type FilterMode = 'include' | 'exclude'
 
@@ -44,7 +45,7 @@ export function visibleRowsOf(
   for (let r = 0; r <= sheet.maxRow; r++) {
     let ok = true
     for (const f of active) {
-      if (!valuePasses(f, getCell(sheet, r, f.col))) {
+      if (!valuePasses(f, cellText(sheet, r, f.col))) {
         ok = false
         break
       }
@@ -98,7 +99,7 @@ export function columnValueCounts(sheet: SheetModel, col: number): ColumnValueCo
   const counts = new Map<string, number>()
   let blanks = 0
   for (let r = 0; r <= sheet.maxRow; r++) {
-    const raw = getCell(sheet, r, col)
+    const raw = cellText(sheet, r, col)
     if (raw === '') {
       blanks++
       continue
