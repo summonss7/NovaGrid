@@ -41,7 +41,8 @@ import {
   withCell,
 } from './sheet'
 import { applyFormulaChanges, cellNumber, recalcSheet } from '../formula/engine'
-import { average, sum } from './stats'
+// метрики выделения (6.1) агрегируются потоком; sum/average из ./stats
+// остаются для движка формул и юнит-тестов
 import { type SearchHit, type SearchOptions, searchBook, searchSheet } from './search'
 import {
   type BookWire,
@@ -145,6 +146,8 @@ export interface GridState {
     meta?: { fileFormat?: FileFormat | null; csvDelimiter?: string },
   ) => void
   setFileHandle: (handle: FileSystemFileHandle | null) => void
+  /** стартовый разделитель CSV из настроек (6.3); при открытии файла замещается детектом */
+  setCsvDelimiter: (d: string) => void
 
   activateTab: (index: number) => void
   addTab: () => void
@@ -209,22 +212,24 @@ export function cellsMetrics(
   rows: readonly number[],
   cols: readonly number[],
 ): SelectionMetrics {
-  const values: number[] = []
+  let total = 0
+  let count = 0
   let filled = 0
+  let min = null as number | null
+  let max = null as number | null
   for (let i = 0; i < rows.length; i++) {
     const raw = getCell(sheet, rows[i], cols[i])
     if (raw !== '') filled++
     // формулы дают результат движка: Sigma в статус-баре видит вычисленное (Этап 4)
     const n = raw.startsWith('=') ? cellNumber(sheet, rows[i], cols[i]) : parseNumber(raw)
-    if (n !== null) values.push(n)
+    if (n !== null) {
+      total += n
+      count++
+      if (min === null || n < min) min = n
+      if (max === null || n > max) max = n
+    }
   }
-  let min = null as number | null
-  let max = null as number | null
-  for (const v of values) {
-    if (min === null || v < min) min = v
-    if (max === null || v > max) max = v
-  }
-  return { total: sum(values), count: values.length, mean: average(values), filled, min, max }
+  return { total, count, mean: count > 0 ? total / count : 0, filled, min, max }
 }
 
 /**
@@ -237,10 +242,11 @@ export function selectionMetrics(
   selection: Selection,
   visible: readonly number[] | null = null,
 ): SelectionMetrics {
+  // однопроходная агрегация без промежуточных массивов: выделение колонки
+  // на 100k строк не должно материализовать 200k координат (Этап 6.1)
+  const agg = newMetricsAgg()
   // несмежные Ctrl-области могут пересекаться — ячейка считается один раз
   const dedup = selection.ranges.length > 1 ? new Set<string>() : null
-  const rows: number[] = []
-  const cols: number[] = []
   for (const rg of selection.ranges) {
     const n = normalize(rg)
     for (let r = n.r1; r <= n.r2; r++) {
@@ -251,12 +257,48 @@ export function selectionMetrics(
           if (dedup.has(key)) continue
           dedup.add(key)
         }
-        rows.push(r)
-        cols.push(c)
+        aggCell(agg, sheet, r, c)
       }
     }
   }
-  return cellsMetrics(sheet, rows, cols)
+  return finishMetrics(agg)
+}
+
+/** Агрегатор метрик: накапливает Σ/n/x̄/мин/макс потоком, без массива значений. */
+interface MetricsAgg {
+  total: number
+  count: number
+  filled: number
+  min: number | null
+  max: number | null
+}
+
+function newMetricsAgg(): MetricsAgg {
+  return { total: 0, count: 0, filled: 0, min: null, max: null }
+}
+
+function aggCell(agg: MetricsAgg, sheet: SheetModel, row: number, col: number): void {
+  const raw = getCell(sheet, row, col)
+  if (raw !== '') agg.filled++
+  // формулы дают результат движка: Σ в статус-баре видит вычисленное (Этап 4)
+  const n = raw.startsWith('=') ? cellNumber(sheet, row, col) : parseNumber(raw)
+  if (n !== null) {
+    agg.total += n
+    agg.count++
+    if (agg.min === null || n < agg.min) agg.min = n
+    if (agg.max === null || n > agg.max) agg.max = n
+  }
+}
+
+function finishMetrics(agg: MetricsAgg): SelectionMetrics {
+  return {
+    total: agg.total,
+    count: agg.count,
+    mean: agg.count > 0 ? agg.total / agg.count : 0,
+    filled: agg.filled,
+    min: agg.min,
+    max: agg.max,
+  }
 }
 
 export function rangeMetrics(
@@ -264,16 +306,12 @@ export function rangeMetrics(
   n: NormRange,
   visible: readonly number[] | null = null,
 ): SelectionMetrics {
-  const rows: number[] = []
-  const cols: number[] = []
+  const agg = newMetricsAgg()
   for (let r = n.r1; r <= n.r2; r++) {
     if (visible && visibleIndexOf(visible, r) < 0) continue
-    for (let c = n.c1; c <= n.c2; c++) {
-      rows.push(r)
-      cols.push(c)
-    }
+    for (let c = n.c1; c <= n.c2; c++) aggCell(agg, sheet, r, c)
   }
-  return cellsMetrics(sheet, rows, cols)
+  return finishMetrics(agg)
 }
 
 /** Демо-данные в духе сценария ТЗ (фамилии + суммы) — чтобы грид жил с первого запуска. */
@@ -495,6 +533,7 @@ export const gridStore = createStore<GridState>((set, get) => {
     },
 
     setFileHandle: (handle) => set({ fileHandle: handle }),
+    setCsvDelimiter: (d) => set({ csvDelimiter: d }),
 
     activateTab: (index) => {
       const { tabs } = get()

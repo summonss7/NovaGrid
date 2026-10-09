@@ -22,7 +22,7 @@ import { visibleRowsOf, type ColumnFilter } from '../core/filter'
 import { normalize, inSelection } from '../core/selection'
 import { gridStore, rangeMetrics } from '../core/store'
 import type { SheetModel } from '../core/sheet'
-import { ru } from '../i18n/ru'
+import { useT } from '../i18n'
 import { AssistPopup } from '../ui/AssistPopup'
 import { useFormulaAssist } from '../ui/useFormulaAssist'
 import { ContextMenu } from '../ui/ContextMenu'
@@ -67,6 +67,7 @@ const LONG_PRESS_SLOP = 8 // сдвиг больше — это не нажат�
 const ZOOM_WHEEL_K = 0.0015
 
 export function GridCanvas() {
+  const t = useT()
   const mainRef = useRef<HTMLElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const spacerRef = useRef<HTMLDivElement>(null)
@@ -367,7 +368,7 @@ export function GridCanvas() {
     setAltLabel({
       x: Math.min(x + 18, rect.width - 130),
       y: Math.max(6, y - 46),
-      text: `${ru.altSum} ${m.total.toLocaleString('ru-RU')}`,
+      text: `${t.altSum} ${t.num(m.total)}`,
     })
   }
 
@@ -591,6 +592,10 @@ export function GridCanvas() {
   }
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLElement>) => {
+    // клавиши из всплывающих меню/панелей внутри main — не команды грида
+    // (иначе Enter «нажимает» активную ячейку вместо пункта меню, Этап 6.2)
+    if ((e.target as HTMLElement).closest('.ctx-menu, .col-menu, .search-panel, .sum-card'))
+      return
     const st = gridStore.getState()
     if (st.edit) return // ввод обрабатывает редактор
     const mod = e.ctrlKey || e.metaKey
@@ -617,6 +622,33 @@ export function GridCanvas() {
         return
       case 'F2':
         st.beginEdit()
+        e.preventDefault()
+        return
+      case 'ContextMenu':
+      case 'F10':
+        // Shift+F10 / клавиша меню — контекстное меню активной ячейки с
+        // клавиатуры (Этап 6.2 «клавиатура везде»): фильтры ТЗ доступны
+        // и без мыши; F10 без Shift оставляем системе (меню окна браузера)
+        if (e.key === 'F10' && !e.shiftKey) return
+        {
+          const { active } = st.selection
+          const main = mainRef.current
+          const el = scrollRef.current
+          if (main && el) {
+            const lay = layoutFor(st.sheet, st.filters)
+            const i = lay.indexOf(active.row)
+            if (i >= 0) {
+              const r = cellRect(i, active.col, el.scrollLeft, el.scrollTop)
+              const rect = main.getBoundingClientRect()
+              setCtxMenu({
+                row: active.row,
+                col: active.col,
+                x: rect.left + r.x + r.w / 2,
+                y: rect.top + r.y + r.h / 2,
+              })
+            }
+          }
+        }
         e.preventDefault()
         return
       case 'Escape':
@@ -741,7 +773,7 @@ export function GridCanvas() {
       ref={mainRef}
       className="grid-area"
       role="grid"
-      aria-label={ru.gridArea}
+      aria-label={t.gridArea}
       aria-rowcount={rows}
       aria-colcount={cols}
       tabIndex={0}
@@ -770,7 +802,7 @@ export function GridCanvas() {
           onSelect={(e) => assist.sync(e.currentTarget.selectionStart ?? 0)}
           onKeyDown={onEditorKeyDown}
           onBlur={onEditorBlur}
-          aria-label={ru.cellEditorLabel}
+          aria-label={t.cellEditorLabel}
           spellCheck={false}
         />
       )}

@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useStore } from 'zustand'
 import { visibleRowsOf } from '../core/filter'
 import { gridStore } from '../core/store'
-import { ru } from '../i18n/ru'
+import { useT } from '../i18n'
 
 interface TabMenu {
   x: number
@@ -14,6 +14,7 @@ interface TabMenu {
 /** Панель листов (§6 + Этап 2.2): вкладки — переключение, переименование
  *  (двойной клик), дублирование и удаление (меню ПКМ), добавление (+). */
 export function SheetsBar() {
+  const t = useT()
   const tabs = useStore(gridStore, (s) => s.tabs)
   const activeTab = useStore(gridStore, (s) => s.activeTab)
   const sheet = useStore(gridStore, (s) => s.sheet)
@@ -31,7 +32,7 @@ export function SheetsBar() {
   const removeTab = (index: number) => {
     const tab = tabs[index]
     const hasContent = tab.sheet.cells.size > 0
-    if (hasContent && !window.confirm(ru.tabDeleteConfirm(tab.name))) return
+    if (hasContent && !window.confirm(t.tabDeleteConfirm(tab.name))) return
     gridStore.getState().removeTab(index)
   }
 
@@ -44,7 +45,7 @@ export function SheetsBar() {
 
   return (
     <div className="sheets-bar">
-      <div className="sheets-tabs" role="tablist" aria-label="Листы книги">
+      <div className="sheets-tabs" role="tablist" aria-label={t.sheetsTabsLabel}>
         {tabs.map((tab, i) => (
           <div key={tab.id} className="sheet-tab-wrap">
             {editing === i ? (
@@ -52,7 +53,7 @@ export function SheetsBar() {
                 ref={inputRef}
                 className="sheet-tab-rename"
                 defaultValue={tab.name}
-                aria-label={ru.tabRename}
+                aria-label={t.tabRename}
                 onBlur={commitRename}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') commitRename()
@@ -85,8 +86,8 @@ export function SheetsBar() {
         <button
           type="button"
           className="btn btn-ghost btn-icon"
-          aria-label={ru.addSheetLabel}
-          title={ru.addSheetLabel}
+          aria-label={t.addSheetLabel}
+          title={t.addSheetLabel}
           onClick={() => gridStore.getState().addTab()}
         >
           <Plus size={16} strokeWidth={1.5} aria-hidden />
@@ -95,8 +96,8 @@ export function SheetsBar() {
       {/* Ф3.5: при активных фильтрах — «Показано 132 из 1 500», иначе габариты */}
       <span className="sheets-note" aria-live="polite">
         {filters.length > 0
-          ? ru.filterShownOf(visibleRowsOf(sheet, filters)?.length ?? 0, sheet.maxRow + 1)
-          : ru.sheetRowsCols(sheet.rows, sheet.cols)}
+          ? t.filterShownOf(visibleRowsOf(sheet, filters)?.length ?? 0, sheet.maxRow + 1)
+          : t.sheetRowsCols(sheet.rows, sheet.cols)}
       </span>
 
       {menu && (
@@ -110,7 +111,7 @@ export function SheetsBar() {
             className="tab-menu"
             style={{ left: menu.x }}
             role="menu"
-            aria-label={ru.tabMenuLabel}
+            aria-label={t.tabMenuLabel}
           >
             <button
               type="button"
@@ -122,7 +123,7 @@ export function SheetsBar() {
               }}
             >
               <PenLine size={14} strokeWidth={1.5} aria-hidden />
-              {ru.tabRename}
+              {t.tabRename}
             </button>
             <button
               type="button"
@@ -134,7 +135,7 @@ export function SheetsBar() {
               }}
             >
               <Copy size={14} strokeWidth={1.5} aria-hidden />
-              {ru.tabDuplicate}
+              {t.tabDuplicate}
             </button>
             <button
               type="button"
@@ -147,7 +148,7 @@ export function SheetsBar() {
               }}
             >
               <Trash2 size={14} strokeWidth={1.5} aria-hidden />
-              {ru.tabDelete}
+              {t.tabDelete}
             </button>
           </div>
         </>

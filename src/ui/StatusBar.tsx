@@ -1,8 +1,11 @@
 import { useStore } from 'zustand'
 import { visibleRowsOf } from '../core/filter'
 import { gridStore, selectionMetrics } from '../core/store'
+import { cellText } from '../formula/engine'
+import { cellRefName } from '../grid/geometry'
 import { zoomStore } from '../grid/zoom'
-import { ru } from '../i18n/ru'
+import { useT } from '../i18n'
+import { useMemo } from 'react'
 
 /**
  * Статус-бар метрик (§6, Ф4): Σ · n · x̄ по выделению — живьём при любом
@@ -10,37 +13,42 @@ import { ru } from '../i18n/ru'
  * «видно 132 строки» Σ показывает сумму именно этих строк (КТ-3).
  * Этап 5.3: справа контрол масштаба таблицы (− % +) — тот же зум, что пинч
  * и Ctrl+колесо; на мобильном метрики растут до «крупной плашки» (§9).
+ * Этап 6.2: скрытый живой регион объявляет скринридеру активную ячейку
+ * (у канвас-грида нет DOM-ячеек — паттерн canvas+aria-live).
+ * Этап 6.1: метрики считаются один раз на изменение (было — три подписки,
+ * каждая пересчитывала агрегат по всему выделению).
  */
 export function StatusBar() {
-  // три примитивные подписки вместо одной объектной — без пересоздания снапшота
-  const total = useStore(
-    gridStore,
-    (s) => selectionMetrics(s.sheet, s.selection, visibleRowsOf(s.sheet, s.filters)).total,
-  )
-  const count = useStore(
-    gridStore,
-    (s) => selectionMetrics(s.sheet, s.selection, visibleRowsOf(s.sheet, s.filters)).count,
-  )
-  const mean = useStore(
-    gridStore,
-    (s) => selectionMetrics(s.sheet, s.selection, visibleRowsOf(s.sheet, s.filters)).mean,
-  )
+  const t = useT()
+  const sheet = useStore(gridStore, (s) => s.sheet)
+  const selection = useStore(gridStore, (s) => s.selection)
+  const filters = useStore(gridStore, (s) => s.filters)
   const zoom = useStore(zoomStore, (s) => s.zoom)
+
+  const metrics = useMemo(
+    () => selectionMetrics(sheet, selection, visibleRowsOf(sheet, filters)),
+    [sheet, selection, filters],
+  )
+  const activeRef = cellRefName(selection.active.row, selection.active.col)
+  const activeText = cellText(sheet, selection.active.row, selection.active.col)
 
   return (
     <footer className="status-bar">
-      <span className="status-phase">{ru.statusPhase}</span>
-      <span className="status-metrics" aria-live="polite">
-        <span className="status-metric">Σ {total.toLocaleString('ru-RU')}</span>
-        <span className="status-metric">n {count.toLocaleString('ru-RU')}</span>
-        <span className="status-metric">x̄ {mean.toLocaleString('ru-RU')}</span>
+      <span className="status-phase">{t.statusPhase}</span>
+      <span className="sr-only" aria-live="polite">
+        {activeText !== '' ? `${activeRef} · ${activeText}` : activeRef}
       </span>
-      <span className="zoom-ctl" role="group" aria-label={ru.zoomLabel}>
+      <span className="status-metrics" aria-live="polite">
+        <span className="status-metric">Σ {t.num(metrics.total)}</span>
+        <span className="status-metric">n {t.num(metrics.count)}</span>
+        <span className="status-metric">x̄ {t.num(metrics.mean)}</span>
+      </span>
+      <span className="zoom-ctl" role="group" aria-label={t.zoomLabel}>
         <button
           type="button"
           className="zoom-btn"
-          aria-label={ru.zoomOut}
-          title={ru.zoomOut}
+          aria-label={t.zoomOut}
+          title={t.zoomOut}
           onClick={() => zoomStore.getState().setZoom(zoom - 0.1)}
         >
           −
@@ -48,8 +56,8 @@ export function StatusBar() {
         <button
           type="button"
           className="zoom-value"
-          aria-label={ru.zoomReset}
-          title={ru.zoomReset}
+          aria-label={t.zoomReset}
+          title={t.zoomReset}
           onClick={() => zoomStore.getState().setZoom(1)}
         >
           {Math.round(zoom * 100)}%
@@ -57,8 +65,8 @@ export function StatusBar() {
         <button
           type="button"
           className="zoom-btn"
-          aria-label={ru.zoomIn}
-          title={ru.zoomIn}
+          aria-label={t.zoomIn}
+          title={t.zoomIn}
           onClick={() => zoomStore.getState().setZoom(zoom + 0.1)}
         >
           +

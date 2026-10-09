@@ -20,12 +20,12 @@
 }
 
 .btn-primary {
-  background: var(--nv-primary-deep);
+  background: var(--nv-primary-btn);
   color: var(--nv-bg);
 }
 
 .btn-primary:hover {
-  background: var(--nv-primary-deep-hover);
+  background: var(--nv-primary-btn-hover);
 }
 
 .btn-ghost {
@@ -63,7 +63,7 @@
 }
 
 .logo-word-grid {
-  color: var(--nv-primary-deep);
+  color: var(--nv-primary-text);
 }
 
 /* ── Поиск ───────────────────────────────────────────────────────────── */
@@ -166,7 +166,7 @@
 }
 
 .search-scope-btn.is-active {
-  background: var(--nv-primary-deep);
+  background: var(--nv-primary-btn);
   color: var(--nv-bg);
   font-weight: 600;
 }
@@ -245,7 +245,7 @@
   font-size: 12px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
-  color: var(--nv-primary-deep);
+  color: var(--nv-primary-text);
 }
 
 .search-result-text {
@@ -692,7 +692,7 @@
 }
 
 .start-recent-open svg {
-  color: var(--nv-primary-deep);
+  color: var(--nv-primary-text);
   flex: none;
 }
 
@@ -919,7 +919,7 @@
   font-family: var(--nv-font-display);
   font-size: 16px;
   font-weight: 700;
-  color: var(--nv-primary-deep);
+  color: var(--nv-primary-text);
 }
 
 .toast {
@@ -936,7 +936,7 @@
 }
 
 .toast-ok {
-  background: var(--nv-primary-deep);
+  background: var(--nv-primary-btn);
   color: var(--nv-bg);
 }
 
@@ -1082,7 +1082,7 @@
 }
 
 .ctx-item-primary {
-  color: var(--nv-primary-deep);
+  color: var(--nv-primary-text);
   font-weight: 600;
 }
 
@@ -1176,7 +1176,7 @@
 }
 
 .col-menu-value input[type='checkbox'] {
-  accent-color: var(--nv-primary-deep);
+  accent-color: var(--nv-primary-text);
   flex: none;
 }
 
@@ -1217,7 +1217,7 @@
   font-family: var(--nv-font-text);
   font-size: 12.5px;
   font-weight: 600;
-  color: var(--nv-primary-deep);
+  color: var(--nv-primary-text);
   cursor: pointer;
 }
 
@@ -1297,7 +1297,7 @@
   font-family: var(--nv-font-text);
   font-size: 12.5px;
   font-weight: 600;
-  color: var(--nv-primary-deep);
+  color: var(--nv-primary-text);
   cursor: pointer;
 }
 
@@ -1360,7 +1360,7 @@
 
 .assist-arg-current {
   font-weight: 700;
-  color: var(--nv-primary-deep);
+  color: var(--nv-primary-text);
 }
 
 .assist-list {
@@ -1499,7 +1499,7 @@
   font-family: var(--nv-font-text);
   font-size: 14px;
   font-weight: 700;
-  color: var(--nv-primary-deep);
+  color: var(--nv-primary-text);
 }
 
 .help-card-sig {
@@ -1530,7 +1530,7 @@
 
 .help-card-result {
   font-weight: 700;
-  color: var(--nv-primary-deep);
+  color: var(--nv-primary-text);
 }
 
 .help-keys {
@@ -1702,8 +1702,8 @@
 }
 
 .formula-ref-btn:hover {
-  border-color: var(--nv-primary-deep);
-  color: var(--nv-primary-deep);
+  border-color: var(--nv-primary-text);
+  color: var(--nv-primary-text);
 }
 
 .formula-collapse {
@@ -1925,4 +1925,93 @@
     width: calc(100vw - 16px);
     height: calc(100dvh - 32px);
   }
+}
+
+/* ── доступность (Этап 6.2) ─────────────────────────────────────────── */
+
+/* только для скринридеров: живой регион активной ячейки канвас-грида */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+/* ── настройки (Этап 6.3) ───────────────────────────────────────────── */
+
+.settings-dialog {
+  position: fixed;
+  z-index: 80;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  width: min(440px, calc(100vw - 32px));
+  background: var(--nv-bg);
+  border-radius: var(--nv-radius-panel);
+  box-shadow: var(--nv-shadow-pop);
+  padding: 18px 20px 20px;
+}
+
+.settings-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.settings-head h2 {
+  margin: 0;
+  font-family: var(--nv-font-display);
+  font-size: var(--nv-size-title);
+  color: var(--nv-ink);
+}
+
+.settings-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 0;
+  border-top: 1px solid var(--nv-grid-line);
+}
+
+.settings-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--nv-ink);
+}
+
+.settings-seg {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.settings-seg-btn {
+  flex: 1 1 auto;
+  min-height: 36px;
+  padding: 6px 12px;
+  border: 1px solid var(--nv-grid-line);
+  border-radius: var(--nv-radius-btn);
+  background: var(--nv-bg);
+  color: var(--nv-ink);
+  font: 600 13px var(--nv-font-text);
+  cursor: pointer;
+}
+
+.settings-seg-btn:hover {
+  border-color: var(--nv-primary-deep);
+}
+
+.settings-seg-btn.is-active {
+  background: var(--nv-primary-btn);
+  border-color: var(--nv-primary-btn);
+  color: #fff;
 }

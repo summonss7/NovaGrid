@@ -1,5 +1,6 @@
 import { useEffect, useState, type RefObject } from 'react'
 import type { AssistInfo, AssistSuggestion } from '../formula/assist'
+import { useT } from '../i18n'
 
 /*
  * Попап подсказок формул (Этап 4.4, Ф6): список функций по префиксу и
@@ -13,6 +14,7 @@ export function AssistPopup(props: {
   activeIdx: number
   onPick: (suggestion: AssistSuggestion) => void
 }) {
+  const t = useT()
   const [rect, setRect] = useState<{ left: number; top: number; width: number } | null>(null)
   const { assist, activeIdx } = props
 
@@ -32,7 +34,7 @@ export function AssistPopup(props: {
       className="assist-popup"
       style={{ left: rect.left, top: rect.top, minWidth: rect.width }}
       role="listbox"
-      aria-label="Подсказки формул"
+      aria-label={t.assistLabel}
     >
       {assist.argHint && (
         <div className="assist-args">

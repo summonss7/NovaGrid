@@ -45,8 +45,8 @@ export function themeFromCSS(scale = 1): GridTheme {
   const headerPx = Math.round(12 * scale * 10) / 10
   return {
     ink: v('--nv-ink', '#2b2b2b'),
-    inkSoft: v('--nv-ink-soft', '#9a9a9a'),
-    errInk: v('--nv-accent-deep', '#e8481c'),
+    inkSoft: v('--nv-ink-soft', '#6b6b6b'),
+    errInk: v('--nv-danger-text', '#c23a10'),
     bg: v('--nv-bg', '#ffffff'),
     surface: v('--nv-surface', '#ededeb'),
     gridLine: v('--nv-grid-line', '#e4e4e1'),

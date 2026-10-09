@@ -5,7 +5,7 @@ import { gridStore } from '../core/store'
 import { getCell } from '../core/sheet'
 import { cellError, cellIsFrozen } from '../formula/engine'
 import { cellRefName } from '../grid/geometry'
-import { ru } from '../i18n/ru'
+import { useT } from '../i18n'
 import { AssistPopup } from './AssistPopup'
 import { useFormulaAssist } from './useFormulaAssist'
 import { useIsMobile } from './useIsMobile'
@@ -21,6 +21,7 @@ import { useIsMobile } from './useIsMobile'
  * редка, экран дорог.
  */
 export function FormulaBar() {
+  const t = useT()
   const inputRef = useRef<HTMLInputElement>(null)
   const mobile = useIsMobile()
   const [expanded, setExpanded] = useState(false)
@@ -57,20 +58,20 @@ export function FormulaBar() {
   return (
     <div className={`formula-bar${collapsed ? ' formula-bar-collapsed' : ''}`}>
       <span className="formula-badge" aria-hidden>
-        {ru.formulaLabel}
+        {t.formulaLabel}
       </span>
       {collapsed ? (
         <button
           type="button"
           className="formula-ref formula-ref-btn"
-          aria-label={ru.formulaExpand}
-          title={ru.formulaExpand}
+          aria-label={t.formulaExpand}
+          title={t.formulaExpand}
           onClick={() => setExpanded(true)}
         >
           {ref}
         </button>
       ) : (
-        <span className="formula-ref" aria-label="Адрес активной ячейки">
+        <span className="formula-ref" aria-label={t.cellRefLabel}>
           {ref}
         </span>
       )}
@@ -80,8 +81,8 @@ export function FormulaBar() {
             ref={inputRef}
             className="formula-input"
             value={value}
-            placeholder={ru.formulaPlaceholder}
-            aria-label={ru.formulaBarLabel}
+            placeholder={t.formulaPlaceholder}
+            aria-label={t.formulaBarLabel}
             spellCheck={false}
             onFocus={() => {
               if (!editingThis) gridStore.getState().beginBarEdit()
@@ -114,8 +115,8 @@ export function FormulaBar() {
             }}
           />
           {frozen && !editingThis && (
-            <span className="formula-frozen" title={ru.formulaFrozenHint}>
-              {ru.formulaFrozen}
+            <span className="formula-frozen" title={t.formulaFrozenHint}>
+              {t.formulaFrozen}
             </span>
           )}
           {error && !editingThis && (
@@ -127,8 +128,8 @@ export function FormulaBar() {
             <button
               type="button"
               className="btn btn-ghost btn-icon formula-collapse"
-              aria-label={ru.formulaCollapse}
-              title={ru.formulaCollapse}
+              aria-label={t.formulaCollapse}
+              title={t.formulaCollapse}
               onClick={() => setExpanded(false)}
             >
               <ChevronUp size={16} strokeWidth={1.5} aria-hidden />

@@ -1,11 +1,12 @@
 import { Copy, Filter, FilterX, ListPlus } from 'lucide-react'
-import { useEffect } from 'react'
+import { useRef } from 'react'
 import { useStore } from 'zustand'
 import { colName } from '../grid/geometry'
 import { gridStore } from '../core/store'
 import { cellText } from '../formula/engine'
-import { ru } from '../i18n/ru'
+import { useT } from '../i18n'
 import { copyText } from './clipboard'
+import { useMenuKeys } from './menuKeys'
 
 /**
  * Контекстное меню ПКМ по ячейке (CONCEPT Ф3, DESIGN-SYSTEM §7) — ключевой
@@ -20,20 +21,15 @@ export function ContextMenu(props: {
   col: number
   onClose: () => void
 }) {
+  const t = useT()
   const filters = useStore(gridStore, (s) => s.filters)
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') props.onClose()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [props])
+  const menuRef = useRef<HTMLDivElement>(null)
+  useMenuKeys(menuRef, props.onClose)
 
   const st = gridStore.getState()
   // отображаемое значение: фильтры сравнивают то, что видно (формулы вычислены)
   const raw = cellText(st.sheet, props.row, props.col)
-  const value = raw === '' ? ru.filterBlanks : raw
+  const value = raw === '' ? t.filterBlanks : raw
   const letter = colName(props.col)
   const colFilter = filters.find((f) => f.col === props.col)
   const canAdd =
@@ -65,7 +61,13 @@ export function ContextMenu(props: {
         onClick={props.onClose}
         onContextMenu={(e) => e.preventDefault()}
       />
-      <div className="ctx-menu" style={{ left, top }} role="menu" aria-label={ru.ctxMenuLabel}>
+      <div
+        ref={menuRef}
+        className="ctx-menu"
+        style={{ left, top }}
+        role="menu"
+        aria-label={t.ctxMenuLabel}
+      >
         <button
           type="button"
           role="menuitem"
@@ -73,7 +75,7 @@ export function ContextMenu(props: {
           onClick={act(() => st.filterByValue(props.col, raw))}
         >
           <Filter size={14} strokeWidth={1.5} aria-hidden />
-          <span className="ctx-item-text">{ru.ctxFilterEqual(letter, value)}</span>
+          <span className="ctx-item-text">{t.ctxFilterEqual(letter, value)}</span>
         </button>
         <button
           type="button"
@@ -82,7 +84,7 @@ export function ContextMenu(props: {
           onClick={act(() => st.excludeByValue(props.col, raw))}
         >
           <FilterX size={14} strokeWidth={1.5} aria-hidden />
-          <span className="ctx-item-text">{ru.ctxFilterNotEqual(letter, value)}</span>
+          <span className="ctx-item-text">{t.ctxFilterNotEqual(letter, value)}</span>
         </button>
         {canAdd && (
           <button
@@ -92,7 +94,7 @@ export function ContextMenu(props: {
             onClick={act(() => st.addValueToFilter(props.col, raw))}
           >
             <ListPlus size={14} strokeWidth={1.5} aria-hidden />
-            <span className="ctx-item-text">{ru.ctxAddValue(value)}</span>
+            <span className="ctx-item-text">{t.ctxAddValue(value)}</span>
           </button>
         )}
         {colFilter && (
@@ -102,7 +104,7 @@ export function ContextMenu(props: {
             className="ctx-item"
             onClick={act(() => st.clearColumnFilter(props.col))}
           >
-            <span className="ctx-item-text">{ru.ctxClearColumn(letter)}</span>
+            <span className="ctx-item-text">{t.ctxClearColumn(letter)}</span>
           </button>
         )}
         {filters.length > 0 && (
@@ -112,7 +114,7 @@ export function ContextMenu(props: {
             className="ctx-item"
             onClick={act(() => st.clearAllFilters())}
           >
-            <span className="ctx-item-text">{ru.ctxClearAll}</span>
+            <span className="ctx-item-text">{t.ctxClearAll}</span>
           </button>
         )}
         <div className="ctx-sep" aria-hidden />
@@ -123,7 +125,7 @@ export function ContextMenu(props: {
           onClick={() => void copyValue(raw)}
         >
           <Copy size={14} strokeWidth={1.5} aria-hidden />
-          <span className="ctx-item-text">{ru.ctxCopyCell}</span>
+          <span className="ctx-item-text">{t.ctxCopyCell}</span>
         </button>
         <button
           type="button"
@@ -132,7 +134,7 @@ export function ContextMenu(props: {
           onClick={() => void copyValue(rowText)}
         >
           <Copy size={14} strokeWidth={1.5} aria-hidden />
-          <span className="ctx-item-text">{ru.ctxCopyRow}</span>
+          <span className="ctx-item-text">{t.ctxCopyRow}</span>
         </button>
       </div>
     </>

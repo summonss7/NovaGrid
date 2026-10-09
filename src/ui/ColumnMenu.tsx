@@ -1,10 +1,11 @@
 import { ArrowDownAZ, ArrowUpAZ, Search } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useStore } from 'zustand'
 import { columnValueCounts, type ColumnFilter } from '../core/filter'
 import { gridStore } from '../core/store'
 import { colName } from '../grid/geometry'
-import { ru } from '../i18n/ru'
+import { useT } from '../i18n'
+import { useMenuKeys } from './menuKeys'
 
 /** Сколько значений показывать в списке (дальше — уточняй поиском). */
 const LIST_CAP = 500
@@ -18,18 +19,17 @@ let sortConfirmedOnce = false
  * галочки значений с поиском и «(пустые)», сброс фильтра колонки.
  */
 export function ColumnMenu(props: { x: number; y: number; col: number; onClose: () => void }) {
+  const t = useT()
   const sheet = useStore(gridStore, (s) => s.sheet)
   const filters = useStore(gridStore, (s) => s.filters)
   const [needle, setNeedle] = useState('')
   const { col, onClose } = props
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
+  const menuRef = useRef<HTMLDivElement>(null)
+  // фокус в поиск при открытии; стрелки не перехватываем — они нужны каретке
+  useMenuKeys(menuRef, onClose, {
+    itemSelector: null,
+    autoFocusSelector: '.col-menu-search input',
+  })
 
   const letter = colName(col)
   const colFilter = filters.find((f) => f.col === col)
@@ -60,7 +60,7 @@ export function ColumnMenu(props: { x: number; y: number; col: number; onClose: 
 
   const sort = (dir: 'asc' | 'desc') => {
     if (!sortConfirmedOnce) {
-      if (!window.confirm(ru.sortConfirm)) return
+      if (!window.confirm(t.sortConfirm)) return
       sortConfirmedOnce = true
     }
     gridStore.getState().sortColumn(col, dir)
@@ -87,19 +87,20 @@ export function ColumnMenu(props: { x: number; y: number; col: number; onClose: 
     <>
       <div className="menu-backdrop" onClick={onClose} onContextMenu={(e) => e.preventDefault()} />
       <div
+        ref={menuRef}
         className="col-menu"
         style={{ left, top }}
         role="menu"
-        aria-label={ru.columnMenuLabel(letter)}
+        aria-label={t.columnMenuLabel(letter)}
       >
-        <div className="col-menu-sort" role="group" aria-label={ru.sortGroupLabel}>
+        <div className="col-menu-sort" role="group" aria-label={t.sortGroupLabel}>
           <button type="button" role="menuitem" className="ctx-item" onClick={() => sort('asc')}>
             <ArrowUpAZ size={14} strokeWidth={1.5} aria-hidden />
-            {ru.sortAsc}
+            {t.sortAsc}
           </button>
           <button type="button" role="menuitem" className="ctx-item" onClick={() => sort('desc')}>
             <ArrowDownAZ size={14} strokeWidth={1.5} aria-hidden />
-            {ru.sortDesc}
+            {t.sortDesc}
           </button>
         </div>
 
@@ -108,17 +109,17 @@ export function ColumnMenu(props: { x: number; y: number; col: number; onClose: 
           <input
             type="search"
             value={needle}
-            placeholder={ru.columnValuesSearch}
-            aria-label={ru.columnValuesSearch}
+            placeholder={t.columnValuesSearch}
+            aria-label={t.columnValuesSearch}
             onChange={(e) => setNeedle(e.target.value)}
             spellCheck={false}
           />
         </div>
 
-        <div className="col-menu-list" role="group" aria-label={ru.columnValuesLabel}>
+        <div className="col-menu-list" role="group" aria-label={t.columnValuesLabel}>
           {shown.map((v) => {
             const isBlank = v.value === ''
-            const label = isBlank ? ru.filterBlanks : v.value
+            const label = isBlank ? t.filterBlanks : v.value
             return (
               <label key={v.value} className="col-menu-value">
                 <input
@@ -129,14 +130,14 @@ export function ColumnMenu(props: { x: number; y: number; col: number; onClose: 
                 <span className="col-menu-value-text" title={label}>
                   {label}
                 </span>
-                <span className="col-menu-value-count">{v.count.toLocaleString('ru-RU')}</span>
+                <span className="col-menu-value-count">{t.num(v.count)}</span>
               </label>
             )
           })}
-          {shown.length === 0 && <div className="col-menu-empty">{ru.searchNoMatches}</div>}
+          {shown.length === 0 && <div className="col-menu-empty">{t.searchNoMatches}</div>}
           {hiddenCount > 0 && (
             <div className="col-menu-capped">
-              {ru.columnValuesShown(shown.length, shown.length + hiddenCount)}
+              {t.columnValuesShown(shown.length, shown.length + hiddenCount)}
             </div>
           )}
         </div>
@@ -148,7 +149,7 @@ export function ColumnMenu(props: { x: number; y: number; col: number; onClose: 
             onClick={() => apply(new Set())}
             disabled={allChecked}
           >
-            {ru.columnSelectAll}
+            {t.columnSelectAll}
           </button>
           <button
             type="button"
@@ -159,7 +160,7 @@ export function ColumnMenu(props: { x: number; y: number; col: number; onClose: 
             }}
             disabled={!colFilter}
           >
-            {ru.columnResetFilter}
+            {t.columnResetFilter}
           </button>
         </div>
       </div>

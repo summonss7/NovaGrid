@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useStore } from 'zustand'
 import { visibleRowsOf } from '../core/filter'
 import { gridStore, selectionMetrics } from '../core/store'
-import { ru } from '../i18n/ru'
+import { useT } from '../i18n'
 import { copyText } from './clipboard'
 
 /**
@@ -12,6 +12,7 @@ import { copyText } from './clipboard'
  * видимые строки (как Σ в статус-баре Excel при фильтре).
  */
 export function SumCard(props: { onClose: () => void }) {
+  const t = useT()
   // примитивные подписки (как StatusBar): объектный селектор пересоздавал
   // снапшот на каждый notify и загонял React в бесконечный ре-рендер
   const total = useStore(
@@ -50,12 +51,12 @@ export function SumCard(props: { onClose: () => void }) {
   }, [props])
 
   const rows: { label: string; value: number | null; strong?: boolean }[] = [
-    { label: ru.metricSum, value: m.total, strong: true },
-    { label: ru.metricCount, value: m.count },
-    { label: ru.metricFilled, value: m.filled },
-    { label: ru.metricMean, value: m.mean },
-    { label: ru.metricMin, value: m.min },
-    { label: ru.metricMax, value: m.max },
+    { label: t.metricSum, value: m.total, strong: true },
+    { label: t.metricCount, value: m.count },
+    { label: t.metricFilled, value: m.filled },
+    { label: t.metricMean, value: m.mean },
+    { label: t.metricMin, value: m.min },
+    { label: t.metricMax, value: m.max },
   ]
 
   const copy = async (value: number | null) => {
@@ -74,7 +75,7 @@ export function SumCard(props: { onClose: () => void }) {
         onClick={props.onClose}
         onContextMenu={(e) => e.preventDefault()}
       />
-      <div className="sum-card" role="dialog" aria-label={ru.sumTitle}>
+      <div className="sum-card" role="dialog" aria-label={t.sumTitle}>
         {rows.map((r) => (
           <button
             type="button"
@@ -84,11 +85,11 @@ export function SumCard(props: { onClose: () => void }) {
           >
             <span>{r.label}</span>
             <span className="sum-card-value">
-              {r.value === null ? '—' : r.value.toLocaleString('ru-RU')}
+              {r.value === null ? '—' : t.num(r.value)}
             </span>
           </button>
         ))}
-        <div className="sum-card-hint">{copied ? ru.metricCopied : ru.metricCopyHint}</div>
+        <div className="sum-card-hint">{copied ? t.metricCopied : t.metricCopyHint}</div>
       </div>
     </>
   )

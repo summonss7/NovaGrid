@@ -1,13 +1,14 @@
-import { FileDown, FolderOpen, HelpCircle, MoreVertical, Save } from 'lucide-react'
+import { FileDown, FolderOpen, HelpCircle, MoreVertical, Save, Settings } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useStore } from 'zustand'
 import { visibleRowsOf } from '../core/filter'
 import { normalize } from '../core/selection'
 import { gridStore, rangeMetrics } from '../core/store'
-import { ru } from '../i18n/ru'
+import { useT } from '../i18n'
 import { HelpDialog } from './HelpDialog'
 import { Logo } from './Logo'
 import { SearchBox } from './SearchBox'
+import { SettingsDialog } from './SettingsDialog'
 import { SumCard } from './SumCard'
 
 /**
@@ -19,10 +20,12 @@ import { SumCard } from './SumCard'
  * берёт Открыть/Поиск/Σ/?), тулбар остаётся тонкой строкой с именем файла.
  */
 export function Toolbar(props: { onOpen: () => void; onSave: () => void; onSaveAs: () => void }) {
+  const t = useT()
   const fileName = useStore(gridStore, (s) => s.fileName)
   const dirty = useStore(gridStore, (s) => s.dirty)
   const [sumOpen, setSumOpen] = useState(false)
   const [helpOpen, setHelpOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
 
   // F1 открывает справочник — как в настольных офисных приложениях
@@ -48,14 +51,14 @@ export function Toolbar(props: { onOpen: () => void; onSave: () => void; onSaveA
     <header className="toolbar">
       <Logo />
 
-      <div className="toolbar-group" role="group" aria-label="Файл">
+      <div className="toolbar-group" role="group" aria-label={t.fileGroupLabel}>
         <button type="button" className="btn btn-primary" onClick={props.onOpen}>
           <FolderOpen size={16} strokeWidth={1.5} aria-hidden />
-          {ru.open}
+          {t.open}
         </button>
         <button type="button" className="btn btn-primary" onClick={props.onSave}>
           <Save size={16} strokeWidth={1.5} aria-hidden />
-          {ru.save}
+          {t.save}
         </button>
         <button
           type="button"
@@ -64,7 +67,7 @@ export function Toolbar(props: { onOpen: () => void; onSave: () => void; onSaveA
           title="Ctrl+Shift+S"
         >
           <FileDown size={16} strokeWidth={1.5} aria-hidden />
-          {ru.saveAs}
+          {t.saveAs}
         </button>
       </div>
 
@@ -73,7 +76,7 @@ export function Toolbar(props: { onOpen: () => void; onSave: () => void; onSaveA
         <button
           type="button"
           className="btn btn-ghost btn-icon"
-          aria-label={ru.moreMenuLabel}
+          aria-label={t.moreMenuLabel}
           aria-expanded={moreOpen}
           onClick={() => setMoreOpen((v) => !v)}
         >
@@ -93,7 +96,7 @@ export function Toolbar(props: { onOpen: () => void; onSave: () => void; onSaveA
                 }}
               >
                 <Save size={15} strokeWidth={1.5} aria-hidden />
-                {ru.save}
+                {t.save}
               </button>
               <button
                 type="button"
@@ -105,7 +108,19 @@ export function Toolbar(props: { onOpen: () => void; onSave: () => void; onSaveA
                 }}
               >
                 <FileDown size={15} strokeWidth={1.5} aria-hidden />
-                {ru.saveAs}
+                {t.saveAs}
+              </button>
+              <button
+                type="button"
+                className="tab-menu-item"
+                role="menuitem"
+                onClick={() => {
+                  setMoreOpen(false)
+                  setSettingsOpen(true)
+                }}
+              >
+                <Settings size={15} strokeWidth={1.5} aria-hidden />
+                {t.settingsLabel}
               </button>
             </div>
           </>
@@ -113,13 +128,13 @@ export function Toolbar(props: { onOpen: () => void; onSave: () => void; onSaveA
       </div>
 
       {(fileName || dirty) && (
-        <span className="file-badge" title={dirty ? ru.dirtyTitle : undefined}>
+        <span className="file-badge" title={dirty ? t.dirtyTitle : undefined}>
           {dirty && (
-            <span className="file-dirty" aria-label={ru.dirtyTitle}>
-              {ru.dirtyMark}
+            <span className="file-dirty" aria-label={t.dirtyTitle}>
+              {t.dirtyMark}
             </span>
           )}
-          <span className="file-name">{fileName ?? ru.unsavedBook}</span>
+          <span className="file-name">{fileName ?? t.unsavedBook}</span>
         </span>
       )}
 
@@ -130,12 +145,23 @@ export function Toolbar(props: { onOpen: () => void; onSave: () => void; onSaveA
       <button
         type="button"
         className="btn btn-ghost btn-icon toolbar-help"
-        aria-label={ru.helpLabel}
-        title={`${ru.helpLabel} (F1)`}
+        aria-label={t.helpLabel}
+        title={`${t.helpLabel} (F1)`}
         aria-expanded={helpOpen}
         onClick={() => setHelpOpen(true)}
       >
         <HelpCircle size={18} strokeWidth={1.5} aria-hidden />
+      </button>
+
+      <button
+        type="button"
+        className="btn btn-ghost btn-icon toolbar-settings"
+        aria-label={t.settingsLabel}
+        title={t.settingsLabel}
+        aria-expanded={settingsOpen}
+        onClick={() => setSettingsOpen(true)}
+      >
+        <Settings size={18} strokeWidth={1.5} aria-hidden />
       </button>
 
       <span className="toolbar-spacer" aria-hidden />
@@ -144,30 +170,31 @@ export function Toolbar(props: { onOpen: () => void; onSave: () => void; onSaveA
         {altSum !== null && (
           <span className="sum-live" aria-live="polite">
             <span className="sum-live-caption" aria-hidden>
-              {ru.sumLiveLabel}
+              {t.sumLiveLabel}
             </span>
-            <span className="sum-live-value">Σ {altSum.toLocaleString('ru-RU')}</span>
+            <span className="sum-live-value">Σ {t.num(altSum)}</span>
           </span>
         )}
         <button
           type="button"
           className="sum-btn toolbar-sum"
-          aria-label={ru.sumTitle}
+          aria-label={t.sumTitle}
           aria-expanded={sumOpen}
-          title={ru.sumTitle}
+          title={t.sumTitle}
           onClick={() => setSumOpen((v) => !v)}
         >
           <span className="sum-symbol" aria-hidden>
             Σ
           </span>
           <span className="sum-caption" aria-hidden>
-            {ru.sumLabel}
+            {t.sumLabel}
           </span>
         </button>
         {sumOpen && <SumCard onClose={() => setSumOpen(false)} />}
       </span>
 
       {helpOpen && <HelpDialog onClose={() => setHelpOpen(false)} />}
+      {settingsOpen && <SettingsDialog onClose={() => setSettingsOpen(false)} />}
     </header>
   )
 }

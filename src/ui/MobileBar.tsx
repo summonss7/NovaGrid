@@ -1,7 +1,7 @@
 import { FolderOpen, HelpCircle, Search, Sigma } from 'lucide-react'
 import { useState } from 'react'
 import { gridStore } from '../core/store'
-import { ru } from '../i18n/ru'
+import { useT } from '../i18n'
 import { HelpDialog } from './HelpDialog'
 import { SumCard } from './SumCard'
 
@@ -13,14 +13,15 @@ import { SumCard } from './SumCard'
  * тем же действием стора, что и Ctrl+F.
  */
 export function MobileBar(props: { onOpen: () => void }) {
+  const t = useT()
   const [sumOpen, setSumOpen] = useState(false)
   const [helpOpen, setHelpOpen] = useState(false)
 
   return (
-    <nav className="mobile-bar" aria-label={ru.mobileBarLabel}>
+    <nav className="mobile-bar" aria-label={t.mobileBarLabel}>
       <button type="button" className="mobile-bar-btn" onClick={props.onOpen}>
         <FolderOpen size={22} strokeWidth={1.5} aria-hidden />
-        <span>{ru.mobileOpen}</span>
+        <span>{t.mobileOpen}</span>
       </button>
       <button
         type="button"
@@ -28,27 +29,27 @@ export function MobileBar(props: { onOpen: () => void }) {
         onClick={() => gridStore.getState().openSearch()}
       >
         <Search size={22} strokeWidth={1.5} aria-hidden />
-        <span>{ru.mobileSearch}</span>
+        <span>{t.mobileSearch}</span>
       </button>
       <button
         type="button"
         className="mobile-bar-btn mobile-bar-sum"
-        aria-label={ru.sumTitle}
+        aria-label={t.sumTitle}
         aria-expanded={sumOpen}
         onClick={() => setSumOpen((v) => !v)}
       >
         <Sigma size={22} strokeWidth={2} aria-hidden />
-        <span>{ru.mobileSum}</span>
+        <span>{t.mobileSum}</span>
       </button>
       <button
         type="button"
         className="mobile-bar-btn"
-        aria-label={ru.helpLabel}
+        aria-label={t.helpLabel}
         aria-expanded={helpOpen}
         onClick={() => setHelpOpen(true)}
       >
         <HelpCircle size={22} strokeWidth={1.5} aria-hidden />
-        <span>{ru.mobileHelp}</span>
+        <span>{t.mobileHelp}</span>
       </button>
 
       {sumOpen && <SumCard onClose={() => setSumOpen(false)} />}

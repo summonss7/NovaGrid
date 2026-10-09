@@ -22,7 +22,9 @@ export const ru = {
   sheet: 'Лист 1',
   addSheetLabel: 'Добавить лист',
   sheetsEmpty: 'Файлы .xlsx/.xls/.csv откроются здесь',
-  statusPhase: 'Этап 5 · PWA · мобильные',
+  statusPhase: 'v1.0',
+  /** число в текущей локали словаря (Этап 6.3) */
+  num: (n: number) => n.toLocaleString('ru-RU'),
 
   // поиск (Ф2, Этап 3)
   searchScopeSheet: 'Этот лист',
@@ -110,6 +112,8 @@ export const ru = {
   saveAsTitle: 'Сохранить как',
   saveAsNameLabel: 'Имя файла',
   saveAsFormatLabel: 'Формат',
+  saveAsFormatXlsx: '.xlsx (Excel, со стилями)',
+  saveAsFormatCsv: '.csv (активный лист)',
   saveAsDelimiterLabel: 'Разделитель CSV',
   semicolon: '; точка с запятой',
   comma: ', запятая',
@@ -160,6 +164,21 @@ export const ru = {
   zoomReset: 'Сбросить масштаб к 100 %',
   formulaExpand: 'Развернуть строку формул',
   formulaCollapse: 'Свернуть строку формул',
+
+  // настройки (Этап 6.3)
+  settingsLabel: 'Настройки',
+  fileGroupLabel: 'Файл',
+  sheetsTabsLabel: 'Листы книги',
+  cellRefLabel: 'Адрес активной ячейки',
+  settingsTitle: 'Настройки',
+  settingsLang: 'Язык',
+  settingsTableSize: 'Размер таблицы',
+  settingsCsvDelimiter: 'Разделитель CSV по умолчанию',
+  settingsSizeS: 'Мелкий',
+  settingsSizeM: 'Обычный',
+  settingsSizeL: 'Крупный',
+  settingsSizeXL: 'Огромный',
+  settingsClose: 'Закрыть настройки',
 } as const
 
 function formatRelative(d: Date): string {
@@ -177,4 +196,11 @@ function formatRelative(d: Date): string {
   })
 }
 
-export type RuDict = typeof ru
+/** Строки широкой строкой (не литералы `as const`) — en-словарь присваивается. */
+type Widen<T> = T extends string
+  ? string
+  : T extends (...args: infer A) => infer R
+    ? (...args: A) => R
+    : T
+
+export type RuDict = { [K in keyof typeof ru]: Widen<(typeof ru)[K]> }

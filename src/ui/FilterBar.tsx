@@ -3,15 +3,16 @@ import { useState } from 'react'
 import { useStore } from 'zustand'
 import { colName } from '../grid/geometry'
 import { gridStore } from '../core/store'
-import { ru } from '../i18n/ru'
+import { dict, useT } from '../i18n'
 import { ColumnMenu } from './ColumnMenu'
 
 /** Подпись чипа: главное значение + счётчик остальных. */
 function chipLabel(col: number, mode: 'include' | 'exclude', values: string[]): string {
   const letter = colName(col)
   const sign = mode === 'include' ? '=' : '≠'
-  const first = values[0] === '' ? ru.filterBlanks : values[0]
-  const more = values.length > 1 ? ` ${ru.filterChipMore(values.length - 1)}` : ''
+  const d = dict()
+  const first = values[0] === '' ? d.filterBlanks : values[0]
+  const more = values.length > 1 ? ` ${d.filterChipMore(values.length - 1)}` : ''
   return `${letter} ${sign} ${first}${more}`
 }
 
@@ -21,20 +22,21 @@ function chipLabel(col: number, mode: 'include' | 'exclude', values: string[]): 
  * один фильтр, клик по чипу открывает меню колонки (редактирование списка).
  */
 export function FilterBar() {
+  const t = useT()
   const filters = useStore(gridStore, (s) => s.filters)
   const [menu, setMenu] = useState<{ col: number; x: number; y: number } | null>(null)
 
   if (filters.length === 0) return null
 
   return (
-    <div className="filter-bar" role="group" aria-label={ru.filterBarLabel}>
-      <span className="filter-bar-label">{ru.filterBarLabel}</span>
+    <div className="filter-bar" role="group" aria-label={t.filterBarLabel}>
+      <span className="filter-bar-label">{t.filterBarLabel}</span>
       {filters.map((f) => (
         <span key={f.col} className="filter-chip">
           <button
             type="button"
             className="filter-chip-text"
-            title={ru.columnMenuLabel(colName(f.col))}
+            title={t.columnMenuLabel(colName(f.col))}
             onClick={(e) => {
               const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
               setMenu({ col: f.col, x: r.left, y: r.bottom + 4 })
@@ -45,8 +47,8 @@ export function FilterBar() {
           <button
             type="button"
             className="filter-chip-x"
-            aria-label={ru.ctxClearColumn(colName(f.col))}
-            title={ru.ctxClearColumn(colName(f.col))}
+            aria-label={t.ctxClearColumn(colName(f.col))}
+            title={t.ctxClearColumn(colName(f.col))}
             onClick={() => gridStore.getState().clearColumnFilter(f.col)}
           >
             <X size={12} strokeWidth={2} aria-hidden />
@@ -58,7 +60,7 @@ export function FilterBar() {
         className="filter-reset"
         onClick={() => gridStore.getState().clearAllFilters()}
       >
-        {ru.filterResetAll}
+        {t.filterResetAll}
       </button>
 
       {menu && (

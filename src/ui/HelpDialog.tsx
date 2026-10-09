@@ -4,7 +4,7 @@ import { X } from 'lucide-react'
 import { gridStore } from '../core/store'
 import { FUNCTIONS, fnSignature } from '../formula/functions'
 import { liveExample } from '../formula/example'
-import { ru } from '../i18n/ru'
+import { useT } from '../i18n'
 
 /*
  * Справочник «?» (Этап 4.5, Ф6): карточки формул — имя, сигнатура,
@@ -56,6 +56,7 @@ const TIPS: readonly { title: string; body: string }[] = [
 ]
 
 export function HelpDialog(props: { onClose: () => void }) {
+  const t = useT()
   const [tab, setTab] = useState<Tab>('fn')
   const [query, setQuery] = useState('')
   const closeRef = useRef<HTMLButtonElement>(null)
@@ -95,15 +96,15 @@ export function HelpDialog(props: { onClose: () => void }) {
         if (e.currentTarget === e.target) props.onClose()
       }}
     >
-      <div className="help-dialog" role="dialog" aria-modal="true" aria-label={ru.helpTitle}>
+      <div className="help-dialog" role="dialog" aria-modal="true" aria-label={t.helpTitle}>
         <header className="help-header">
-          <h2>{ru.helpTitle}</h2>
-          <div className="help-tabs" role="tablist" aria-label={ru.helpTitle}>
+          <h2>{t.helpTitle}</h2>
+          <div className="help-tabs" role="tablist" aria-label={t.helpTitle}>
             {(
               [
-                ['fn', ru.helpTabFunctions],
-                ['keys', ru.helpTabKeys],
-                ['how', ru.helpTabHow],
+                ['fn', t.helpTabFunctions],
+                ['keys', t.helpTabKeys],
+                ['how', t.helpTabHow],
               ] as const
             ).map(([id, label]) => (
               <button
@@ -122,7 +123,7 @@ export function HelpDialog(props: { onClose: () => void }) {
             ref={closeRef}
             type="button"
             className="btn btn-ghost btn-icon"
-            aria-label={ru.helpClose}
+            aria-label={t.helpClose}
             onClick={props.onClose}
           >
             <X size={18} strokeWidth={1.5} aria-hidden />
@@ -134,12 +135,12 @@ export function HelpDialog(props: { onClose: () => void }) {
             <input
               className="help-search"
               type="search"
-              placeholder={ru.helpSearchPlaceholder}
+              placeholder={t.helpSearchPlaceholder}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              aria-label={ru.helpSearchPlaceholder}
+              aria-label={t.helpSearchPlaceholder}
             />
-            {cards.length === 0 && <p className="help-empty">{ru.searchNoMatches}</p>}
+            {cards.length === 0 && <p className="help-empty">{t.searchNoMatches}</p>}
             <div className="help-cards">
               {cards.map((c) => (
                 <article key={c.meta.name} className="help-card">
@@ -147,7 +148,7 @@ export function HelpDialog(props: { onClose: () => void }) {
                   <code className="help-card-sig">{c.sig}</code>
                   <p className="help-card-desc">{c.meta.desc}</p>
                   <p className="help-card-example">
-                    {ru.helpExampleLabel}:{' '}
+                    {t.helpExampleLabel}:{' '}
                     <code>{c.example.formula}</code>
                     <span className="help-card-result"> → {c.example.result}</span>
                   </p>
@@ -162,8 +163,8 @@ export function HelpDialog(props: { onClose: () => void }) {
             <table className="help-keys">
               <thead>
                 <tr>
-                  <th>{ru.helpKeysColKey}</th>
-                  <th>{ru.helpKeysColAction}</th>
+                  <th>{t.helpKeysColKey}</th>
+                  <th>{t.helpKeysColAction}</th>
                 </tr>
               </thead>
               <tbody>

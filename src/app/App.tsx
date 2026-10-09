@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { gridStore } from '../core/store'
-import { ru } from '../i18n/ru'
+import { TABLE_SIZE_SCALE, useDocumentLang, useSettings, useT } from '../i18n'
 import { installAutosave } from '../storage/autosave'
 import type { SessionRow } from '../storage/db'
 import { onPwaUpdate, registerServiceWorker } from '../pwa/registerSW'
+import { zoomStore } from '../grid/zoom'
 import {
   buildBookBuffer,
   csvMime,
@@ -41,6 +42,7 @@ interface Toast {
  * панель листов → статус-бар (DESIGN-SYSTEM §6).
  */
 export default function App() {
+  const t = useT()
   const [mode, setMode] = useState<Mode>('boot')
   const [busy, setBusy] = useState<string | null>(null)
   const [toast, setToast] = useState<Toast | null>(null)
@@ -60,20 +62,20 @@ export default function App() {
   /** Файл → конвейер → книга на экране. Общий путь для input, drop, FSA, фикстур. */
   const openFile = useCallback(
     async (file: File) => {
-      setBusy(ru.openingFile)
+      setBusy(t.openingFile)
       try {
         await readBookFile(file)
         setMode('book')
       } catch (err) {
         showToast(
-          `${ru.openErrorTitle}: ${err instanceof Error ? err.message : String(err)}`,
+          `${t.openErrorTitle}: ${err instanceof Error ? err.message : String(err)}`,
           'error',
         )
       } finally {
         setBusy(null)
       }
     },
-    [showToast],
+[showToast, t],
   )
 
   const onOpenClicked = useCallback(async () => {
@@ -96,7 +98,7 @@ export default function App() {
     const st = gridStore.getState()
     if (st.edit) st.commitEdit('none')
     if (st.fileHandle && st.fileFormat && st.fileFormat !== 'xls') {
-      setBusy(ru.savingFile)
+      setBusy(t.savingFile)
       try {
         const buffer = await buildBookBuffer(
           st.fileFormat === 'csv' ? 'csv' : 'xlsx',
@@ -104,10 +106,10 @@ export default function App() {
         )
         await writeToHandle(st.fileHandle, buffer)
         gridStore.getState().markSaved()
-        showToast(ru.savedToast(st.fileName ?? ''), 'ok')
+        showToast(t.savedToast(st.fileName ?? ''), 'ok')
       } catch (err) {
         showToast(
-          `${ru.saveErrorTitle}: ${err instanceof Error ? err.message : String(err)}`,
+          `${t.saveErrorTitle}: ${err instanceof Error ? err.message : String(err)}`,
           'error',
         )
       } finally {
@@ -116,12 +118,12 @@ export default function App() {
       return
     }
     setSaveAsOpen(true)
-  }, [showToast])
+  }, [showToast, t])
 
   const saveAsChosen = useCallback(
     async (choice: SaveAsChoice) => {
       setSaveAsOpen(false)
-      setBusy(ru.savingFile)
+      setBusy(t.savingFile)
       try {
         const buffer = await buildBookBuffer(choice.format, choice.delimiter)
         if (isFsaAvailable()) {
@@ -144,18 +146,18 @@ export default function App() {
         gridStore
           .getState()
           .markSaved(choice.fileName, { fileFormat: choice.format, csvDelimiter: choice.delimiter })
-        showToast(ru.savedToast(choice.fileName), 'ok')
+        showToast(t.savedToast(choice.fileName), 'ok')
       } catch (err) {
         if (err instanceof DOMException && err.name === 'AbortError') return // отмена пикера
         showToast(
-          `${ru.saveErrorTitle}: ${err instanceof Error ? err.message : String(err)}`,
+          `${t.saveErrorTitle}: ${err instanceof Error ? err.message : String(err)}`,
           'error',
         )
       } finally {
         setBusy(null)
       }
     },
-    [showToast],
+[showToast, t],
   )
 
   const restoreSession = useCallback((row: SessionRow) => {
@@ -172,20 +174,20 @@ export default function App() {
 
   const openFixtureCard = useCallback(
     async (url: string, name: string) => {
-      setBusy(ru.openingFile)
+      setBusy(t.openingFile)
       try {
         await openFixture(new URL(url, document.baseURI).href, name)
         setMode('book')
       } catch (err) {
         showToast(
-          `${ru.openErrorTitle}: ${err instanceof Error ? err.message : String(err)}`,
+          `${t.openErrorTitle}: ${err instanceof Error ? err.message : String(err)}`,
           'error',
         )
       } finally {
         setBusy(null)
       }
     },
-    [showToast],
+[showToast, t],
   )
 
   // ── старт: разбор режима (демо/стресс/стартовый экран) ───────────────
@@ -208,6 +210,15 @@ export default function App() {
 
   // ── автосохранение сессии (отдельный эффект: переживёт StrictMode) ──
   useEffect(() => installAutosave(), [])
+
+  // ── настройки (6.3): размер таблицы из персиста — стартовый зум, ─────
+  // document.lang для скринридеров идёт за языком интерфейса
+  useDocumentLang()
+  useEffect(() => {
+    const { tableSize, csvDelimiter } = useSettings.getState()
+    zoomStore.getState().setZoom(TABLE_SIZE_SCALE[tableSize])
+    gridStore.getState().setCsvDelimiter(csvDelimiter)
+  }, [])
 
   // ── PWA (Этап 5.1): офлайн-оболочка + обновление по кнопке ──────────
   // (registerServiceWorker гасит и Safari-пинч страницы — см. pwa/registerSW)
@@ -235,7 +246,7 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey)
   }, [mode, save, onOpenClicked])
 
-  const suggestedName = gridStore.getState().fileName ?? ru.unsavedBook
+  const suggestedName = gridStore.getState().fileName ?? t.unsavedBook
   const defaultFormat: SaveAsFormat = gridStore.getState().fileFormat === 'csv' ? 'csv' : 'xlsx'
 
   return (
@@ -262,7 +273,7 @@ export default function App() {
         type="file"
         hidden
         accept=".xlsx,.xlsm,.xls,.csv,.tsv"
-        aria-label={ru.fileInputLabel}
+        aria-label={t.fileInputLabel}
         onChange={(e) => {
           const file = e.target.files?.[0]
           if (file) void openFile(file)
@@ -301,24 +312,24 @@ export default function App() {
 
       {swReload && (
         <div className="pwa-update" role="alert">
-          <span>{ru.pwaUpdateTitle}</span>
+          <span>{t.pwaUpdateTitle}</span>
           <button type="button" className="btn btn-primary" onClick={() => swReload()}>
-            {ru.pwaUpdateAction}
+            {t.pwaUpdateAction}
           </button>
           <button
             type="button"
             className="btn btn-ghost"
-            aria-label={ru.pwaUpdateDismiss}
+            aria-label={t.pwaUpdateDismiss}
             onClick={() => setSwReload(null)}
           >
-            {ru.pwaUpdateDismiss}
+            {t.pwaUpdateDismiss}
           </button>
         </div>
       )}
 
       {dropping && (
         <div className="drop-overlay" aria-hidden>
-          <span>{ru.dropHere}</span>
+          <span>{t.dropHere}</span>
         </div>
       )}
 

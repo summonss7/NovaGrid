@@ -4,7 +4,7 @@ import { useStore } from 'zustand'
 import { gridStore } from '../core/store'
 import { cellRefName } from '../grid/geometry'
 import { getCell } from '../core/sheet'
-import { ru } from '../i18n/ru'
+import { useT } from '../i18n'
 
 /** Сколько совпадений показывать в списке «Все листы» (дальше — счётчик). */
 const RESULTS_CAP = 60
@@ -16,6 +16,7 @@ const RESULTS_CAP = 60
  * целиком). В режиме «Все листы» — сгруппированный список результатов.
  */
 export function SearchBox() {
+  const t = useT()
   const search = useStore(gridStore, (s) => s.search)
   const tabs = useStore(gridStore, (s) => s.tabs)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -65,8 +66,8 @@ export function SearchBox() {
           ref={inputRef}
           type="search"
           className="search-input"
-          placeholder={ru.searchPlaceholder}
-          aria-label={ru.searchLabel}
+          placeholder={t.searchPlaceholder}
+          aria-label={t.searchLabel}
           value={search.query}
           onChange={(e) => gridStore.getState().setSearchQuery(e.target.value)}
           onFocus={() => gridStore.getState().openSearch()}
@@ -83,13 +84,13 @@ export function SearchBox() {
             }
           }}
         />
-        <kbd className="search-kbd">{ru.searchHint}</kbd>
+        <kbd className="search-kbd">{t.searchHint}</kbd>
       </div>
 
       {search.open && (
-        <div className="search-panel" role="dialog" aria-label={ru.searchResultsLabel}>
+        <div className="search-panel" role="dialog" aria-label={t.searchResultsLabel}>
           <div className="search-panel-row">
-            <div className="search-scope" role="radiogroup" aria-label={ru.searchScopeLabel}>
+            <div className="search-scope" role="radiogroup" aria-label={t.searchScopeLabel}>
               <button
                 type="button"
                 role="radio"
@@ -99,7 +100,7 @@ export function SearchBox() {
                 }
                 onClick={() => gridStore.getState().setSearchScope('sheet')}
               >
-                {ru.searchScopeSheet}
+                {t.searchScopeSheet}
               </button>
               <button
                 type="button"
@@ -110,7 +111,7 @@ export function SearchBox() {
                 }
                 onClick={() => gridStore.getState().setSearchScope('book')}
               >
-                {ru.searchScopeBook}
+                {t.searchScopeBook}
               </button>
             </div>
             <span className="search-counter" aria-live="polite">
@@ -119,8 +120,8 @@ export function SearchBox() {
             <button
               type="button"
               className="btn btn-ghost btn-icon btn-xs"
-              aria-label={ru.searchPrev}
-              title={ru.searchPrev}
+              aria-label={t.searchPrev}
+              title={t.searchPrev}
               onClick={() => gridStore.getState().searchStep(-1)}
             >
               <ChevronUp size={15} strokeWidth={1.5} aria-hidden />
@@ -128,8 +129,8 @@ export function SearchBox() {
             <button
               type="button"
               className="btn btn-ghost btn-icon btn-xs"
-              aria-label={ru.searchNext}
-              title={ru.searchNext}
+              aria-label={t.searchNext}
+              title={t.searchNext}
               onClick={() => gridStore.getState().searchStep(1)}
             >
               <ChevronDown size={15} strokeWidth={1.5} aria-hidden />
@@ -137,9 +138,9 @@ export function SearchBox() {
             <button
               type="button"
               className={`btn btn-ghost btn-icon btn-xs${optionsOpen ? ' is-active' : ''}`}
-              aria-label={ru.searchOptions}
+              aria-label={t.searchOptions}
               aria-expanded={optionsOpen}
-              title={ru.searchOptions}
+              title={t.searchOptions}
               onClick={() => setOptionsOpen((v) => !v)}
             >
               <Settings size={15} strokeWidth={1.5} aria-hidden />
@@ -147,8 +148,8 @@ export function SearchBox() {
             <button
               type="button"
               className="btn btn-ghost btn-icon btn-xs"
-              aria-label={ru.searchClose}
-              title={ru.searchClose}
+              aria-label={t.searchClose}
+              title={t.searchClose}
               onClick={() => gridStore.getState().closeSearch()}
             >
               <X size={15} strokeWidth={1.5} aria-hidden />
@@ -165,7 +166,7 @@ export function SearchBox() {
                     gridStore.getState().setSearchOptions({ caseSensitive: e.target.checked })
                   }
                 />
-                {ru.searchCaseSensitive}
+                {t.searchCaseSensitive}
               </label>
               <label>
                 <input
@@ -175,15 +176,15 @@ export function SearchBox() {
                     gridStore.getState().setSearchOptions({ wholeCell: e.target.checked })
                   }
                 />
-                {ru.searchWholeCell}
+                {t.searchWholeCell}
               </label>
             </div>
           )}
 
           {search.scope === 'book' && search.query !== '' && (
-            <div className="search-results" aria-label={ru.searchResultsLabel}>
+            <div className="search-results" aria-label={t.searchResultsLabel}>
               {results.length === 0 && (
-                <div className="search-results-empty">{ru.searchNoMatches}</div>
+                <div className="search-results-empty">{t.searchNoMatches}</div>
               )}
               {tabs.map((tab, tabIndex) => {
                 const items = results.filter((h) => h.tab === tabIndex)
@@ -198,7 +199,7 @@ export function SearchBox() {
                 )
               })}
               {moreResults > 0 && (
-                <div className="search-results-more">{ru.searchMoreResults(moreResults)}</div>
+                <div className="search-results-more">{t.searchMoreResults(moreResults)}</div>
               )}
             </div>
           )}
@@ -210,6 +211,7 @@ export function SearchBox() {
 
 /** Пункт результата: адрес ячейки + её значение (клик — переход). */
 function SearchResultRow(props: { hit: { tab: number; row: number; col: number } }) {
+  const t = useT()
   const { hit } = props
   const value = useStore(gridStore, (s) =>
     getCell(s.tabs[hit.tab]?.sheet ?? s.sheet, hit.row, hit.col),
@@ -221,7 +223,7 @@ function SearchResultRow(props: { hit: { tab: number; row: number; col: number }
       onClick={() => gridStore.getState().gotoHit(hit)}
     >
       <span className="search-result-ref">{cellRefName(hit.row, hit.col)}</span>
-      <span className="search-result-text">{value === '' ? ru.filterBlanks : value}</span>
+      <span className="search-result-text">{value === '' ? t.filterBlanks : value}</span>
     </button>
   )
 }

@@ -41,11 +41,16 @@ export function visibleRowsOf(
 ): readonly number[] | null {
   const active = filters.filter(isActiveFilter)
   if (active.length === 0) return null
+  // значения — в Set: список из сотен галочек меню колонки не должен делать
+  // каждую из 100k строк линейным сканом (Этап 6.1)
+  const prepared = active.map((f) => ({ f, set: f.values.length > 8 ? new Set(f.values) : null }))
   const out: number[] = []
   for (let r = 0; r <= sheet.maxRow; r++) {
     let ok = true
-    for (const f of active) {
-      if (!valuePasses(f, cellText(sheet, r, f.col))) {
+    for (const { f, set } of prepared) {
+      const raw = cellText(sheet, r, f.col)
+      const hit = set ? set.has(raw) : f.values.includes(raw)
+      if (f.mode === 'include' ? !hit : hit) {
         ok = false
         break
       }

@@ -70,10 +70,10 @@ test.describe('главный экран — каркас книги', () => {
       'background-color',
       'rgb(242, 107, 33)',
     )
-    // кнопки действий — глубокий зелёный #2BA84A
+    // кнопки действий — зелёный кнопок AA (Этап 6.2: белый текст ≥ 4.5:1) #1E7D36
     await expect(page.getByRole('button', { name: 'Открыть' })).toHaveCSS(
       'background-color',
-      'rgb(43, 168, 74)',
+      'rgb(30, 125, 54)',
     )
   })
 
