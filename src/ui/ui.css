@@ -67,6 +67,11 @@
 }
 
 /* ── Поиск ───────────────────────────────────────────────────────────── */
+.search-wrap {
+  position: relative; /* якорь для разворачиваемой панели поиска (§8) */
+  display: flex;
+}
+
 .search {
   display: flex;
   align-items: center;
@@ -100,6 +105,10 @@
   color: var(--nv-ink-soft);
 }
 
+.search-input::-webkit-search-cancel-button {
+  cursor: pointer;
+}
+
 .search-kbd {
   font-family: var(--nv-font-text);
   font-size: 11px;
@@ -108,6 +117,148 @@
   border-radius: 5px;
   padding: 1px 5px;
   white-space: nowrap;
+}
+
+.btn-xs {
+  padding: 5px;
+}
+
+.btn.is-active {
+  color: var(--nv-accent);
+}
+
+/* Развёрнутая панель поиска (Ф2): область, счётчик, навигация, параметры */
+.search-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 45;
+  width: min(380px, calc(100vw - 24px));
+  padding: 10px 12px;
+  background: var(--nv-bg);
+  border: 1px solid var(--nv-grid-line);
+  border-radius: var(--nv-radius-panel);
+  box-shadow: var(--nv-shadow-pop);
+}
+
+.search-panel-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.search-scope {
+  display: flex;
+  margin-right: auto;
+  border: 1px solid var(--nv-grid-line);
+  border-radius: var(--nv-radius-btn);
+  overflow: hidden;
+}
+
+.search-scope-btn {
+  padding: 6px 10px;
+  border: none;
+  background: transparent;
+  font-family: var(--nv-font-text);
+  font-size: 12.5px;
+  color: var(--nv-ink-soft);
+  cursor: pointer;
+}
+
+.search-scope-btn.is-active {
+  background: var(--nv-primary-deep);
+  color: var(--nv-bg);
+  font-weight: 600;
+}
+
+.search-counter {
+  min-width: 58px;
+  text-align: right;
+  font-family: var(--nv-font-text);
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--nv-ink);
+}
+
+.search-options {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: var(--nv-mint, #e8f8ec);
+  border-radius: var(--nv-radius-btn);
+}
+
+.search-options label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--nv-font-text);
+  font-size: 13px;
+  color: var(--nv-ink);
+  cursor: pointer;
+}
+
+.search-results {
+  max-height: 320px;
+  overflow: auto;
+  margin-top: 10px;
+  border-top: 1px solid var(--nv-grid-line);
+  padding-top: 8px;
+}
+
+.search-group-title {
+  padding: 6px 6px 4px;
+  font-family: var(--nv-font-display);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--nv-ink-soft);
+}
+
+.search-result {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 8px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  font-family: var(--nv-font-text);
+  font-size: 13px;
+  color: var(--nv-ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.search-result:hover {
+  background: rgba(58, 223, 99, 0.14);
+}
+
+.search-result-ref {
+  flex: none;
+  min-width: 40px;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--nv-primary-deep);
+}
+
+.search-result-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.search-results-empty,
+.search-results-more {
+  padding: 8px;
+  font-size: 12.5px;
+  color: var(--nv-ink-soft);
 }
 
 /* ── Большая кнопка Σ (§6: 56 px, оранжевая, всегда на виду) ────────── */
@@ -792,4 +943,364 @@
 .toast-error {
   background: var(--nv-accent-deep, #e8481c);
   color: var(--nv-bg);
+}
+
+/* ── Этап 3: зона Σ, карточка метрик, живая Alt-сумма (Ф4) ──────────── */
+.sum-zone {
+  position: relative; /* якорь для карточки метрик и живой суммы */
+  display: inline-flex;
+}
+
+.sum-live {
+  position: absolute;
+  right: calc(100% + 10px);
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+  padding: 7px 14px;
+  background: var(--nv-accent);
+  border-radius: var(--nv-radius-btn);
+  box-shadow: var(--nv-shadow-pop);
+  color: var(--nv-bg);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.sum-live-caption {
+  font-family: var(--nv-font-display);
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.85;
+}
+
+.sum-live-value {
+  font-family: var(--nv-font-display);
+  font-size: 19px;
+  font-weight: 700;
+  line-height: 1.05;
+  font-variant-numeric: tabular-nums;
+}
+
+.sum-card {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 10px);
+  z-index: 46;
+  width: 264px;
+  padding: 8px;
+  background: var(--nv-bg);
+  border: 1px solid var(--nv-grid-line);
+  border-radius: var(--nv-radius-panel);
+  box-shadow: var(--nv-shadow-pop);
+}
+
+.sum-card-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  font-family: var(--nv-font-text);
+  font-size: 13px;
+  color: var(--nv-ink);
+  cursor: pointer;
+}
+
+.sum-card-row:hover {
+  background: rgba(58, 223, 99, 0.14);
+}
+
+.sum-card-row-strong {
+  background: var(--nv-accent);
+  color: var(--nv-bg);
+  font-weight: 600;
+}
+
+.sum-card-row-strong:hover {
+  background: var(--nv-accent-deep, #e8481c);
+}
+
+.sum-card-row-strong .sum-card-value {
+  font-family: var(--nv-font-display);
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.sum-card-value {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.sum-card-hint {
+  padding: 7px 10px 3px;
+  font-size: 11.5px;
+  color: var(--nv-ink-soft);
+  text-align: center;
+}
+
+/* ── Этап 3: контекстное меню ПКМ (Ф3, §7) ───────────────────────────── */
+.ctx-menu {
+  position: fixed;
+  z-index: 51;
+  display: flex;
+  flex-direction: column;
+  min-width: 250px;
+  max-width: 330px;
+  padding: 5px;
+  background: var(--nv-bg);
+  border: 1px solid var(--nv-grid-line);
+  border-radius: var(--nv-radius-panel);
+  box-shadow: var(--nv-shadow-pop);
+}
+
+.ctx-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  font-family: var(--nv-font-text);
+  font-size: 13px;
+  color: var(--nv-ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.ctx-item:hover:not(:disabled) {
+  background: rgba(58, 223, 99, 0.14);
+}
+
+.ctx-item-primary {
+  color: var(--nv-primary-deep);
+  font-weight: 600;
+}
+
+.ctx-item-primary:hover:not(:disabled) {
+  background: var(--nv-mint, #e8f8ec);
+}
+
+.ctx-item-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ctx-sep {
+  height: 1px;
+  margin: 5px 8px;
+  background: var(--nv-grid-line);
+}
+
+/* ── Этап 3: меню колонки ▾ (Ф3.7 + Ф8) ──────────────────────────────── */
+.col-menu {
+  position: fixed;
+  z-index: 51;
+  display: flex;
+  flex-direction: column;
+  width: 300px;
+  padding: 8px;
+  background: var(--nv-bg);
+  border: 1px solid var(--nv-grid-line);
+  border-radius: var(--nv-radius-panel);
+  box-shadow: var(--nv-shadow-pop);
+}
+
+.col-menu-sort {
+  display: flex;
+  gap: 6px;
+}
+
+.col-menu-sort .ctx-item {
+  flex: 1;
+}
+
+.col-menu-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 6px 9px;
+  border: 1.5px solid var(--nv-grid-line);
+  border-radius: var(--nv-radius-btn);
+  color: var(--nv-ink-soft);
+}
+
+.col-menu-search:focus-within {
+  border-color: var(--nv-accent);
+}
+
+.col-menu-search input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-family: var(--nv-font-text);
+  font-size: 12.5px;
+  color: var(--nv-ink);
+}
+
+.col-menu-list {
+  max-height: 300px;
+  overflow: auto;
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+}
+
+.col-menu-value {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-family: var(--nv-font-text);
+  font-size: 13px;
+  color: var(--nv-ink);
+  cursor: pointer;
+}
+
+.col-menu-value:hover {
+  background: rgba(58, 223, 99, 0.1);
+}
+
+.col-menu-value input[type='checkbox'] {
+  accent-color: var(--nv-primary-deep);
+  flex: none;
+}
+
+.col-menu-value-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.col-menu-value-count {
+  flex: none;
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--nv-ink-soft);
+}
+
+.col-menu-empty,
+.col-menu-capped {
+  padding: 8px;
+  font-size: 12.5px;
+  color: var(--nv-ink-soft);
+}
+
+.col-menu-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--nv-grid-line);
+}
+
+.col-menu-link {
+  border: none;
+  background: transparent;
+  font-family: var(--nv-font-text);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--nv-primary-deep);
+  cursor: pointer;
+}
+
+.col-menu-link:disabled {
+  color: var(--nv-ink-soft);
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* ── Этап 3: лента чипов фильтров (Ф3.4, §6) ─────────────────────────── */
+.filter-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 6px 16px;
+  background: var(--nv-bg);
+  border-bottom: 1px solid var(--nv-grid-line);
+}
+
+.filter-bar-label {
+  font-family: var(--nv-font-display);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--nv-ink-soft);
+}
+
+.filter-chip {
+  display: inline-flex;
+  align-items: stretch;
+  background: var(--nv-mint, #e8f8ec);
+  border: 1px solid #dff5e3;
+  border-radius: var(--nv-radius-btn);
+  overflow: hidden;
+}
+
+.filter-chip-text {
+  padding: 4px 10px;
+  border: none;
+  background: transparent;
+  font-family: var(--nv-font-text);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--nv-ink);
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.filter-chip-text:hover {
+  background: rgba(58, 223, 99, 0.16);
+}
+
+.filter-chip-x {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 7px;
+  border: none;
+  border-left: 1px solid #dff5e3;
+  background: transparent;
+  color: var(--nv-ink-soft);
+  cursor: pointer;
+}
+
+.filter-chip-x:hover {
+  background: rgba(242, 107, 33, 0.12);
+  color: var(--nv-accent-deep, #e8481c);
+}
+
+.filter-reset {
+  border: none;
+  background: transparent;
+  font-family: var(--nv-font-text);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--nv-primary-deep);
+  cursor: pointer;
+}
+
+.filter-reset:hover {
+  text-decoration: underline;
 }

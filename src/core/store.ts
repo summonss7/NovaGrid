@@ -1,7 +1,9 @@
 /*
  * Единое состояние грида (Zustand, ARCHITECTURE §2): книга с вкладками листов,
- * выделение, редактирование, Alt-лассо, метаданные файла (Этап 2). Undo —
- * delta-стеки core/history, по одному на вкладку. Модуль UI-агностичен:
+ * выделение, редактирование, Alt-лассо, метаданные файла (Этап 2). Этап 3
+ * добавляет фильтры колонок (объединение по «И», список видимых строк —
+ * производный), инкрементальный поиск и сортировку видимых строк.
+ * Undo — delta-стеки core/history, по одному на вкладку. Модуль UI-агностичен:
  * канвас подписывается напрямую на стор, React-панели — селекторами.
  *
  * Инвариант: state.sheet === state.tabs[state.activeTab].sheet — «текущий лист»,
@@ -9,12 +11,21 @@
  */
 
 import { createStore } from 'zustand/vanilla'
+import {
+  type ColumnFilter,
+  columnValueCounts,
+  compareCellValues,
+  nearestVisibleRow,
+  visibleIndexOf,
+  visibleRowsOf,
+} from './filter'
 import { History, type CellChange } from './history'
 import {
   type NormRange,
   type Range,
   type Selection,
   clampRef,
+  normalize,
   range,
   selectedCells,
   selectionOf,
@@ -30,6 +41,7 @@ import {
   withCell,
 } from './sheet'
 import { average, sum } from './stats'
+import { type SearchHit, type SearchOptions, searchBook, searchSheet } from './search'
 import {
   type BookWire,
   type SheetTab,
@@ -69,8 +81,27 @@ export interface SelectionMetrics {
   count: number
   /** x̄ — среднее по числовым ячейкам (0 при пустом выделении) */
   mean: number
-  /** количество заполненных ячеек (для будущей карточки метрик Ф4) */
+  /** количество заполненных ячеек (карточка метрик Ф4) */
   filled: number
+  /** мин/макс числовых ячеек; null — чисел нет */
+  min: number | null
+  max: number | null
+}
+
+export type SearchScope = 'sheet' | 'book'
+
+/** Состояние поиска (Ф2): инкрементальный, пересчитывается на каждую правку. */
+export interface SearchState {
+  open: boolean
+  query: string
+  scope: SearchScope
+  caseSensitive: boolean
+  wholeCell: boolean
+  /** все совпадения в рамках scope; текущее — index */
+  hits: SearchHit[]
+  /** ключи «row:col» совпадений активного листа — подсветка канвасом */
+  hitSet: Set<string>
+  index: number
 }
 
 export interface GridState {
@@ -82,6 +113,11 @@ export interface GridState {
   edit: EditState | null
   /** Alt-лассо быстрой суммы (Ф4) — временный оранжевый диапазон */
   altRange: Range | null
+
+  /** фильтры активной вкладки (Ф3); хранение по вкладкам — как история */
+  filters: ColumnFilter[]
+  /** состояние поиска (Ф2) */
+  search: SearchState
 
   /** имя файла на диске (null — новая несохранённая книга) */
   fileName: string | null
@@ -137,9 +173,32 @@ export interface GridState {
   undo: () => void
   redo: () => void
   setAltRange: (r: Range | null) => void
+
+  // ── фильтры (Ф3) ──────────────────────────────────────────────────────
+  /** установить/заменить фильтр колонки; include, покрывающий все значения, снимается */
+  setColumnFilter: (filter: ColumnFilter) => void
+  filterByValue: (col: number, value: string) => void
+  excludeByValue: (col: number, value: string) => void
+  /** добавить значение к существующему include-фильтру колонки (ПКМ, Ф3.2) */
+  addValueToFilter: (col: number, value: string) => void
+  clearColumnFilter: (col: number) => void
+  clearAllFilters: () => void
+  /** сортировка видимых строк по колонке (Ф8): значения переставляются в тех же позициях */
+  sortColumn: (col: number, dir: 'asc' | 'desc') => void
+
+  // ── поиск (Ф2) ────────────────────────────────────────────────────────
+  openSearch: () => void
+  closeSearch: () => void
+  setSearchQuery: (query: string) => void
+  setSearchScope: (scope: SearchScope) => void
+  setSearchOptions: (opts: Partial<Pick<SearchOptions, 'caseSensitive' | 'wholeCell'>>) => void
+  /** шаг навигации по совпадениям (Enter/Shift+Enter/F3/▲▼), циклично */
+  searchStep: (dir: 1 | -1) => void
+  /** переход на конкретное совпадение (клик в списке «все листы») */
+  gotoHit: (hit: SearchHit) => void
 }
 
-/** Метрики набора ячеек: Σ/n/x̄ по числовым значениям (Ф4, статус-бар). */
+/** Метрики набора ячеек: Σ/n/x̄/мин/макс по числовым значениям (Ф4). */
 export function cellsMetrics(
   sheet: SheetModel,
   rows: readonly number[],
@@ -153,18 +212,56 @@ export function cellsMetrics(
     const n = parseNumber(raw)
     if (n !== null) values.push(n)
   }
-  return { total: sum(values), count: values.length, mean: average(values), filled }
+  let min = null as number | null
+  let max = null as number | null
+  for (const v of values) {
+    if (min === null || v < min) min = v
+    if (max === null || v > max) max = v
+  }
+  return { total: sum(values), count: values.length, mean: average(values), filled, min, max }
 }
 
-export function selectionMetrics(sheet: SheetModel, selection: Selection): SelectionMetrics {
-  const { rows, cols } = selectedCells(selection)
+/**
+ * Метрики выделения. Строки, скрытые фильтром, не считаются — как в Excel,
+ * Σ в статус-баре агрегирует видимое (КТ-3: «видно 132 строки → Σ показывает
+ * сумму»). visible = null — фильтров нет, считаем всё.
+ */
+export function selectionMetrics(
+  sheet: SheetModel,
+  selection: Selection,
+  visible: readonly number[] | null = null,
+): SelectionMetrics {
+  // несмежные Ctrl-области могут пересекаться — ячейка считается один раз
+  const dedup = selection.ranges.length > 1 ? new Set<string>() : null
+  const rows: number[] = []
+  const cols: number[] = []
+  for (const rg of selection.ranges) {
+    const n = normalize(rg)
+    for (let r = n.r1; r <= n.r2; r++) {
+      if (visible && visibleIndexOf(visible, r) < 0) continue
+      for (let c = n.c1; c <= n.c2; c++) {
+        if (dedup) {
+          const key = `${r}:${c}`
+          if (dedup.has(key)) continue
+          dedup.add(key)
+        }
+        rows.push(r)
+        cols.push(c)
+      }
+    }
+  }
   return cellsMetrics(sheet, rows, cols)
 }
 
-export function rangeMetrics(sheet: SheetModel, n: NormRange): SelectionMetrics {
+export function rangeMetrics(
+  sheet: SheetModel,
+  n: NormRange,
+  visible: readonly number[] | null = null,
+): SelectionMetrics {
   const rows: number[] = []
   const cols: number[] = []
   for (let r = n.r1; r <= n.r2; r++) {
+    if (visible && visibleIndexOf(visible, r) < 0) continue
     for (let c = n.c1; c <= n.c2; c++) {
       rows.push(r)
       cols.push(c)
@@ -247,6 +344,9 @@ function applyChanges(
 /** История правок — по вкладкам (delta-стек экономен: клонируются только изменения). */
 const histories = new Map<string, History>()
 
+/** Фильтры — тоже по вкладкам (id), но живут в state для активной (как sheet). */
+const tabFilters = new Map<string, ColumnFilter[]>()
+
 function historyOf(tabId: string): History {
   let h = histories.get(tabId)
   if (!h) {
@@ -258,15 +358,75 @@ function historyOf(tabId: string): History {
 
 function clearHistories(): void {
   histories.clear()
+  tabFilters.clear()
 }
 
 const initialTab = createTab(DEFAULT_SHEET_NAME)
+
+const EMPTY_SEARCH: SearchState = {
+  open: false,
+  query: '',
+  scope: 'sheet',
+  caseSensitive: false,
+  wholeCell: false,
+  hits: [],
+  hitSet: new Set(),
+  index: 0,
+}
 
 export const gridStore = createStore<GridState>((set, get) => {
   /** Записать новый лист модели в активную вкладку (держит инвариант sheet). */
   const patchSheet = (sheet: SheetModel) => {
     const { tabs, activeTab } = get()
     set({ tabs: tabs.map((t, i) => (i === activeTab ? { ...t, sheet } : t)), sheet })
+  }
+
+  /** Сохранить фильтры активной вкладки в её ячейку хранилища (перед сменой). */
+  const saveFilters = () => {
+    const { tabs, activeTab, filters } = get()
+    tabFilters.set(tabs[activeTab].id, filters)
+  }
+
+  /**
+   * Пересчёт совпадений поиска — инкрементальность Ф2: после каждой правки,
+   * смены листа, фильтра и параметров. Скрытые фильтром строки не ищутся.
+   */
+  const refreshSearch = () => {
+    const st = get()
+    const { open, query, scope, caseSensitive, wholeCell, index } = st.search
+    if (!open || query === '') {
+      if (st.search.hits.length > 0)
+        set({ search: { ...st.search, hits: [], hitSet: new Set(), index: 0 } })
+      return
+    }
+    const opts: SearchOptions = { caseSensitive, wholeCell }
+    const hits =
+      scope === 'book'
+        ? searchBook(
+            st.tabs.map((t) => ({ sheet: t.sheet, filters: tabFilters.get(t.id) })),
+            query,
+            opts,
+          )
+        : searchSheet(st.sheet, query, opts, visibleRowsOf(st.sheet, st.filters)).map((h) => ({
+            ...h,
+            tab: st.activeTab,
+          }))
+    const hitSet = new Set<string>()
+    for (const h of hits) if (h.tab === st.activeTab) hitSet.add(`${h.row}:${h.col}`)
+    set({
+      search: {
+        ...st.search,
+        hits,
+        hitSet,
+        index: Math.min(index, Math.max(hits.length - 1, 0)),
+      },
+    })
+  }
+
+  /** Показать совпадение: перейти на его лист (если другой) и выбрать ячейку. */
+  const focusHit = (hit: SearchHit) => {
+    if (hit.tab !== get().activeTab) get().activateTab(hit.tab)
+    get().goTo(hit.row, hit.col)
   }
 
   return {
@@ -276,6 +436,8 @@ export const gridStore = createStore<GridState>((set, get) => {
     selection: selectionOf(0, 0),
     edit: null,
     altRange: null,
+    filters: [],
+    search: EMPTY_SEARCH,
     fileName: null,
     fileFormat: null,
     csvDelimiter: ';',
@@ -293,6 +455,8 @@ export const gridStore = createStore<GridState>((set, get) => {
         selection: selectionOf(0, 0),
         edit: null,
         altRange: null,
+        filters: [],
+        search: EMPTY_SEARCH,
         fileName: meta?.fileName ?? null,
         fileFormat: meta?.fileFormat ?? null,
         csvDelimiter: meta?.csvDelimiter ?? ';',
@@ -320,13 +484,16 @@ export const gridStore = createStore<GridState>((set, get) => {
       const { tabs } = get()
       const i = Math.min(Math.max(index, 0), tabs.length - 1)
       if (get().edit) get().commitEdit('none')
+      saveFilters()
       set({
         activeTab: i,
         sheet: tabs[i].sheet,
         selection: selectionOf(0, 0),
         edit: null,
         altRange: null,
+        filters: tabFilters.get(tabs[i].id) ?? [],
       })
+      refreshSearch()
     },
 
     addTab: () => {
@@ -337,6 +504,7 @@ export const gridStore = createStore<GridState>((set, get) => {
       )
       const tab = createTab(name)
       if (get().edit) get().commitEdit('none')
+      saveFilters()
       set({
         tabs: [...tabs.slice(0, activeTab + 1), tab, ...tabs.slice(activeTab + 1)],
         activeTab: activeTab + 1,
@@ -344,8 +512,10 @@ export const gridStore = createStore<GridState>((set, get) => {
         selection: selectionOf(0, 0),
         edit: null,
         altRange: null,
+        filters: [],
         dirty: true,
       })
+      refreshSearch()
     },
 
     renameTab: (index, name) => {
@@ -363,6 +533,7 @@ export const gridStore = createStore<GridState>((set, get) => {
       const removed = tabs[index]
       const next = tabs.filter((_, i) => i !== index)
       histories.delete(removed.id)
+      tabFilters.delete(removed.id)
       const nextActive = index < activeTab ? activeTab - 1 : Math.min(activeTab, next.length - 1)
       if (get().edit) get().cancelEdit()
       set({
@@ -372,8 +543,10 @@ export const gridStore = createStore<GridState>((set, get) => {
         selection: selectionOf(0, 0),
         edit: null,
         altRange: null,
+        filters: tabFilters.get(next[nextActive].id) ?? [],
         dirty: true,
       })
+      refreshSearch()
       return true
     },
 
@@ -396,6 +569,7 @@ export const gridStore = createStore<GridState>((set, get) => {
         },
       }
       if (get().edit) get().commitEdit('none')
+      saveFilters()
       set({
         tabs: [...tabs.slice(0, index + 1), copy, ...tabs.slice(index + 1)],
         activeTab: index + 1,
@@ -403,8 +577,10 @@ export const gridStore = createStore<GridState>((set, get) => {
         selection: selectionOf(0, 0),
         edit: null,
         altRange: null,
+        filters: [],
         dirty: true,
       })
+      refreshSearch()
     },
 
     seedDemo: () => {
@@ -501,17 +677,21 @@ export const gridStore = createStore<GridState>((set, get) => {
     },
 
     moveActive: (dr, dc, opts) => {
-      const { sheet, selection } = get()
+      const state = get()
+      const { sheet, selection } = state
       const from = selection.active
       const target = opts?.jump
         ? jumpTarget(sheet, from.row, from.col, dr, dc)
         : clampRef({ row: from.row + dr, col: from.col + dc }, sheet.rows, sheet.cols)
+      // скрытые фильтром строки навигация пропускает — активная ячейка видима
+      const visible = visibleRowsOf(sheet, state.filters)
+      const row = visible ? nearestVisibleRow(visible, target.row, dr !== 0 ? dr : 1) : target.row
       if (opts?.extend) {
         const ranges = [...selection.ranges]
-        ranges[ranges.length - 1] = { ...ranges[ranges.length - 1], tr: target.row, tc: target.col }
+        ranges[ranges.length - 1] = { ...ranges[ranges.length - 1], tr: row, tc: target.col }
         set({ selection: { ...selection, ranges } })
       } else {
-        set({ selection: selectionOf(target.row, target.col) })
+        set({ selection: selectionOf(row, target.col) })
       }
     },
 
@@ -559,6 +739,7 @@ export const gridStore = createStore<GridState>((set, get) => {
       historyOf(tabs[activeTab].id).push({ label: 'clear', changes })
       patchSheet(applyChanges(sheet, changes, 'after'))
       set({ dirty: true })
+      refreshSearch()
     },
 
     beginEdit: (initial) => {
@@ -596,6 +777,7 @@ export const gridStore = createStore<GridState>((set, get) => {
       const [dr, dc] = MOVE_DELTA[move]
       const target = clampRef({ row: edit.row + dr, col: edit.col + dc }, next.rows, next.cols)
       set({ edit: null, selection: selectionOf(target.row, target.col) })
+      refreshSearch()
     },
 
     cancelEdit: () => set({ edit: null }),
@@ -607,6 +789,7 @@ export const gridStore = createStore<GridState>((set, get) => {
       if (!entry) return
       patchSheet(applyChanges(sheet, entry.changes, 'before'))
       set({ edit: null, altRange: null, dirty: true })
+      refreshSearch()
     },
 
     redo: () => {
@@ -616,9 +799,131 @@ export const gridStore = createStore<GridState>((set, get) => {
       if (!entry) return
       patchSheet(applyChanges(sheet, entry.changes, 'after'))
       set({ edit: null, altRange: null, dirty: true })
+      refreshSearch()
     },
 
     setAltRange: (r) => set({ altRange: r }),
+
+    // ── фильтры (Ф3) ────────────────────────────────────────────────────
+    setColumnFilter: (filter) => {
+      const { sheet, filters } = get()
+      let next = filters.filter((f) => f.col !== filter.col)
+      // «выбраны все значения» == фильтра нет: иначе новые значения скроются
+      if (filter.mode === 'include') {
+        const distinct = new Set(columnValueCounts(sheet, filter.col).map((v) => v.value))
+        const covers =
+          filter.values.length >= distinct.size && filter.values.every((v) => distinct.has(v))
+        if (covers) {
+          set({ filters: next })
+          refreshSearch()
+          return
+        }
+      }
+      next = [...next, filter].sort((a, b) => a.col - b.col)
+      set({ filters: next })
+      refreshSearch()
+    },
+
+    filterByValue: (col, value) => {
+      get().setColumnFilter({ col, mode: 'include', values: [value] })
+    },
+
+    excludeByValue: (col, value) => {
+      get().setColumnFilter({ col, mode: 'exclude', values: [value] })
+    },
+
+    addValueToFilter: (col, value) => {
+      const ex = get().filters.find((f) => f.col === col && f.mode === 'include')
+      if (!ex) {
+        get().filterByValue(col, value)
+        return
+      }
+      if (!ex.values.includes(value)) {
+        get().setColumnFilter({ ...ex, values: [...ex.values, value] })
+      }
+    },
+
+    clearColumnFilter: (col) => {
+      const { filters } = get()
+      if (!filters.some((f) => f.col === col)) return
+      set({ filters: filters.filter((f) => f.col !== col) })
+      refreshSearch()
+    },
+
+    clearAllFilters: () => {
+      if (get().filters.length === 0) return
+      set({ filters: [] })
+      refreshSearch()
+    },
+
+    sortColumn: (col, dir) => {
+      const state = get()
+      const { sheet, filters, tabs, activeTab } = state
+      const visible = visibleRowsOf(sheet, filters)
+      const rows = visible ?? Array.from({ length: sheet.maxRow + 1 }, (_, r) => r)
+      // пустые остаются на местах (Excel держит их в конце при любом направлении);
+      // стили не переставляются — в этой модели стиль привязан к позиции (шапка),
+      // зато undo честно возвращает всё
+      const filled = rows.map((r) => ({ r, v: getCell(sheet, r, col) })).filter((x) => x.v !== '')
+      const sorted = [...filled].sort((a, b) =>
+        dir === 'asc' ? compareCellValues(a.v, b.v) : -compareCellValues(a.v, b.v),
+      )
+      const changes: CellChange[] = []
+      for (let i = 0; i < filled.length; i++) {
+        if (filled[i].v !== sorted[i].v) {
+          changes.push({ row: filled[i].r, col, before: filled[i].v, after: sorted[i].v })
+        }
+      }
+      if (changes.length === 0) return
+      historyOf(tabs[activeTab].id).push({ label: 'sort', changes })
+      patchSheet(applyChanges(sheet, changes, 'after'))
+      set({ dirty: true })
+      refreshSearch()
+    },
+
+    // ── поиск (Ф2) ──────────────────────────────────────────────────────
+    openSearch: () => {
+      const { search } = get()
+      if (!search.open) set({ search: { ...search, open: true } })
+      refreshSearch()
+    },
+
+    closeSearch: () => {
+      const { search } = get()
+      set({ search: { ...search, open: false, hits: [], hitSet: new Set(), index: 0 } })
+    },
+
+    setSearchQuery: (query) => {
+      set({ search: { ...get().search, query, index: 0 } })
+      refreshSearch()
+    },
+
+    setSearchScope: (scope) => {
+      set({ search: { ...get().search, scope, index: 0 } })
+      refreshSearch()
+    },
+
+    setSearchOptions: (opts) => {
+      set({ search: { ...get().search, ...opts, index: 0 } })
+      refreshSearch()
+    },
+
+    searchStep: (dir) => {
+      const { search } = get()
+      if (search.hits.length === 0) return
+      const next = (search.index + dir + search.hits.length) % search.hits.length
+      set({ search: { ...search, index: next } })
+      focusHit(search.hits[next])
+    },
+
+    gotoHit: (hit) => {
+      const { search } = get()
+      const idx = search.hits.findIndex(
+        (h) => h.tab === hit.tab && h.row === hit.row && h.col === hit.col,
+      )
+      set({ search: { ...search, index: idx >= 0 ? idx : search.index } })
+      focusHit(hit)
+    },
   }
 })
 

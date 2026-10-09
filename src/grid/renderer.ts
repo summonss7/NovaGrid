@@ -2,12 +2,17 @@
  * Канвас-рендер грида: за кадр рисуются только видимые ячейки (виртуализация).
  * Функция чистая от DOM-событий — состояние приходит параметрами, что делает
  * кадр детерминированным и дешёвым (стресс 100k×30 = те же ~400 прямоугольников).
+ *
+ * Этап 3: строки идут через RowLayout (фильтры скрывают строки — рисуется
+ * визуальный индекс, номер строки в шапке остаётся модельным), совпадения
+ * поиска подсвечиваются мятным фоном (текущее — оранжевая рамка), у колонок
+ * с фильтром рисуется воронка, у остальных — кнопка меню ▾.
  */
 
 import { normalize, type Range, type Selection } from '../core/selection'
 import { cellKey, getCell, isNumericCell, type SheetModel } from '../core/sheet'
 import type { EditState } from '../core/store'
-import { colName, METRICS, visibleCols, visibleRows } from './geometry'
+import { colName, METRICS, type RowLayout, visibleCols, visibleRows } from './geometry'
 
 export interface GridTheme {
   ink: string
@@ -17,6 +22,7 @@ export interface GridTheme {
   gridLine: string
   limeFill: string
   limeBorder: string
+  mintFill: string
   altFill: string
   altBorder: string
   greenBorder: string
@@ -38,6 +44,7 @@ export function themeFromCSS(): GridTheme {
     gridLine: v('--nv-grid-line', '#e4e4e1'),
     limeFill: 'rgba(58, 223, 99, 0.12)',
     limeBorder: v('--nv-primary', '#3adf63'),
+    mintFill: v('--nv-mint', '#e8f8ec'),
     altFill: 'rgba(242, 107, 33, 0.10)',
     altBorder: v('--nv-accent', '#f26b21'),
     greenBorder: v('--nv-primary-deep', '#2ba84a'),
@@ -56,6 +63,12 @@ export interface DrawStats {
 /** Накопительная статистика кадров — читается e2e через тест-хук (?test=1). */
 export const drawStats: DrawStats = { frames: 0, totalMs: 0, lastMs: 0 }
 
+/** Подсветка поиска (Ф2): множество ключей «row:col» + текущее совпадение. */
+export interface SearchHighlight {
+  hitSet: ReadonlySet<string>
+  currentKey: string | null
+}
+
 export interface DrawInput {
   ctx: CanvasRenderingContext2D
   width: number
@@ -63,9 +76,13 @@ export interface DrawInput {
   scrollX: number
   scrollY: number
   sheet: SheetModel
+  layout: RowLayout
   selection: Selection
   edit: EditState | null
   altRange: Range | null
+  search: SearchHighlight
+  /** колонки с активным фильтром — воронка в заголовке (Ф3.6) */
+  filteredCols: ReadonlySet<number>
   theme: GridTheme
 }
 
@@ -78,12 +95,26 @@ export interface VisibleRegion {
 
 export function drawGrid(input: DrawInput): VisibleRegion {
   const t0 = performance.now()
-  const { ctx, width, height, scrollX, scrollY, sheet, selection, edit, altRange, theme } = input
+  const {
+    ctx,
+    width,
+    height,
+    scrollX,
+    scrollY,
+    sheet,
+    layout,
+    selection,
+    edit,
+    altRange,
+    search,
+    filteredCols,
+    theme,
+  } = input
   const m = METRICS
 
   const rows = visibleRows(scrollY, height - m.headerH)
   const cols = visibleCols(scrollX, width - m.rowHeaderW)
-  const lastRow = Math.min(rows.last, sheet.rows - 1)
+  const lastRow = Math.min(rows.last, layout.count - 1)
   const lastCol = Math.min(cols.last, sheet.cols - 1)
 
   ctx.save()
@@ -97,8 +128,9 @@ export function drawGrid(input: DrawInput): VisibleRegion {
   ctx.clip()
 
   // ── заливки стилей из .xlsx (Этап 2): до сетки — линии остаются поверх ──
-  for (let r = rows.first; r <= lastRow; r++) {
-    const y = m.headerH + r * m.rowH - scrollY
+  for (let i = rows.first; i <= lastRow; i++) {
+    const r = layout.rowAt(i)
+    const y = m.headerH + i * m.rowH - scrollY
     if (y + m.rowH <= m.headerH || y >= height) continue
     for (let c = cols.first; c <= lastCol; c++) {
       const bg = sheet.styles.get(cellKey(r, c))?.bg
@@ -114,8 +146,8 @@ export function drawGrid(input: DrawInput): VisibleRegion {
   ctx.strokeStyle = theme.gridLine
   ctx.lineWidth = 1
   ctx.beginPath()
-  for (let r = rows.first; r <= lastRow + 1; r++) {
-    const y = m.headerH + r * m.rowH - scrollY + 0.5
+  for (let i = rows.first; i <= lastRow + 1; i++) {
+    const y = m.headerH + i * m.rowH - scrollY + 0.5
     ctx.moveTo(m.rowHeaderW, y)
     ctx.lineTo(width, y)
   }
@@ -126,12 +158,29 @@ export function drawGrid(input: DrawInput): VisibleRegion {
   }
   ctx.stroke()
 
+  // ── подсветка совпадений поиска (Ф2): мятный фон под текстом ──
+  if (search.hitSet.size > 0) {
+    ctx.fillStyle = theme.mintFill
+    for (let i = rows.first; i <= lastRow; i++) {
+      const r = layout.rowAt(i)
+      const y = m.headerH + i * m.rowH - scrollY
+      if (y + m.rowH <= m.headerH || y >= height) continue
+      for (let c = cols.first; c <= lastCol; c++) {
+        if (!search.hitSet.has(`${r}:${c}`)) continue
+        const x = m.rowHeaderW + c * m.colW - scrollX
+        if (x + m.colW <= m.rowHeaderW || x >= width) continue
+        ctx.fillRect(x + 1, y + 1, m.colW - 2, m.rowH - 2)
+      }
+    }
+  }
+
   // ── текст ячеек (числа — вправо, текст — влево; стиль .xlsx — поверх) ──
   ctx.textBaseline = 'middle'
   ctx.textAlign = 'left'
   const pad = 6
-  for (let r = rows.first; r <= lastRow; r++) {
-    const cy = m.headerH + r * m.rowH - scrollY + m.rowH / 2
+  for (let i = rows.first; i <= lastRow; i++) {
+    const r = layout.rowAt(i)
+    const cy = m.headerH + i * m.rowH - scrollY + m.rowH / 2
     for (let c = cols.first; c <= lastCol; c++) {
       const raw = getCell(sheet, r, c)
       if (raw === '') continue
@@ -167,6 +216,7 @@ export function drawGrid(input: DrawInput): VisibleRegion {
       n.c1,
       n.r2,
       n.c2,
+      layout,
       scrollX,
       scrollY,
       theme.limeFill,
@@ -178,9 +228,10 @@ export function drawGrid(input: DrawInput): VisibleRegion {
   // активная ячейка — толстая зелёная рамка поверх заливки
   {
     const { row, col } = selection.active
+    const i = layout.indexOf(row)
     const x = m.rowHeaderW + col * m.colW - scrollX
-    const y = m.headerH + row * m.rowH - scrollY
-    if (x + m.colW > m.rowHeaderW && y + m.rowH > m.headerH && x < width && y < height) {
+    const y = m.headerH + i * m.rowH - scrollY
+    if (i >= 0 && x + m.colW > m.rowHeaderW && y + m.rowH > m.headerH && x < width && y < height) {
       ctx.strokeStyle = theme.greenBorder
       ctx.lineWidth = 2
       ctx.strokeRect(x + 1, y + 1, m.colW - 2, m.rowH - 2)
@@ -195,6 +246,7 @@ export function drawGrid(input: DrawInput): VisibleRegion {
       n.c1,
       n.r2,
       n.c2,
+      layout,
       scrollX,
       scrollY,
       theme.altFill,
@@ -202,6 +254,20 @@ export function drawGrid(input: DrawInput): VisibleRegion {
       width,
       height,
     )
+  }
+  // текущее совпадение поиска — оранжевая рамка поверх всего (Ф2)
+  if (search.currentKey) {
+    const csep = search.currentKey.indexOf(':')
+    const hitRow = Number(search.currentKey.slice(0, csep))
+    const hitCol = Number(search.currentKey.slice(csep + 1))
+    const i = layout.indexOf(hitRow)
+    const x = m.rowHeaderW + hitCol * m.colW - scrollX
+    const y = m.headerH + i * m.rowH - scrollY
+    if (i >= 0 && x + m.colW > m.rowHeaderW && y + m.rowH > m.headerH && x < width && y < height) {
+      ctx.strokeStyle = theme.altBorder
+      ctx.lineWidth = 2
+      ctx.strokeRect(x + 1, y + 1, m.colW - 2, m.rowH - 2)
+    }
   }
   ctx.restore()
 
@@ -216,7 +282,9 @@ export function drawGrid(input: DrawInput): VisibleRegion {
     lastCol,
     rows.first,
     lastRow,
+    layout,
     selection,
+    filteredCols,
     theme,
   )
 
@@ -233,6 +301,7 @@ function paintRange(
   c1: number,
   r2: number,
   c2: number,
+  layout: RowLayout,
   scrollX: number,
   scrollY: number,
   fill: string,
@@ -240,17 +309,59 @@ function paintRange(
   width: number,
   height: number,
 ): void {
+  // края диапазона могут попасть на скрытые строки — тогда берём ближайшие
+  // видимые внутри диапазона; в визуальных индексах блок всегда сплошной
+  // (скрытые строки не занимают места), как выглядит выделение в Excel
   const m = METRICS
+  const i1 = layout.indexOf(r1)
+  const i2 = layout.indexOf(r2)
+  if (i1 < 0 && i2 < 0) return
+  const from = i1 >= 0 ? i1 : Math.max(0, firstVisibleFrom(layout, r1, r2))
+  const to = i2 >= 0 ? i2 : lastVisibleTill(layout, r1, r2)
   const x = m.rowHeaderW + c1 * m.colW - scrollX
-  const y = m.headerH + r1 * m.rowH - scrollY
   const w = (c2 - c1 + 1) * m.colW
-  const h = (r2 - r1 + 1) * m.rowH
+  const y = m.headerH + from * m.rowH - scrollY
+  const h = (to - from + 1) * m.rowH
   if (x + w <= m.rowHeaderW || y + h <= m.headerH || x >= width || y >= height) return
   ctx.fillStyle = fill
   ctx.fillRect(x, y, w, h)
   ctx.strokeStyle = border
   ctx.lineWidth = 2
   ctx.strokeRect(x + 1, y + 1, w - 2, h - 2)
+}
+
+/** Первый видимый индекс внутри модельного отрезка [r1, r2]. */
+function firstVisibleFrom(layout: RowLayout, r1: number, r2: number): number {
+  let lo = 0
+  let hi = layout.count - 1
+  let ans = -1
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1
+    const v = layout.rowAt(mid)
+    if (v >= r1 && v <= r2) {
+      ans = mid
+      hi = mid - 1
+    } else if (v < r1) lo = mid + 1
+    else hi = mid - 1
+  }
+  return ans
+}
+
+/** Последний видимый индекс внутри модельного отрезка [r1, r2]. */
+function lastVisibleTill(layout: RowLayout, r1: number, r2: number): number {
+  let lo = 0
+  let hi = layout.count - 1
+  let ans = -1
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1
+    const v = layout.rowAt(mid)
+    if (v >= r1 && v <= r2) {
+      ans = mid
+      lo = mid + 1
+    } else if (v < r1) lo = mid + 1
+    else hi = mid - 1
+  }
+  return ans
 }
 
 function drawHeaders(
@@ -263,7 +374,9 @@ function drawHeaders(
   lastCol: number,
   firstRow: number,
   lastRow: number,
+  layout: RowLayout,
   selection: Selection,
+  filteredCols: ReadonlySet<number>,
   theme: GridTheme,
 ): void {
   const m = METRICS
@@ -286,7 +399,7 @@ function drawHeaders(
   ctx.font = theme.fontHeader
   ctx.textBaseline = 'middle'
 
-  // буквы колонок
+  // буквы колонок + кнопка меню (▾ / воронка при фильтре)
   for (let c = firstCol; c <= lastCol; c++) {
     const x = m.rowHeaderW + c * m.colW - scrollX
     if (x + m.colW <= m.rowHeaderW || x >= width) continue
@@ -298,12 +411,18 @@ function drawHeaders(
     ctx.fillStyle = isSel ? theme.greenBorder : theme.inkSoft
     ctx.textAlign = 'center'
     ctx.fillText(colName(c), x + m.colW / 2, m.headerH / 2)
+    if (filteredCols.has(c)) {
+      drawFunnel(ctx, x + m.colW - 15, 9, theme.greenBorder)
+    } else {
+      drawChevron(ctx, x + m.colW - 15, m.headerH / 2, theme.inkSoft)
+    }
   }
 
-  // номера строк
+  // номера строк (модельные — скрытые не сдвигают нумерацию)
   ctx.textAlign = 'center'
-  for (let r = firstRow; r <= lastRow; r++) {
-    const y = m.headerH + r * m.rowH - scrollY
+  for (let i = firstRow; i <= lastRow; i++) {
+    const r = layout.rowAt(i)
+    const y = m.headerH + i * m.rowH - scrollY
     if (y + m.rowH <= m.headerH || y >= height) continue
     const isSel = selected.some((n) => r >= n.r1 && r <= n.r2)
     if (isSel) {
@@ -313,6 +432,31 @@ function drawHeaders(
     ctx.fillStyle = isSel ? theme.greenBorder : theme.inkSoft
     ctx.fillText(String(r + 1), m.rowHeaderW / 2, y + m.rowH / 2)
   }
+}
+
+/** Воронка фильтра (Ф3.6): зелёная, 12×12. */
+function drawFunnel(ctx: CanvasRenderingContext2D, x: number, y: number, color: string): void {
+  ctx.fillStyle = color
+  ctx.beginPath()
+  ctx.moveTo(x, y)
+  ctx.lineTo(x + 12, y)
+  ctx.lineTo(x + 8.2, y + 4.6)
+  ctx.lineTo(x + 8.2, y + 11)
+  ctx.lineTo(x + 3.8, y + 12.8)
+  ctx.lineTo(x + 3.8, y + 4.6)
+  ctx.closePath()
+  ctx.fill()
+}
+
+/** Кнопка меню колонки ▾ (Ф3.7): мягкая стрелка вниз. */
+function drawChevron(ctx: CanvasRenderingContext2D, cx: number, cy: number, color: string): void {
+  ctx.strokeStyle = color
+  ctx.lineWidth = 1.6
+  ctx.beginPath()
+  ctx.moveTo(cx - 3.5, cy - 1.5)
+  ctx.lineTo(cx, cy + 2)
+  ctx.lineTo(cx + 3.5, cy - 1.5)
+  ctx.stroke()
 }
 
 /** Обрезка текста под ширину ячейки с многоточием. */

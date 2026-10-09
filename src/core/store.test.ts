@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest'
+import { visibleRowsOf } from './filter'
 import { createSheet, getCell, withCell } from './sheet'
 import { gridStore, selectionMetrics } from './store'
 
@@ -217,5 +218,128 @@ describe('store: книга и вкладки (Этап 2.2)', () => {
     expect(s().fileName).toBe('книга.csv')
     expect(s().fileFormat).toBe('csv')
     expect(s().csvDelimiter).toBe(',')
+  })
+})
+
+describe('store: фильтры (Этап 3, Ф3)', () => {
+  it('ПКМ-сценарий: A = Иванов, затем добавить C = 10000 — объединение по «И»', () => {
+    s().filterByValue(0, 'Иванов')
+    expect(s().filters).toEqual([{ col: 0, mode: 'include', values: ['Иванов'] }])
+    // видимые: строки с фамилией Иванов (в демо-листе это строки 1 и 4)
+    const vis1 = visibleRowsOf(s().sheet, s().filters)!
+    expect(vis1).toContain(1)
+
+    s().filterByValue(2, '10000')
+    const vis2 = visibleRowsOf(s().sheet, s().filters)!
+    // Иванов + 10000 — только строка 1 (у Кузнецовой в строке 4 другая сумма)
+    expect(vis2).toEqual([1])
+
+    // инверсия: exclude
+    s().excludeByValue(0, 'Иванов')
+    expect(s().filters.find((f) => f.col === 0)?.mode).toBe('exclude')
+
+    s().clearAllFilters()
+    expect(s().filters).toEqual([])
+  })
+
+  it('добавление значения к фильтру: {Иванов, Петров}', () => {
+    s().filterByValue(0, 'Иванов')
+    s().addValueToFilter(0, 'Петров')
+    const f = s().filters.find((x) => x.col === 0)
+    expect(f?.values).toEqual(['Иванов', 'Петров'])
+    // повторное добавление не дублирует
+    s().addValueToFilter(0, 'Петров')
+    expect(s().filters.find((x) => x.col === 0)?.values).toEqual(['Иванов', 'Петров'])
+  })
+
+  it('include, покрывающий все значения колонки, снимает фильтр', () => {
+    s().setColumnFilter({
+      col: 0,
+      mode: 'include',
+      values: ['Фамилия', 'Иванов', 'Петров', 'Сидоров', 'Кузнецова', 'Смирнов', 'Волкова'],
+    })
+    expect(s().filters).toEqual([])
+  })
+
+  it('фильтры изолированы по вкладкам', () => {
+    s().filterByValue(0, 'Иванов')
+    s().addTab()
+    expect(s().filters).toEqual([])
+    s().filterByValue(0, 'X') // на новой вкладке
+    s().activateTab(0)
+    expect(s().filters).toEqual([{ col: 0, mode: 'include', values: ['Иванов'] }])
+  })
+
+  it('метрики выделения не считают скрытые строки (КТ-3: Σ по видимым)', () => {
+    // демо-лист: сплошной диапазон A1:C7 без фильтра — все 6 чисел
+    s().selectAll()
+    expect(selectionMetrics(s().sheet, s().selection).total).toBe(59800)
+    // фильтр A = Петров скрывает остальных — колонка C целиком даёт только 12500
+    s().filterByValue(0, 'Петров')
+    const vis = visibleRowsOf(s().sheet, s().filters)
+    expect(selectionMetrics(s().sheet, s().selection, vis).total).toBe(12500)
+    s().clearAllFilters()
+  })
+
+  it('sortColumn переставляет значения видимых строк и откатывается undo', () => {
+    s().sortColumn(2, 'asc')
+    // все 7 строк колонки C непустые: числа по возрастанию, текст-шапка в конце
+    expect(getCell(s().sheet, 0, 2)).toBe('4200')
+    expect(getCell(s().sheet, 1, 2)).toBe('8000')
+    expect(getCell(s().sheet, 5, 2)).toBe('15300')
+    expect(getCell(s().sheet, 6, 2)).toBe('Сумма')
+    s().undo()
+    expect(getCell(s().sheet, 0, 2)).toBe('Сумма')
+    expect(getCell(s().sheet, 1, 2)).toBe('10000')
+    expect(getCell(s().sheet, 6, 2)).toBe('9800')
+  })
+})
+
+describe('store: поиск (Этап 3, Ф2)', () => {
+  it('инкрементальный поиск по листу: счётчик, шаг, закрытие', () => {
+    s().openSearch()
+    s().setSearchQuery('Иванов')
+    expect(s().search.hits.length).toBe(1) // в демо-листе один Иванов
+    s().setSearchQuery('о')
+    expect(s().search.hits.length).toBeGreaterThan(3)
+    // Enter-навигация двигает активную ячейку по совпадениям циклично
+    const first = s().search.index
+    s().searchStep(1)
+    const second = s().search.index
+    expect(second).not.toBe(first)
+    s().closeSearch()
+    expect(s().search.open).toBe(false)
+    expect(s().search.hits).toEqual([])
+  })
+
+  it('поиск по книге: второй лист включается, переход активирует вкладку', () => {
+    s().addTab()
+    s().clickCell(0, 0)
+    s().beginEdit('Иванов')
+    s().commitEdit('none')
+    s().activateTab(0)
+    s().openSearch()
+    s().setSearchScope('book')
+    s().setSearchQuery('Иванов')
+    expect(s().search.hits.length).toBe(2)
+    // шаг до совпадения на вкладке 1 — вкладка активируется
+    const target = s().search.hits.find((h) => h.tab === 1)!
+    s().gotoHit(target)
+    expect(s().activeTab).toBe(1)
+    expect(s().selection.active).toEqual({ row: 0, col: 0 })
+  })
+
+  it('правки обновляют совпадения живьём', () => {
+    s().openSearch()
+    s().setSearchQuery('Иванов')
+    expect(s().search.hits.length).toBe(1)
+    s().clickCell(1, 0)
+    s().beginEdit('Ивановский')
+    s().commitEdit('none')
+    expect(s().search.hits.length).toBe(1) // «Ивановский» тоже содержит «Иванов»
+    s().undo()
+    expect(s().search.hits.length).toBe(1)
+    s().setSearchQuery('Ивановский')
+    expect(s().search.hits.length).toBe(0)
   })
 })

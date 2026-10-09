@@ -21,7 +21,63 @@ export const ru = {
   sheet: 'Лист 1',
   addSheetLabel: 'Добавить лист',
   sheetsEmpty: 'Файлы .xlsx/.xls/.csv откроются здесь',
-  statusPhase: 'Этап 2 · файлы',
+  statusPhase: 'Этап 3 · поиск · фильтры · Σ',
+
+  // поиск (Ф2, Этап 3)
+  searchScopeSheet: 'Этот лист',
+  searchScopeBook: 'Все листы',
+  searchScopeLabel: 'Область поиска',
+  searchNext: 'Следующее совпадение',
+  searchPrev: 'Предыдущее совпадение',
+  searchOptions: 'Параметры поиска',
+  searchCaseSensitive: 'Учитывать регистр',
+  searchWholeCell: 'Ячейка целиком',
+  searchClose: 'Закрыть поиск',
+  searchNoMatches: 'Совпадений нет',
+  searchResultsLabel: 'Результаты поиска',
+  searchMoreResults: (n: number) => `… ещё ${n.toLocaleString('ru-RU')}`,
+  searchHitContext: (ref: string, text: string) => `${ref} · ${text}`,
+
+  // фильтры (Ф3)
+  filterBarLabel: 'Фильтры:',
+  filterChipMore: (n: number) => `+${n.toLocaleString('ru-RU')}`,
+  filterResetAll: 'Сбросить всё',
+  filterBlanks: '(пустые)',
+  filterShownOf: (shown: number, total: number) =>
+    `Показано ${shown.toLocaleString('ru-RU')} из ${total.toLocaleString('ru-RU')}`,
+  ctxMenuLabel: 'Меню ячейки',
+  ctxFilterEqual: (col: string, value: string) => `Фильтровать: ${col} = «${value}»`,
+  ctxFilterNotEqual: (col: string, value: string) => `Исключить: ${col} ≠ «${value}»`,
+  ctxAddValue: (value: string) => `Добавить «${value}» к фильтру`,
+  ctxClearColumn: (col: string) => `Снять фильтр с колонки ${col}`,
+  ctxClearAll: 'Сбросить все фильтры',
+  ctxCopyCell: 'Копировать ячейку',
+  ctxCopyRow: 'Копировать строку',
+  copiedToast: 'Скопировано',
+
+  // меню колонки (Ф3.7 + Ф8)
+  columnMenuLabel: (col: string) => `Меню колонки ${col}`,
+  sortGroupLabel: 'Сортировка',
+  sortAsc: 'По возрастанию',
+  sortDesc: 'По убыванию',
+  sortConfirm: 'Строки перемешаются. Отменить можно будет Ctrl+Z. Продолжить?',
+  columnValuesLabel: 'Значения',
+  columnValuesSearch: 'Поиск по значениям…',
+  columnValuesShown: (shown: number, total: number) =>
+    `Показаны первые ${shown.toLocaleString('ru-RU')} из ${total.toLocaleString('ru-RU')}`,
+  columnSelectAll: 'Выбрать все',
+  columnResetFilter: 'Сбросить фильтр колонки',
+
+  // Σ и метрики (Ф4)
+  metricSum: 'Сумма',
+  metricCount: 'Кол-во чисел',
+  metricFilled: 'Кол-во заполненных',
+  metricMean: 'Среднее',
+  metricMin: 'Минимум',
+  metricMax: 'Максимум',
+  metricCopyHint: 'Клик по строке копирует значение',
+  metricCopied: 'Скопировано ✓',
+  sumLiveLabel: 'Σ выделения',
 
   // файлы (Этап 2)
   fileOpenTitle: 'Открыть файл',

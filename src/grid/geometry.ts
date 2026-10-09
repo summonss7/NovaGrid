@@ -1,8 +1,13 @@
 /*
  * Геометрия грида — чистые функции перевода координат (юнит-тестируемы).
  * Все размеры — константы Этапа 1; переменные ширины колонок возможны позже
- * без изменения контрактов этих функций.
+ * без изменения контрактов этих функций. Этап 3 добавляет RowLayout:
+ * фильтры скрывают строки, и визуальный индекс перестаёт совпадать
+ * с модельной строкой (индексация прокрутки/рисования — визуальная,
+ * номера в заголовке строк и ссылки A1 — модельные).
  */
+
+import { visibleIndexOf } from '../core/filter'
 
 export interface GridMetrics {
   /** ширина заголовочной колонки (номера строк) */
@@ -11,6 +16,32 @@ export interface GridMetrics {
   headerH: number
   rowH: number
   colW: number
+}
+
+/** Перевод визуальный индекс ⇄ модельная строка при скрытых фильтром строках. */
+export interface RowLayout {
+  /** сколько строк видно (высота прокрутки = headerH + count·rowH) */
+  count: number
+  /** модельная строка по визуальному индексу */
+  rowAt(index: number): number
+  /** визуальный индекс модельной строки; −1 — строка скрыта */
+  indexOf(row: number): number
+}
+
+/**
+ * Раскладка: null (фильтров нет) — тождественная, без аллокаций, чтобы
+ * стресс 100k не платил за фичу фильтрации.
+ */
+export function rowLayoutOf(totalRows: number, visible: readonly number[] | null): RowLayout {
+  if (!visible) {
+    return { count: totalRows, rowAt: (i) => i, indexOf: (r) => r }
+  }
+  const last = visible.length - 1
+  return {
+    count: visible.length,
+    rowAt: (i) => visible[Math.min(Math.max(i, 0), last)] ?? -1,
+    indexOf: (r) => visibleIndexOf(visible, r),
+  }
 }
 
 export const METRICS: GridMetrics = {

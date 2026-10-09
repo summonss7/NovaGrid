@@ -1,16 +1,32 @@
 /*
- * Канвас-грид Этапа 1 (решение спайка — собственный грид, docs/SPIKE-1-GRID.md):
+ * Канвас-грид (решение спайка — собственный грид, docs/SPIKE-1-GRID.md):
  * прокрутка нативная (spacer в .grid-scroll), рендер — канвас поверх вьюпорта,
  * за кадр рисуются только видимые ячейки. Все жесты (Shift/Ctrl/Alt/ПКМ)
  * транслируются в действия стора, логика выделения живёт в core/selection.
+ *
+ * Этап 3: координаты строк идут через RowLayout (фильтры скрывают строки),
+ * ПКМ открывает контекстное меню фильтрации (Ф3), кнопка ▾/воронка в шапке —
+ * меню колонки, Esc сначала закрывает поиск.
  */
 
 import { useEffect, useRef, useState } from 'react'
 import { useStore } from 'zustand'
+import { visibleRowsOf, type ColumnFilter } from '../core/filter'
 import { normalize, inSelection } from '../core/selection'
 import { gridStore, rangeMetrics } from '../core/store'
+import type { SheetModel } from '../core/sheet'
 import { ru } from '../i18n/ru'
-import { cellAtPoint, cellRect, METRICS, scrollIntoView, totalSize } from './geometry'
+import { ContextMenu } from '../ui/ContextMenu'
+import { ColumnMenu } from '../ui/ColumnMenu'
+import {
+  cellAtPoint,
+  cellRect,
+  METRICS,
+  rowLayoutOf,
+  scrollIntoView,
+  totalSize,
+  type RowLayout,
+} from './geometry'
 import { drawGrid, themeFromCSS, type GridTheme, type VisibleRegion } from './renderer'
 import { installTestHook } from './testHook'
 
@@ -20,6 +36,19 @@ interface AltLabel {
   x: number
   y: number
   text: string
+}
+
+interface CtxMenuState {
+  x: number
+  y: number
+  row: number
+  col: number
+}
+
+interface ColMenuState {
+  x: number
+  y: number
+  col: number
 }
 
 export function GridCanvas() {
@@ -34,10 +63,31 @@ export function GridCanvas() {
   const regionRef = useRef<VisibleRegion | null>(null)
   const rafRef = useRef(0)
   const [altLabel, setAltLabel] = useState<AltLabel | null>(null)
+  const [ctxMenu, setCtxMenu] = useState<CtxMenuState | null>(null)
+  const [colMenu, setColMenu] = useState<ColMenuState | null>(null)
 
   const edit = useStore(gridStore, (s) => s.edit)
+  const sheet = useStore(gridStore, (s) => s.sheet)
+  const filters = useStore(gridStore, (s) => s.filters)
   const rows = useStore(gridStore, (s) => s.sheet.rows)
   const cols = useStore(gridStore, (s) => s.sheet.cols)
+
+  // ── раскладка строк (фильтры) ─────────────────────────────────────────
+  // sheet и filters иммутабельны по ссылке — кэш пересчитывается только
+  // при их смене, кадр скролла платит O(1)
+  const layoutRef = useRef<{
+    sheet: SheetModel
+    filters: readonly ColumnFilter[]
+    layout: RowLayout
+  } | null>(null)
+  const layoutFor = (sh: SheetModel, fl: readonly ColumnFilter[]): RowLayout => {
+    const cur = layoutRef.current
+    if (cur && cur.sheet === sh && cur.filters === fl) return cur.layout
+    const layout = rowLayoutOf(sh.rows, visibleRowsOf(sh, fl))
+    layoutRef.current = { sheet: sh, filters: fl, layout }
+    return layout
+  }
+  const layout = layoutFor(sheet, filters)
 
   // ── рендер ────────────────────────────────────────────────────────────
   const draw = () => {
@@ -59,6 +109,8 @@ export function GridCanvas() {
     }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     const state = gridStore.getState()
+    const lay = layoutFor(state.sheet, state.filters)
+    const hit = state.search.hits[state.search.index]
     regionRef.current = drawGrid({
       ctx,
       width: w,
@@ -66,9 +118,15 @@ export function GridCanvas() {
       scrollX: scrollEl.scrollLeft,
       scrollY: scrollEl.scrollTop,
       sheet: state.sheet,
+      layout: lay,
       selection: state.selection,
       edit: state.edit,
       altRange: state.altRange,
+      search: {
+        hitSet: state.search.hitSet,
+        currentKey: hit && hit.tab === state.activeTab ? `${hit.row}:${hit.col}` : null,
+      },
+      filteredCols: new Set(state.filters.map((f) => f.col)),
       theme,
     })
   }
@@ -85,10 +143,13 @@ export function GridCanvas() {
     const el = scrollRef.current
     const main = mainRef.current
     if (!el || !main) return
-    const { active } = gridStore.getState().selection
+    const st = gridStore.getState()
+    const lay = layoutFor(st.sheet, st.filters)
+    const i = lay.indexOf(st.selection.active.row)
+    if (i < 0) return // активная ячейка скрыта фильтром
     const target = scrollIntoView(
-      active.row,
-      active.col,
+      i,
+      st.selection.active.col,
       el.scrollLeft,
       el.scrollTop,
       main.clientWidth,
@@ -103,7 +164,10 @@ export function GridCanvas() {
     const el = scrollRef.current
     const editState = gridStore.getState().edit
     if (!input || !el || !editState) return
-    const r = cellRect(editState.row, editState.col, el.scrollLeft, el.scrollTop)
+    const st = gridStore.getState()
+    const lay = layoutFor(st.sheet, st.filters)
+    const i = Math.max(0, lay.indexOf(editState.row))
+    const r = cellRect(i, editState.col, el.scrollLeft, el.scrollTop)
     input.style.left = `${r.x - 1}px`
     input.style.top = `${r.y - 1}px`
   }
@@ -116,6 +180,10 @@ export function GridCanvas() {
       main: () => mainRef.current,
       scroll: () => scrollRef.current,
       region: () => regionRef.current,
+      layout: () => {
+        const st = gridStore.getState()
+        return layoutFor(st.sheet, st.filters)
+      },
     })
 
     const unsub = gridStore.subscribe(() => {
@@ -168,20 +236,24 @@ export function GridCanvas() {
   const cellFromPoint = (x: number, y: number) => {
     const el = scrollRef.current
     if (!el) return null
-    const sheet = gridStore.getState().sheet
+    const st = gridStore.getState()
+    const lay = layoutFor(st.sheet, st.filters)
+    if (lay.count === 0) return null
     const hit = cellAtPoint(x, y, el.scrollLeft, el.scrollTop)
     if (!hit) return null
+    const visualRow = Math.min(hit.row, lay.count - 1)
     return {
-      ...hit,
-      row: Math.min(hit.row, sheet.rows - 1),
-      col: Math.min(hit.col, sheet.cols - 1),
+      kind: hit.kind,
+      col: Math.min(hit.col, st.sheet.cols - 1),
+      visualRow,
+      row: hit.kind === 'cell' || hit.kind === 'rowHeader' ? lay.rowAt(visualRow) : visualRow,
     }
   }
 
   const updateAltLabel = (clientX: number, clientY: number) => {
     const st = gridStore.getState()
     if (!st.altRange) return
-    const m = rangeMetrics(st.sheet, normalize(st.altRange))
+    const m = rangeMetrics(st.sheet, normalize(st.altRange), visibleRowsOf(st.sheet, st.filters))
     const rect = mainRef.current!.getBoundingClientRect()
     const { x, y } = localPoint(clientX, clientY)
     setAltLabel({
@@ -203,20 +275,37 @@ export function GridCanvas() {
 
   const onPointerDown = (e: React.PointerEvent<HTMLElement>) => {
     if (e.button !== 0) return
+    // pointerdown из всплывающих меню/панелей не должен попадать в грид:
+    // иначе setPointerCapture уведёт у кнопки меню её click
+    if (
+      (e.target as HTMLElement).closest('.ctx-menu, .col-menu, .search-panel, .sum-card, .tab-menu')
+    )
+      return
     const { x, y } = localPoint(e.clientX, e.clientY)
     const hit = cellFromPoint(x, y)
     if (!hit || hit.kind === 'corner') return
-    mainRef.current?.focus({ preventScroll: true })
-    mainRef.current?.setPointerCapture(e.pointerId)
 
     if (hit.kind === 'colHeader') {
+      mainRef.current?.focus({ preventScroll: true })
+      // зона кнопки меню в правой части заголовка (▾ / воронка) — Ф3.7
+      const scrollEl = scrollRef.current
+      const scrollX = scrollEl?.scrollLeft ?? 0
+      const headerRight = METRICS.rowHeaderW + (hit.col + 1) * METRICS.colW - scrollX
+      if (x > headerRight - 26) {
+        setColMenu({ col: hit.col, x: e.clientX, y: e.clientY })
+        return
+      }
       gridStore.getState().selectCol(hit.col)
       return
     }
     if (hit.kind === 'rowHeader') {
+      mainRef.current?.focus({ preventScroll: true })
       gridStore.getState().selectRow(hit.row)
       return
     }
+    mainRef.current?.focus({ preventScroll: true })
+    mainRef.current?.setPointerCapture(e.pointerId)
+
     if (e.altKey) {
       // Alt-лассо быстрой суммы (Ф4): оранжевая рамка + живая Σ у курсора
       dragModeRef.current = 'alt'
@@ -258,14 +347,20 @@ export function GridCanvas() {
   }
 
   const onContextMenu = (e: React.MouseEvent<HTMLElement>) => {
-    // меню ПКМ-фильтра — Этап 3 (Ф3); сейчас Excel-поведение: вне выделения — выбрать ячейку
+    // меню ПКМ-фильтра (Ф3): по ячейке — фильтрация, по шапке — меню колонки
     e.preventDefault()
     const { x, y } = localPoint(e.clientX, e.clientY)
     const hit = cellFromPoint(x, y)
-    if (hit && hit.kind === 'cell') {
-      const st = gridStore.getState()
-      if (!inSelection(st.selection, hit.row, hit.col)) st.clickCell(hit.row, hit.col)
+    if (!hit) return
+    if (hit.kind === 'colHeader') {
+      setColMenu({ col: hit.col, x: e.clientX, y: e.clientY })
+      return
     }
+    if (hit.kind !== 'cell') return
+    const st = gridStore.getState()
+    // Excel-поведение: ПКМ вне выделения выбирает ячейку
+    if (!inSelection(st.selection, hit.row, hit.col)) st.clickCell(hit.row, hit.col)
+    setCtxMenu({ row: hit.row, col: hit.col, x: e.clientX, y: e.clientY })
   }
 
   // ── клавиатура ────────────────────────────────────────────────────────
@@ -304,7 +399,9 @@ export function GridCanvas() {
         e.preventDefault()
         return
       case 'Escape':
-        st.escape()
+        // сначала закрываем поиск (Ф2), потом снимаем выделение
+        if (st.search.open) st.closeSearch()
+        else st.escape()
         return
       case 'Delete':
       case 'Backspace':
@@ -326,6 +423,12 @@ export function GridCanvas() {
       case 'PageUp':
         st.pageMove(visibleRowCount(), -1, e.shiftKey)
         e.preventDefault()
+        return
+      case 'F3':
+        if (st.search.open) {
+          st.searchStep(e.shiftKey ? -1 : 1)
+          e.preventDefault()
+        }
         return
     }
     // e.code не зависит от раскладки — Ctrl+Z работает и на «я»
@@ -384,11 +487,12 @@ export function GridCanvas() {
   const editorStyle = (() => {
     const el = scrollRef.current
     if (!edit || !el) return undefined
-    const r = cellRect(edit.row, edit.col, el.scrollLeft, el.scrollTop)
+    const i = Math.max(0, layout.indexOf(edit.row))
+    const r = cellRect(i, edit.col, el.scrollLeft, el.scrollTop)
     return { left: r.x - 1, top: r.y - 1, width: r.w + 1, height: r.h + 1 }
   })()
 
-  const size = totalSize(rows, cols)
+  const size = totalSize(layout.count, cols)
 
   return (
     <main
@@ -430,6 +534,31 @@ export function GridCanvas() {
         >
           {altLabel.text}
         </div>
+      )}
+      {ctxMenu && (
+        <ContextMenu
+          key={`${ctxMenu.row}:${ctxMenu.col}`}
+          x={ctxMenu.x}
+          y={ctxMenu.y}
+          row={ctxMenu.row}
+          col={ctxMenu.col}
+          onClose={() => {
+            setCtxMenu(null)
+            mainRef.current?.focus({ preventScroll: true })
+          }}
+        />
+      )}
+      {colMenu && (
+        <ColumnMenu
+          key={colMenu.col}
+          col={colMenu.col}
+          x={colMenu.x}
+          y={colMenu.y}
+          onClose={() => {
+            setColMenu(null)
+            mainRef.current?.focus({ preventScroll: true })
+          }}
+        />
       )}
     </main>
   )

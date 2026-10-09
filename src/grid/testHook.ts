@@ -2,12 +2,16 @@
  * Тест-хук e2e: устанавливается только при ?test=1 / ?testui=1 — в обычном
  * режиме в приложении его нет. Даёт Playwright доступ к состоянию грида
  * (значения ячеек канваса недоступны DOM-локаторам) и к статистике кадров.
+ * Этап 3: координаты ячеек идут через раскладку строк (фильтры скрывают
+ * строки), добавлены доступы к фильтрам/поиску для сценариев КТ-3.
  */
 
 import { normalize } from '../core/selection'
+import type { ColumnFilter } from '../core/filter'
+import { visibleRowsOf } from '../core/filter'
 import { getCell } from '../core/sheet'
 import { gridStore, selectionMetrics, type EditState } from '../core/store'
-import { cellRefName, cellRect } from './geometry'
+import { cellRefName, cellRect, type RowLayout } from './geometry'
 import { drawStats, type VisibleRegion } from './renderer'
 
 export interface NvBookInfo {
@@ -17,6 +21,14 @@ export interface NvBookInfo {
   activeTab: number
   rows: number
   cols: number
+}
+
+export interface NvSearchInfo {
+  open: boolean
+  query: string
+  scope: 'sheet' | 'book'
+  count: number
+  index: number
 }
 
 export interface NvTestApi {
@@ -33,6 +45,12 @@ export interface NvTestApi {
   cellCenter: (row: number, col: number) => { x: number; y: number }
   editor: () => EditState | null
   book: () => NvBookInfo
+  /** фильтры активной вкладки (КТ-3) */
+  filters: () => ColumnFilter[]
+  /** видимые строки активной вкладки; null — фильтров нет */
+  visibleRows: () => number[] | null
+  /** состояние поиска: счётчик/индекс (Ф2) */
+  searchInfo: () => NvSearchInfo
 }
 
 declare global {
@@ -45,6 +63,8 @@ export interface TestHookRefs {
   main: () => HTMLElement | null
   scroll: () => HTMLDivElement | null
   region: () => VisibleRegion | null
+  /** раскладка строк активного листа (с учётом фильтров) */
+  layout: () => RowLayout
 }
 
 export function installTestHook(refs: TestHookRefs): void {
@@ -63,7 +83,7 @@ export function installTestHook(refs: TestHookRefs): void {
     },
     metrics: () => {
       const st = gridStore.getState()
-      return selectionMetrics(st.sheet, st.selection)
+      return selectionMetrics(st.sheet, st.selection, visibleRowsOf(st.sheet, st.filters))
     },
     ranges: () =>
       gridStore.getState().selection.ranges.map((r) => {
@@ -92,8 +112,13 @@ export function installTestHook(refs: TestHookRefs): void {
       const main = refs.main()
       const el = refs.scroll()
       if (!main || !el) return { x: 0, y: 0 }
+      const layout = refs.layout()
+      // row = -1 — центр заголовка колонки (как до Этапа 3); скрытая строка —
+      // грубая позиция модельной строки (тесты по скрытым не кликают)
+      const i = layout.indexOf(row)
+      const vi = i >= 0 ? i : row
       const mainRect = main.getBoundingClientRect()
-      const r = cellRect(row, col, el.scrollLeft, el.scrollTop)
+      const r = cellRect(vi, col, el.scrollLeft, el.scrollTop)
       return { x: mainRect.left + r.x + r.w / 2, y: mainRect.top + r.y + r.h / 2 }
     },
     editor: () => gridStore.getState().edit,
@@ -107,6 +132,15 @@ export function installTestHook(refs: TestHookRefs): void {
         rows: st.sheet.rows,
         cols: st.sheet.cols,
       }
+    },
+    filters: () => gridStore.getState().filters,
+    visibleRows: () => {
+      const vis = visibleRowsOf(gridStore.getState().sheet, gridStore.getState().filters)
+      return vis ? [...vis] : null
+    },
+    searchInfo: () => {
+      const { open, query, scope, hits, index } = gridStore.getState().search
+      return { open, query, scope, count: hits.length, index }
     },
   }
 }

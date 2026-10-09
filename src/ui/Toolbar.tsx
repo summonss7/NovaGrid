@@ -1,17 +1,31 @@
-import { FileDown, FolderOpen, HelpCircle, Save, Search } from 'lucide-react'
+import { FileDown, FolderOpen, HelpCircle, Save } from 'lucide-react'
+import { useState } from 'react'
 import { useStore } from 'zustand'
-import { gridStore } from '../core/store'
+import { visibleRowsOf } from '../core/filter'
+import { normalize } from '../core/selection'
+import { gridStore, rangeMetrics } from '../core/store'
 import { ru } from '../i18n/ru'
 import { Logo } from './Logo'
+import { SearchBox } from './SearchBox'
+import { SumCard } from './SumCard'
 
 /**
  * Тулбар (DESIGN-SYSTEM §6): лого · Открыть · Сохранить · Сохранить как… ·
  * имя файла с точкой несохранённых правок · поиск · справка · Σ справа.
- * Поиск и справка оживают на этапах 3–4.
+ * Этап 3 оживляет поиск (Ф2) и кнопку Σ: клик — карточка метрик, Alt-лассо —
+ * живая сумма крупно в зоне Σ (Ф4). Справка — Этап 4.
  */
 export function Toolbar(props: { onOpen: () => void; onSave: () => void; onSaveAs: () => void }) {
   const fileName = useStore(gridStore, (s) => s.fileName)
   const dirty = useStore(gridStore, (s) => s.dirty)
+  const [sumOpen, setSumOpen] = useState(false)
+
+  // Alt-лассо: сумма крупно в зоне кнопки Σ, пока тянется рамка (Ф4)
+  const altSum = useStore(gridStore, (s) =>
+    s.altRange
+      ? rangeMetrics(s.sheet, normalize(s.altRange), visibleRowsOf(s.sheet, s.filters)).total
+      : null,
+  )
 
   return (
     <header className="toolbar">
@@ -50,16 +64,7 @@ export function Toolbar(props: { onOpen: () => void; onSave: () => void; onSaveA
 
       <span className="toolbar-sep" aria-hidden />
 
-      <div className="search">
-        <Search size={15} strokeWidth={1.5} aria-hidden />
-        <input
-          type="search"
-          className="search-input"
-          placeholder={ru.searchPlaceholder}
-          aria-label={ru.searchLabel}
-        />
-        <kbd className="search-kbd">{ru.searchHint}</kbd>
-      </div>
+      <SearchBox />
 
       <button
         type="button"
@@ -72,14 +77,32 @@ export function Toolbar(props: { onOpen: () => void; onSave: () => void; onSaveA
 
       <span className="toolbar-spacer" aria-hidden />
 
-      <button type="button" className="sum-btn" aria-label={ru.sumTitle} title={ru.sumTitle}>
-        <span className="sum-symbol" aria-hidden>
-          Σ
-        </span>
-        <span className="sum-caption" aria-hidden>
-          {ru.sumLabel}
-        </span>
-      </button>
+      <span className="sum-zone">
+        {altSum !== null && (
+          <span className="sum-live" aria-live="polite">
+            <span className="sum-live-caption" aria-hidden>
+              {ru.sumLiveLabel}
+            </span>
+            <span className="sum-live-value">Σ {altSum.toLocaleString('ru-RU')}</span>
+          </span>
+        )}
+        <button
+          type="button"
+          className="sum-btn"
+          aria-label={ru.sumTitle}
+          aria-expanded={sumOpen}
+          title={ru.sumTitle}
+          onClick={() => setSumOpen((v) => !v)}
+        >
+          <span className="sum-symbol" aria-hidden>
+            Σ
+          </span>
+          <span className="sum-caption" aria-hidden>
+            {ru.sumLabel}
+          </span>
+        </button>
+        {sumOpen && <SumCard onClose={() => setSumOpen(false)} />}
+      </span>
     </header>
   )
 }

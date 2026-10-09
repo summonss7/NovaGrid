@@ -1,6 +1,7 @@
 import { Copy, PenLine, Plus, Trash2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useStore } from 'zustand'
+import { visibleRowsOf } from '../core/filter'
 import { gridStore } from '../core/store'
 import { ru } from '../i18n/ru'
 
@@ -16,6 +17,7 @@ export function SheetsBar() {
   const tabs = useStore(gridStore, (s) => s.tabs)
   const activeTab = useStore(gridStore, (s) => s.activeTab)
   const sheet = useStore(gridStore, (s) => s.sheet)
+  const filters = useStore(gridStore, (s) => s.filters)
   const [menu, setMenu] = useState<TabMenu | null>(null)
   const [editing, setEditing] = useState<number | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -90,7 +92,12 @@ export function SheetsBar() {
           <Plus size={16} strokeWidth={1.5} aria-hidden />
         </button>
       </div>
-      <span className="sheets-note">{ru.sheetRowsCols(sheet.rows, sheet.cols)}</span>
+      {/* Ф3.5: при активных фильтрах — «Показано 132 из 1 500», иначе габариты */}
+      <span className="sheets-note" aria-live="polite">
+        {filters.length > 0
+          ? ru.filterShownOf(visibleRowsOf(sheet, filters)?.length ?? 0, sheet.maxRow + 1)
+          : ru.sheetRowsCols(sheet.rows, sheet.cols)}
+      </span>
 
       {menu && (
         <>

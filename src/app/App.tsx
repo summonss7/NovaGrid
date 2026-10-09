@@ -15,6 +15,7 @@ import {
   writeToHandle,
   xlsxMime,
 } from '../io/fileActions'
+import { FilterBar } from '../ui/FilterBar'
 import { FormulaBar } from '../ui/FormulaBar'
 import { GridCanvas } from '../grid/GridCanvas'
 import { SaveAsDialog, type SaveAsChoice, type SaveAsFormat } from '../ui/SaveAsDialog'
@@ -279,6 +280,7 @@ export default function App() {
             onSave={() => void save()}
             onSaveAs={() => setSaveAsOpen(true)}
           />
+          <FilterBar />
           <FormulaBar />
           <GridCanvas />
           <SheetsBar />
