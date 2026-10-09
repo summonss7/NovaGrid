@@ -58,7 +58,7 @@ export function SearchBox() {
   const moreResults = Math.max(0, search.hits.length - results.length)
 
   return (
-    <div className="search-wrap">
+    <div className={`search-wrap${search.open ? ' is-open' : ''}`}>
       <div className="search">
         <Search size={15} strokeWidth={1.5} aria-hidden />
         <input

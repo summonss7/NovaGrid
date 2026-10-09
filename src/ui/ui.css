@@ -1594,3 +1594,335 @@
   line-height: 1.5;
   color: var(--nv-ink);
 }
+
+/* ══ Этап 5: PWA, мобильная раскладка, зум (DESIGN-SYSTEM §9) ═════════ */
+
+/* Пинч над таблицей зумит её (5.3), не страницу: браузеру оставляем только
+   пан-прокрутку; жест выделения и пинч обрабатывает GridCanvas */
+.grid-area {
+  touch-action: pan-x pan-y;
+}
+
+/* Контрол масштаба в статус-баре (5.3) */
+.zoom-ctl {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.zoom-btn,
+.zoom-value {
+  border: 1px solid var(--nv-grid-line);
+  background: var(--nv-bg);
+  color: var(--nv-ink);
+  font-family: var(--nv-font-text);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.zoom-btn {
+  width: 22px;
+  height: 22px;
+  border-radius: 5px 0 0 5px;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.zoom-btn + .zoom-btn {
+  border-radius: 0 5px 5px 0;
+}
+
+.zoom-value {
+  min-width: 46px;
+  height: 22px;
+  border-left: none;
+  border-right: none;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.zoom-btn:hover,
+.zoom-value:hover {
+  background: var(--nv-mint);
+}
+
+/* Плашка «Доступна новая версия» (5.1): не закрывает таблицу — снизу
+   с отступом от мобильной панели и safe-area */
+.pwa-update {
+  position: fixed;
+  left: 50%;
+  bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: calc(100vw - 24px);
+  padding: 10px 14px;
+  background: var(--nv-ink);
+  color: var(--nv-bg);
+  border-radius: var(--nv-radius-panel);
+  box-shadow: var(--nv-shadow-pop);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.pwa-update .btn {
+  padding: 6px 12px;
+}
+
+/* Нижняя панель действий (5.2, §9): только мобильная раскладка */
+.mobile-bar {
+  display: none;
+}
+
+/* Кнопка «⋯» в тулбаре — мобильная замена файловой группе */
+.toolbar-more {
+  display: none;
+  position: relative;
+}
+
+.toolbar-more-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 8px;
+  z-index: 52;
+  min-width: 210px;
+}
+
+.toolbar-more-menu .tab-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+/* Свёрнутая строка формул (5.2): адрес ячейки — кнопка раскрытия */
+.formula-ref-btn {
+  cursor: pointer;
+}
+
+.formula-ref-btn:hover {
+  border-color: var(--nv-primary-deep);
+  color: var(--nv-primary-deep);
+}
+
+.formula-collapse {
+  flex: none;
+}
+
+/* ── Мобильная раскладка (§9): coarse-указатель (телефон, iPad) или
+      узкий экран — то же условие, что в ui/useIsMobile.ts ───────────── */
+@media (pointer: coarse), (max-width: 760px) {
+  .app-shell {
+    /* не даём странице отпружинить при жестах над таблицей */
+    overflow: hidden;
+  }
+
+  /* тонкая верхняя строка: лого · «⋯» · имя файла */
+  .toolbar {
+    position: relative;
+    gap: 8px;
+    padding: 6px 10px;
+  }
+
+  .toolbar-group,
+  .toolbar-sep,
+  .toolbar-help,
+  .toolbar-sum,
+  .toolbar .search-wrap:not(.is-open) {
+    display: none;
+  }
+
+  .toolbar-more {
+    display: block;
+  }
+
+  .file-name {
+    max-width: 38vw;
+  }
+
+  /* поиск раскрывается из нижней панели: полноширинная строка под тулбаром */
+  .toolbar .search-wrap.is-open {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    z-index: 44;
+    background: var(--nv-surface);
+    border-bottom: 1px solid var(--nv-grid-line);
+    padding: 6px 10px;
+  }
+
+  .toolbar .search-wrap.is-open .search {
+    flex: 1;
+  }
+
+  .toolbar .search-wrap.is-open .search-kbd {
+    display: none;
+  }
+
+  .toolbar .search-wrap.is-open .search-panel {
+    left: 0;
+    right: 0;
+    width: auto;
+    max-width: none;
+  }
+
+  /* чипы фильтров — горизонтальная лента (§9) */
+  .filter-bar {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    gap: 6px;
+    padding: 5px 10px;
+  }
+
+  .filter-bar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .filter-bar-label {
+    flex: none;
+  }
+
+  .filter-chip {
+    flex: none;
+  }
+
+  .filter-chip-text {
+    padding: 6px 9px;
+    font-size: 13px;
+  }
+
+  .filter-chip-x {
+    width: 32px;
+    height: 32px;
+  }
+
+  .filter-reset {
+    flex: none;
+    padding: 8px 11px;
+  }
+
+  /* крупные метрики выделения — плашка над нижней панелью (§9) */
+  .status-bar {
+    flex-wrap: wrap;
+    gap: 4px 10px;
+    padding: 6px 12px;
+    padding-bottom: calc(6px + env(safe-area-inset-bottom, 0px) / 2);
+  }
+
+  .status-phase {
+    display: none;
+  }
+
+  .status-metrics {
+    flex: 1;
+    gap: 12px;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--nv-ink);
+  }
+
+  .zoom-btn,
+  .zoom-value {
+    width: 30px;
+    height: 30px;
+    font-size: 15px;
+  }
+
+  .zoom-value {
+    min-width: 52px;
+    font-size: 12.5px;
+  }
+
+  /* нижняя панель: Открыть · Поиск · Σ · ? — касания ≥ 48 px (§9) */
+  .mobile-bar {
+    position: relative;
+    display: flex;
+    justify-content: space-around;
+    gap: 4px;
+    padding: 4px 6px calc(4px + env(safe-area-inset-bottom, 0px));
+    background: var(--nv-surface);
+    border-top: 1px solid var(--nv-grid-line);
+  }
+
+  .mobile-bar-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    min-width: 64px;
+    min-height: 48px;
+    padding: 4px 10px;
+    border: none;
+    border-radius: var(--nv-radius-btn);
+    background: transparent;
+    color: var(--nv-ink);
+    font-family: var(--nv-font-text);
+    font-size: 10.5px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .mobile-bar-btn:active {
+    background: var(--nv-mint);
+  }
+
+  .mobile-bar-sum {
+    color: var(--nv-accent-deep);
+  }
+
+  /* карточка метрик из нижней панели — крупнее и почти во всю ширину */
+  .mobile-bar .sum-card {
+    right: 4px;
+    left: 4px;
+    width: auto;
+    max-width: 420px;
+    margin: 0 auto;
+    padding: 10px;
+  }
+
+  .mobile-bar .sum-card-row {
+    padding: 12px 12px;
+    font-size: 15px;
+  }
+
+  .mobile-bar .sum-card-row-strong .sum-card-value {
+    font-size: 21px;
+  }
+
+  .mobile-bar .sum-card-hint {
+    font-size: 12.5px;
+  }
+
+  /* панель листов компактнее */
+  .sheets-bar {
+    padding: 4px 8px;
+    gap: 8px;
+  }
+
+  .sheet-tab {
+    padding: 7px 13px;
+    white-space: nowrap;
+  }
+
+  /* меню ПКМ/колонки — пальце-размеры */
+  .ctx-menu-item,
+  .col-menu-item {
+    min-height: 44px;
+  }
+
+  .ctx-menu,
+  .col-menu {
+    max-width: min(330px, calc(100vw - 16px));
+  }
+
+  /* справочник почти во весь экран телефона */
+  .help-dialog {
+    width: calc(100vw - 16px);
+    height: calc(100dvh - 32px);
+  }
+}

@@ -44,11 +44,38 @@ export function rowLayoutOf(totalRows: number, visible: readonly number[] | null
   }
 }
 
-export const METRICS: GridMetrics = {
+/** Базовые размеры (масштаб 100 %) — от них считается пинч-зум (Этап 5.3). */
+const BASE_METRICS: GridMetrics = {
   rowHeaderW: 44,
   headerH: 30,
   rowH: 30,
   colW: 96,
+}
+
+export const METRICS: GridMetrics = { ...BASE_METRICS }
+
+export const ZOOM_MIN = 0.5
+export const ZOOM_MAX = 2.5
+
+let zoomLevel = 1
+
+/** Текущий уровень зума таблицы (1 = 100 %). */
+export function zoomOf(): number {
+  return zoomLevel
+}
+
+/**
+ * Применить зум к METRICS (масштаб ячеек/шапок), вернуть фактический уровень
+ * после клампинга. Прокрутку под якорь корректирует вызывающий (GridCanvas):
+ * здесь нет DOM. Минимальные размеры защищают читаемость шапок при отдалении.
+ */
+export function applyZoom(z: number): number {
+  zoomLevel = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z))
+  METRICS.colW = Math.max(48, Math.round(BASE_METRICS.colW * zoomLevel))
+  METRICS.rowH = Math.max(20, Math.round(BASE_METRICS.rowH * zoomLevel))
+  METRICS.headerH = Math.max(22, Math.round(BASE_METRICS.headerH * zoomLevel))
+  METRICS.rowHeaderW = Math.max(28, Math.round(BASE_METRICS.rowHeaderW * zoomLevel))
+  return zoomLevel
 }
 
 /** 0 → A, 25 → Z, 26 → AA, 701 → ZZ (как в Excel). */

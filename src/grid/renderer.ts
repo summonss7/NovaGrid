@@ -36,9 +36,13 @@ export interface GridTheme {
 
 const FALLBACK_FONT = '"Open Sans", "Segoe UI", system-ui, sans-serif'
 
-export function themeFromCSS(): GridTheme {
+/** Тема из CSS-токенов; scale = зум таблицы — шрифты масштабируются вместе
+ *  с ячейками (Этап 5.3), иначе отдалённые ячейки рваные, а приближённые пустые. */
+export function themeFromCSS(scale = 1): GridTheme {
   const cs = getComputedStyle(document.documentElement)
   const v = (name: string, fallback: string): string => cs.getPropertyValue(name).trim() || fallback
+  const cellPx = Math.round(13.5 * scale * 10) / 10
+  const headerPx = Math.round(12 * scale * 10) / 10
   return {
     ink: v('--nv-ink', '#2b2b2b'),
     inkSoft: v('--nv-ink-soft', '#9a9a9a'),
@@ -52,9 +56,9 @@ export function themeFromCSS(): GridTheme {
     altFill: 'rgba(242, 107, 33, 0.10)',
     altBorder: v('--nv-accent', '#f26b21'),
     greenBorder: v('--nv-primary-deep', '#2ba84a'),
-    fontCell: `13.5px ${FALLBACK_FONT}`,
-    fontCellBold: `600 13.5px ${FALLBACK_FONT}`,
-    fontHeader: `600 12px ${FALLBACK_FONT}`,
+    fontCell: `${cellPx}px ${FALLBACK_FONT}`,
+    fontCellBold: `600 ${cellPx}px ${FALLBACK_FONT}`,
+    fontHeader: `600 ${headerPx}px ${FALLBACK_FONT}`,
   }
 }
 

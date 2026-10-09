@@ -22,7 +22,7 @@ export const ru = {
   sheet: 'Лист 1',
   addSheetLabel: 'Добавить лист',
   sheetsEmpty: 'Файлы .xlsx/.xls/.csv откроются здесь',
-  statusPhase: 'Этап 4 · формулы · справка',
+  statusPhase: 'Этап 5 · PWA · мобильные',
 
   // поиск (Ф2, Этап 3)
   searchScopeSheet: 'Этот лист',
@@ -143,6 +143,23 @@ export const ru = {
   helpKeysColKey: 'Клавиши',
   helpFunctionsHint:
     'Примеры считаются на вашей таблице — откройте файл или начните с новой',
+
+  // PWA и мобильные (Этап 5)
+  pwaUpdateTitle: 'Доступна новая версия NovaGrid',
+  pwaUpdateAction: 'Обновить',
+  pwaUpdateDismiss: 'Позже',
+  mobileBarLabel: 'Действия',
+  mobileOpen: 'Открыть',
+  mobileSearch: 'Поиск',
+  mobileSum: 'Сумма',
+  mobileHelp: 'Справка',
+  moreMenuLabel: 'Ещё',
+  zoomLabel: 'Масштаб таблицы',
+  zoomIn: 'Увеличить масштаб',
+  zoomOut: 'Уменьшить масштаб',
+  zoomReset: 'Сбросить масштаб к 100 %',
+  formulaExpand: 'Развернуть строку формул',
+  formulaCollapse: 'Свернуть строку формул',
 } as const
 
 function formatRelative(d: Date): string {

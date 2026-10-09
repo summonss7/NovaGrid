@@ -1,4 +1,4 @@
-import { FileDown, FolderOpen, HelpCircle, Save } from 'lucide-react'
+import { FileDown, FolderOpen, HelpCircle, MoreVertical, Save } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useStore } from 'zustand'
 import { visibleRowsOf } from '../core/filter'
@@ -15,12 +15,15 @@ import { SumCard } from './SumCard'
  * имя файла с точкой несохранённых правок · поиск · справка · Σ справа.
  * Этап 3 оживляет поиск (Ф2) и кнопку Σ: клик — карточка метрик, Alt-лассо —
  * живая сумма крупно в зоне Σ (Ф4). Справка — Этап 4.
+ * Этап 5.2: на мобильном файловые кнопки уходят в меню «⋯» (нижняя панель
+ * берёт Открыть/Поиск/Σ/?), тулбар остаётся тонкой строкой с именем файла.
  */
 export function Toolbar(props: { onOpen: () => void; onSave: () => void; onSaveAs: () => void }) {
   const fileName = useStore(gridStore, (s) => s.fileName)
   const dirty = useStore(gridStore, (s) => s.dirty)
   const [sumOpen, setSumOpen] = useState(false)
   const [helpOpen, setHelpOpen] = useState(false)
+  const [moreOpen, setMoreOpen] = useState(false)
 
   // F1 открывает справочник — как в настольных офисных приложениях
   useEffect(() => {
@@ -65,6 +68,50 @@ export function Toolbar(props: { onOpen: () => void; onSave: () => void; onSaveA
         </button>
       </div>
 
+      {/* мобильное меню «⋯» (5.2): файловые действия, не влезающие в тонкую строку */}
+      <div className="toolbar-more">
+        <button
+          type="button"
+          className="btn btn-ghost btn-icon"
+          aria-label={ru.moreMenuLabel}
+          aria-expanded={moreOpen}
+          onClick={() => setMoreOpen((v) => !v)}
+        >
+          <MoreVertical size={20} strokeWidth={1.5} aria-hidden />
+        </button>
+        {moreOpen && (
+          <>
+            <div className="menu-backdrop" onClick={() => setMoreOpen(false)} aria-hidden />
+            <div className="tab-menu toolbar-more-menu" role="menu">
+              <button
+                type="button"
+                className="tab-menu-item"
+                role="menuitem"
+                onClick={() => {
+                  setMoreOpen(false)
+                  props.onSave()
+                }}
+              >
+                <Save size={15} strokeWidth={1.5} aria-hidden />
+                {ru.save}
+              </button>
+              <button
+                type="button"
+                className="tab-menu-item"
+                role="menuitem"
+                onClick={() => {
+                  setMoreOpen(false)
+                  props.onSaveAs()
+                }}
+              >
+                <FileDown size={15} strokeWidth={1.5} aria-hidden />
+                {ru.saveAs}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+
       {(fileName || dirty) && (
         <span className="file-badge" title={dirty ? ru.dirtyTitle : undefined}>
           {dirty && (
@@ -82,7 +129,7 @@ export function Toolbar(props: { onOpen: () => void; onSave: () => void; onSaveA
 
       <button
         type="button"
-        className="btn btn-ghost btn-icon"
+        className="btn btn-ghost btn-icon toolbar-help"
         aria-label={ru.helpLabel}
         title={`${ru.helpLabel} (F1)`}
         aria-expanded={helpOpen}
@@ -104,7 +151,7 @@ export function Toolbar(props: { onOpen: () => void; onSave: () => void; onSaveA
         )}
         <button
           type="button"
-          className="sum-btn"
+          className="sum-btn toolbar-sum"
           aria-label={ru.sumTitle}
           aria-expanded={sumOpen}
           title={ru.sumTitle}

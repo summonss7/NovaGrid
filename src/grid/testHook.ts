@@ -12,7 +12,7 @@ import { visibleRowsOf } from '../core/filter'
 import { getCell } from '../core/sheet'
 import { cellText, formulaStateAt } from '../formula/engine'
 import { gridStore, selectionMetrics, type EditState } from '../core/store'
-import { cellRefName, cellRect, type RowLayout } from './geometry'
+import { cellRefName, cellRect, METRICS, zoomOf, type RowLayout } from './geometry'
 import { drawStats, type VisibleRegion } from './renderer'
 
 export interface NvBookInfo {
@@ -63,6 +63,9 @@ export interface NvTestApi {
   visibleRows: () => number[] | null
   /** состояние поиска: счётчик/индекс (Ф2) */
   searchInfo: () => NvSearchInfo
+  /** зум таблицы и текущие размеры ячеек (Этап 5.3, пинч/кнопки) */
+  zoom: () => number
+  cellMetrics: () => { rowH: number; colW: number; headerH: number; rowHeaderW: number }
 }
 
 declare global {
@@ -166,5 +169,7 @@ export function installTestHook(refs: TestHookRefs): void {
       const { open, query, scope, hits, index } = gridStore.getState().search
       return { open, query, scope, count: hits.length, index }
     },
+    zoom: () => zoomOf(),
+    cellMetrics: () => ({ ...METRICS }),
   }
 }

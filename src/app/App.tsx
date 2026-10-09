@@ -3,6 +3,7 @@ import { gridStore } from '../core/store'
 import { ru } from '../i18n/ru'
 import { installAutosave } from '../storage/autosave'
 import type { SessionRow } from '../storage/db'
+import { onPwaUpdate, registerServiceWorker } from '../pwa/registerSW'
 import {
   buildBookBuffer,
   csvMime,
@@ -18,6 +19,7 @@ import {
 import { FilterBar } from '../ui/FilterBar'
 import { FormulaBar } from '../ui/FormulaBar'
 import { GridCanvas } from '../grid/GridCanvas'
+import { MobileBar } from '../ui/MobileBar'
 import { SaveAsDialog, type SaveAsChoice, type SaveAsFormat } from '../ui/SaveAsDialog'
 import { SheetsBar } from '../ui/SheetsBar'
 import { StartScreen } from '../ui/StartScreen'
@@ -44,6 +46,7 @@ export default function App() {
   const [toast, setToast] = useState<Toast | null>(null)
   const [saveAsOpen, setSaveAsOpen] = useState(false)
   const [dropping, setDropping] = useState(false)
+  const [swReload, setSwReload] = useState<(() => void) | null>(null)
   const bootedRef = useRef(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const toastTimer = useRef(0)
@@ -206,6 +209,13 @@ export default function App() {
   // ── автосохранение сессии (отдельный эффект: переживёт StrictMode) ──
   useEffect(() => installAutosave(), [])
 
+  // ── PWA (Этап 5.1): офлайн-оболочка + обновление по кнопке ──────────
+  // (registerServiceWorker гасит и Safari-пинч страницы — см. pwa/registerSW)
+  useEffect(() => {
+    registerServiceWorker()
+    return onPwaUpdate((reload) => setSwReload(() => reload))
+  }, [])
+
   // ── горячие клавиши файлов (в режиме книги) ─────────────────────────
   useEffect(() => {
     if (mode !== 'book') return
@@ -285,6 +295,24 @@ export default function App() {
           <GridCanvas />
           <SheetsBar />
           <StatusBar />
+          <MobileBar onOpen={() => void onOpenClicked()} />
+        </div>
+      )}
+
+      {swReload && (
+        <div className="pwa-update" role="alert">
+          <span>{ru.pwaUpdateTitle}</span>
+          <button type="button" className="btn btn-primary" onClick={() => swReload()}>
+            {ru.pwaUpdateAction}
+          </button>
+          <button
+            type="button"
+            className="btn btn-ghost"
+            aria-label={ru.pwaUpdateDismiss}
+            onClick={() => setSwReload(null)}
+          >
+            {ru.pwaUpdateDismiss}
+          </button>
         </div>
       )}
 
