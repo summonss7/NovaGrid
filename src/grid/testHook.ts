@@ -32,6 +32,17 @@ export interface NvSearchInfo {
   index: number
 }
 
+/** Состояние «Найти и заменить» для e2e Этапа 7 (зеркало searchInfo). */
+export interface NvReplaceInfo {
+  open: boolean
+  query: string
+  replacement: string
+  scope: 'sheet' | 'book'
+  count: number
+  index: number
+  lastCount: number | null
+}
+
 export interface NvFormulaInfo {
   source: string
   display: string
@@ -63,6 +74,8 @@ export interface NvTestApi {
   visibleRows: () => number[] | null
   /** состояние поиска: счётчик/индекс (Ф2) */
   searchInfo: () => NvSearchInfo
+  /** состояние «Найти и заменить»: счётчик/индекс/последнее действие (Этап 7) */
+  replaceInfo: () => NvReplaceInfo
   /** зум таблицы и текущие размеры ячеек (Этап 5.3, пинч/кнопки) */
   zoom: () => number
   cellMetrics: () => { rowH: number; colW: number; headerH: number; rowHeaderW: number }
@@ -168,6 +181,18 @@ export function installTestHook(refs: TestHookRefs): void {
     searchInfo: () => {
       const { open, query, scope, hits, index } = gridStore.getState().search
       return { open, query, scope, count: hits.length, index }
+    },
+    replaceInfo: () => {
+      const r = gridStore.getState().replace
+      return {
+        open: r.open,
+        query: r.query,
+        replacement: r.replacement,
+        scope: r.scope,
+        count: r.hits.length,
+        index: r.index,
+        lastCount: r.lastCount,
+      }
     },
     zoom: () => zoomOf(),
     cellMetrics: () => ({ ...METRICS }),

@@ -21,6 +21,7 @@ import { FilterBar } from '../ui/FilterBar'
 import { FormulaBar } from '../ui/FormulaBar'
 import { GridCanvas } from '../grid/GridCanvas'
 import { MobileBar } from '../ui/MobileBar'
+import { ReplaceHost } from '../ui/ReplaceDialog'
 import { SaveAsDialog, type SaveAsChoice, type SaveAsFormat } from '../ui/SaveAsDialog'
 import { SheetsBar } from '../ui/SheetsBar'
 import { StartScreen } from '../ui/StartScreen'
@@ -307,6 +308,7 @@ export default function App() {
           <SheetsBar />
           <StatusBar />
           <MobileBar onOpen={() => void onOpenClicked()} />
+          <ReplaceHost />
         </div>
       )}
 

@@ -15,6 +15,12 @@ export interface CellChange {
 export interface HistoryEntry {
   label: string
   changes: CellChange[]
+  /**
+   * Метка сквозной транзакции (Этап 7): батч «заменить все» по книге пишет
+   * по записи в историю каждой вкладки с одной меткой — undo/redo снимает
+   * их со всех вкладок разом, одним Ctrl+Z.
+   */
+  group?: string
 }
 
 const DEFAULT_LIMIT = 100
@@ -43,6 +49,16 @@ export class History {
     const entry = this.redoStack.pop() ?? null
     if (entry) this.undoStack.push(entry)
     return entry
+  }
+
+  /** Верхняя запись redo-стека без снятия (группировка батча Этапа 7). */
+  peekRedo(): HistoryEntry | null {
+    return this.redoStack[this.redoStack.length - 1] ?? null
+  }
+
+  /** Верхняя запись undo-стека без снятия (группировка батча Этапа 7). */
+  peek(): HistoryEntry | null {
+    return this.undoStack[this.undoStack.length - 1] ?? null
   }
 
   get canUndo(): boolean {

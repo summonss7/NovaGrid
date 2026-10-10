@@ -1,4 +1,4 @@
-import { FileDown, FolderOpen, HelpCircle, MoreVertical, Save, Settings } from 'lucide-react'
+import { FileDown, FolderOpen, HelpCircle, MoreVertical, Replace, Save, Settings } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useStore } from 'zustand'
 import { visibleRowsOf } from '../core/filter'
@@ -121,6 +121,19 @@ export function Toolbar(props: { onOpen: () => void; onSave: () => void; onSaveA
               >
                 <Settings size={15} strokeWidth={1.5} aria-hidden />
                 {t.settingsLabel}
+              </button>
+              {/* Этап 7: «Найти и заменить» на мобильном — из «⋯» */}
+              <button
+                type="button"
+                className="tab-menu-item"
+                role="menuitem"
+                onClick={() => {
+                  setMoreOpen(false)
+                  gridStore.getState().openReplace()
+                }}
+              >
+                <Replace size={15} strokeWidth={1.5} aria-hidden />
+                {t.replaceOpenAction}
               </button>
             </div>
           </>

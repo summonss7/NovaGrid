@@ -56,6 +56,20 @@ const en: RuDict = {
   searchMoreResults: (n: number) => `… ${n.toLocaleString('en-US')} more`,
   searchHitContext: (ref: string, text: string) => `${ref} · ${text}`,
 
+  replaceTitle: 'Find and replace',
+  replaceHint: 'Ctrl+H',
+  replaceOpenAction: 'Find and replace',
+  replaceFindLabel: 'Find',
+  replaceWithLabel: 'Replace with',
+  replaceAction: 'Replace',
+  replaceAllAction: 'Replace all',
+  replaceFound: (n: number) => `Found: ${n.toLocaleString('en-US')}`,
+  replaceDone: (n: number) => `Replaced: ${n.toLocaleString('en-US')}`,
+  replaceInFormulas: 'Search in formulas',
+  replaceClose: 'Close',
+  replaceFormulasNote:
+    'By default the cell value is replaced (a formula becomes a number/text); “search in formulas” edits the formula text and recalculates',
+
   filterBarLabel: 'Filters:',
   filterChipMore: (n: number) => `+${n.toLocaleString('en-US')}`,
   filterResetAll: 'Reset all',

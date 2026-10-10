@@ -41,6 +41,21 @@ export const ru = {
   searchMoreResults: (n: number) => `… ещё ${n.toLocaleString('ru-RU')}`,
   searchHitContext: (ref: string, text: string) => `${ref} · ${text}`,
 
+  // найти и заменить (Этап 7)
+  replaceTitle: 'Найти и заменить',
+  replaceHint: 'Ctrl+H',
+  replaceOpenAction: 'Найти и заменить',
+  replaceFindLabel: 'Найти',
+  replaceWithLabel: 'Заменить на',
+  replaceAction: 'Заменить',
+  replaceAllAction: 'Заменить все',
+  replaceFound: (n: number) => `Найдено: ${n.toLocaleString('ru-RU')}`,
+  replaceDone: (n: number) => `Заменено: ${n.toLocaleString('ru-RU')}`,
+  replaceInFormulas: 'Искать в формулах',
+  replaceClose: 'Закрыть',
+  replaceFormulasNote:
+    'По умолчанию заменяется значение ячейки (формула станет числом/текстом); «искать в формулах» меняет текст формулы с пересчётом',
+
   // фильтры (Ф3)
   filterBarLabel: 'Фильтры:',
   filterChipMore: (n: number) => `+${n.toLocaleString('ru-RU')}`,

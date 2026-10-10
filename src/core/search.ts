@@ -21,7 +21,8 @@ export interface SearchHit {
   col: number
 }
 
-function matches(raw: string, needle: string, opts: SearchOptions): boolean {
+/** Совпадение текста с запросом (общее для поиска и «найти и заменить»). */
+export function matches(raw: string, needle: string, opts: SearchOptions): boolean {
   if (opts.wholeCell) {
     return opts.caseSensitive ? raw === needle : raw.toLowerCase() === needle
   }

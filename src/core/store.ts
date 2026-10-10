@@ -19,7 +19,7 @@ import {
   visibleIndexOf,
   visibleRowsOf,
 } from './filter'
-import { History, type CellChange } from './history'
+import { History, type CellChange, type HistoryEntry } from './history'
 import {
   type NormRange,
   type Range,
@@ -44,6 +44,13 @@ import { applyFormulaChanges, cellNumber, recalcSheet } from '../formula/engine'
 // метрики выделения (6.1) агрегируются потоком; sum/average из ./stats
 // остаются для движка формул и юнит-тестов
 import { type SearchHit, type SearchOptions, searchBook, searchSheet } from './search'
+import {
+  type ReplaceOptions,
+  replaceAllInSheet,
+  replaceCellRaw,
+  replaceHitsInBook,
+  replaceHitsInSheet,
+} from './replace'
 import {
   type BookWire,
   type SheetTab,
@@ -108,6 +115,29 @@ export interface SearchState {
   index: number
 }
 
+/**
+ * Состояние «Найти и заменить» (Этап 7): диалог Ctrl+H. Совпадения
+ * считаются движком core/replace (режим значений/формул), счётчик «Найдено»
+ * живой; lastCount — сколько ячеек заменило последнее действие.
+ */
+export interface ReplaceState {
+  open: boolean
+  query: string
+  replacement: string
+  scope: SearchScope
+  caseSensitive: boolean
+  wholeCell: boolean
+  /** искать в тексте формул (после «=») вместо вычисленных значений */
+  inFormulas: boolean
+  /** совпадения в рамках scope; текущее — index */
+  hits: SearchHit[]
+  index: number
+  /** результат последнего «Заменить»/«Заменить все»; null — действия не было */
+  lastCount: number | null
+  /** ячейки, заменённые в текущей серии «Заменить»: их пропускает указатель */
+  replacedKeys: Set<string>
+}
+
 export interface GridState {
   /** вкладки книги; sheet ниже — всегда активная из них */
   tabs: SheetTab[]
@@ -122,6 +152,8 @@ export interface GridState {
   filters: ColumnFilter[]
   /** состояние поиска (Ф2) */
   search: SearchState
+  /** состояние «Найти и заменить» (Этап 7) */
+  replace: ReplaceState
 
   /** имя файла на диске (null — новая несохранённая книга) */
   fileName: string | null
@@ -204,6 +236,23 @@ export interface GridState {
   searchStep: (dir: 1 | -1) => void
   /** переход на конкретное совпадение (клик в списке «все листы») */
   gotoHit: (hit: SearchHit) => void
+
+  // ── найти и заменить (Этап 7) ─────────────────────────────────────────
+  /** открыть диалог Ctrl+H; запрос наследуется из открытой панели поиска */
+  openReplace: () => void
+  closeReplace: () => void
+  setReplaceQuery: (query: string) => void
+  setReplaceField: (
+    patch: Partial<
+      Pick<ReplaceState, 'replacement' | 'scope' | 'caseSensitive' | 'wholeCell' | 'inFormulas'>
+    >,
+  ) => void
+  /** шаг по совпадениям замены (Enter/Shift+Enter), циклично */
+  replaceStep: (dir: 1 | -1) => void
+  /** «Заменить»: текущее совпадение → шаг к следующему */
+  replaceCurrent: () => void
+  /** «Заменить все» в рамках scope; батч по книге — одна Ctrl+Z-транзакция */
+  replaceAll: () => void
 }
 
 /** Метрики набора ячеек: Σ/n/x̄/мин/макс по числовым значениям (Ф4). */
@@ -418,6 +467,23 @@ const EMPTY_SEARCH: SearchState = {
   index: 0,
 }
 
+const EMPTY_REPLACE: ReplaceState = {
+  open: false,
+  query: '',
+  replacement: '',
+  scope: 'sheet',
+  caseSensitive: false,
+  wholeCell: false,
+  inFormulas: false,
+  hits: [],
+  index: 0,
+  lastCount: null,
+  replacedKeys: new Set(),
+}
+
+/** Счётчик меток сквозных транзакций («заменить все» по книге, Этап 7). */
+let replaceGroupSeq = 0
+
 export const gridStore = createStore<GridState>((set, get) => {
   /** Записать новый лист модели в активную вкладку (держит инвариант sheet). */
   const patchSheet = (sheet: SheetModel) => {
@@ -482,6 +548,149 @@ export const gridStore = createStore<GridState>((set, get) => {
     get().goTo(hit.row, hit.col)
   }
 
+  /**
+   * Пересчёт совпадений «Найти и заменить» — как у поиска, после каждой
+   * правки/смены листа/фильтра/параметров. Режим формул ищет по тексту
+   * формулы (core/replace), поэтому свой проход, а не searchBook.
+   */
+  const refreshReplace = () => {
+    const st = get()
+    const r = st.replace
+    if (!r.open || r.query === '') {
+      if (r.hits.length > 0) set({ replace: { ...r, hits: [], index: 0 } })
+      return
+    }
+    const opts: ReplaceOptions = {
+      caseSensitive: r.caseSensitive,
+      wholeCell: r.wholeCell,
+      inFormulas: r.inFormulas,
+    }
+    const hits =
+      r.scope === 'book'
+        ? replaceHitsInBook(
+            st.tabs.map((t) => ({ sheet: t.sheet, filters: tabFilters.get(t.id) })),
+            r.query,
+            opts,
+          )
+        : replaceHitsInSheet(st.sheet, r.query, opts, visibleRowsOf(st.sheet, st.filters)).map(
+            (h) => ({ ...h, tab: st.activeTab }),
+          )
+    set({
+      replace: { ...r, hits, index: Math.min(r.index, Math.max(hits.length - 1, 0)) },
+    })
+  }
+
+  /** Записать новый лист модели в произвольную вкладку (инвариант sheet). */
+  const patchTab = (tabIndex: number, sheet: SheetModel) => {
+    const { tabs, activeTab } = get()
+    set({
+      tabs: tabs.map((t, i) => (i === tabIndex ? { ...t, sheet } : t)),
+      ...(tabIndex === activeTab ? { sheet } : {}),
+    })
+  }
+
+  /**
+   * Применить записи истории к вкладкам в направлении before/after
+   * (undo/redo): пересчёт формул инкрементальный, вкладки могут быть
+   * неактивными. Одна сквозная транзакция снимается целиком (Этап 7).
+   */
+  const applyHistoryEntries = (
+    targets: readonly { index: number; entry: HistoryEntry }[],
+    direction: 'before' | 'after',
+  ) => {
+    if (targets.length === 0) return
+    const activeTab = get().activeTab
+    let tabsArr = get().tabs
+    let activeSheet: SheetModel | null = null
+    for (const { index, entry } of targets) {
+      const prev = tabsArr[index].sheet
+      const next = applyChanges(prev, entry.changes, direction)
+      applyFormulaChanges(prev, next, entry.changes)
+      tabsArr = tabsArr.map((t, i) => (i === index ? { ...t, sheet: next } : t))
+      if (index === activeTab) activeSheet = next
+    }
+    set({
+      tabs: tabsArr,
+      ...(activeSheet ? { sheet: activeSheet } : {}),
+      edit: null,
+      altRange: null,
+      dirty: true,
+    })
+    refreshSearch()
+    refreshReplace()
+  }
+
+  /**
+   * «Заменить все» в рамках scope: общий путь для листа и книги. По книге —
+   * по записи в историю каждой затронутой вкладки с общей меткой group,
+   * чтобы один Ctrl+Z откатил весь батч (applyHistoryEntries).
+   */
+  const runReplaceAll = () => {
+    const st = get()
+    const r = st.replace
+    const done = (count: number) =>
+      set({ replace: { ...get().replace, lastCount: count, replacedKeys: new Set() } })
+    if (r.query === '') {
+      done(0)
+      return
+    }
+    const opts: ReplaceOptions = {
+      caseSensitive: r.caseSensitive,
+      wholeCell: r.wholeCell,
+      inFormulas: r.inFormulas,
+    }
+    if (r.scope === 'sheet') {
+      const prev = st.sheet
+      const changes = replaceAllInSheet(
+        prev,
+        r.query,
+        r.replacement,
+        opts,
+        visibleRowsOf(prev, st.filters),
+      )
+      if (changes.length > 0) {
+        historyOf(st.tabs[st.activeTab].id).push({ label: 'replace-all', changes })
+        commitSheet(prev, applyChanges(prev, changes, 'after'), changes)
+        set({ dirty: true })
+      }
+      done(changes.length)
+      refreshReplace()
+      refreshSearch()
+      return
+    }
+    const group = `replace-all-${++replaceGroupSeq}`
+    let total = 0
+    let tabsArr = st.tabs
+    let activeSheet: SheetModel | null = null
+    tabsArr.forEach((tab, i) => {
+      const changes = replaceAllInSheet(
+        tab.sheet,
+        r.query,
+        r.replacement,
+        opts,
+        visibleRowsOf(tab.sheet, tabFilters.get(tab.id) ?? []),
+      )
+      if (changes.length === 0) return
+      total += changes.length
+      historyOf(tab.id).push({ label: 'replace-all', changes, group })
+      const prev = tab.sheet
+      const next = applyChanges(prev, changes, 'after')
+      applyFormulaChanges(prev, next, changes)
+      tabsArr = tabsArr.map((t, j) => (j === i ? { ...t, sheet: next } : t))
+      if (i === st.activeTab) activeSheet = next
+    })
+    if (total > 0) {
+      set({
+        tabs: tabsArr,
+        ...(activeSheet ? { sheet: activeSheet } : {}),
+        dirty: true,
+      })
+    }
+    done(total)
+    refreshReplace()
+    refreshSearch()
+  }
+
   return {
     tabs: [initialTab],
     activeTab: 0,
@@ -491,6 +700,7 @@ export const gridStore = createStore<GridState>((set, get) => {
     altRange: null,
     filters: [],
     search: EMPTY_SEARCH,
+    replace: EMPTY_REPLACE,
     fileName: null,
     fileFormat: null,
     csvDelimiter: ';',
@@ -511,6 +721,7 @@ export const gridStore = createStore<GridState>((set, get) => {
         altRange: null,
         filters: [],
         search: EMPTY_SEARCH,
+        replace: EMPTY_REPLACE,
         fileName: meta?.fileName ?? null,
         fileFormat: meta?.fileFormat ?? null,
         csvDelimiter: meta?.csvDelimiter ?? ';',
@@ -862,22 +1073,48 @@ export const gridStore = createStore<GridState>((set, get) => {
 
     undo: () => {
       const state = get()
-      const { sheet, tabs, activeTab } = state
-      const entry = historyOf(tabs[activeTab].id).undo()
-      if (!entry) return
-      commitSheet(sheet, applyChanges(sheet, entry.changes, 'before'), entry.changes)
-      set({ edit: null, altRange: null, dirty: true })
-      refreshSearch()
+      const { tabs, activeTab } = state
+      const history = historyOf(tabs[activeTab].id)
+      const top = history.peek()
+      if (!top) return
+      // сквозная транзакция (Этап 7): снимаем со всех вкладок с этой меткой —
+      // батч «заменить все» по книге откатывается одним Ctrl+Z
+      const targets: { index: number; entry: HistoryEntry }[] = []
+      if (top.group) {
+        tabs.forEach((tab, i) => {
+          const h = historyOf(tab.id)
+          if (h.peek()?.group === top.group) {
+            const entry = h.undo()
+            if (entry) targets.push({ index: i, entry })
+          }
+        })
+      } else {
+        const entry = history.undo()
+        if (entry) targets.push({ index: activeTab, entry })
+      }
+      applyHistoryEntries(targets, 'before')
     },
 
     redo: () => {
       const state = get()
-      const { sheet, tabs, activeTab } = state
-      const entry = historyOf(tabs[activeTab].id).redo()
-      if (!entry) return
-      commitSheet(sheet, applyChanges(sheet, entry.changes, 'after'), entry.changes)
-      set({ edit: null, altRange: null, dirty: true })
-      refreshSearch()
+      const { tabs, activeTab } = state
+      const history = historyOf(tabs[activeTab].id)
+      const top = history.peekRedo()
+      if (!top) return
+      const targets: { index: number; entry: HistoryEntry }[] = []
+      if (top.group) {
+        tabs.forEach((tab, i) => {
+          const h = historyOf(tab.id)
+          if (h.peekRedo()?.group === top.group) {
+            const entry = h.redo()
+            if (entry) targets.push({ index: i, entry })
+          }
+        })
+      } else {
+        const entry = history.redo()
+        if (entry) targets.push({ index: activeTab, entry })
+      }
+      applyHistoryEntries(targets, 'after')
     },
 
     setAltRange: (r) => set({ altRange: r }),
@@ -1002,6 +1239,103 @@ export const gridStore = createStore<GridState>((set, get) => {
       set({ search: { ...search, index: idx >= 0 ? idx : search.index } })
       focusHit(hit)
     },
+
+    // ── найти и заменить (Этап 7) ───────────────────────────────────────
+    openReplace: () => {
+      const st = get()
+      // один поисковый UI за раз: панель поиска закрывается, её запрос
+      // наследуется диалогом (Ctrl+F → Ctrl+H — продолжить тем же словом)
+      if (st.search.open) st.closeSearch()
+      const query = st.search.query !== '' ? st.search.query : st.replace.query
+      set({
+        replace: {
+          ...st.replace,
+          open: true,
+          query,
+          hits: [],
+          index: 0,
+          lastCount: null,
+          replacedKeys: new Set(),
+        },
+      })
+      refreshReplace()
+    },
+
+    closeReplace: () => {
+      const r = get().replace
+      set({ replace: { ...r, open: false, hits: [], index: 0, lastCount: null } })
+    },
+
+    setReplaceQuery: (query) => {
+      set({
+        replace: { ...get().replace, query, index: 0, lastCount: null, replacedKeys: new Set() },
+      })
+      refreshReplace()
+    },
+
+    setReplaceField: (patch) => {
+      set({
+        replace: { ...get().replace, ...patch, index: 0, lastCount: null, replacedKeys: new Set() },
+      })
+      refreshReplace()
+    },
+
+    replaceStep: (dir) => {
+      const r = get().replace
+      if (r.hits.length === 0) return
+      const next = (r.index + dir + r.hits.length) % r.hits.length
+      set({ replace: { ...r, index: next } })
+      focusHit(r.hits[next])
+    },
+
+    replaceCurrent: () => {
+      const st = get()
+      const r = st.replace
+      const hit = r.hits[r.index]
+      if (!hit || r.query === '') return
+      const tab = st.tabs[hit.tab]
+      const prev = tab.sheet
+      const opts: ReplaceOptions = {
+        caseSensitive: r.caseSensitive,
+        wholeCell: r.wholeCell,
+        inFormulas: r.inFormulas,
+      }
+      const hitKey = `${hit.tab}:${hit.row}:${hit.col}`
+      const replaced = new Set(r.replacedKeys)
+      replaced.add(hitKey)
+      const after = replaceCellRaw(prev, hit.row, hit.col, r.query, r.replacement, opts)
+      if (after !== null && after !== getCell(prev, hit.row, hit.col)) {
+        const changes: CellChange[] = [
+          { row: hit.row, col: hit.col, before: getCell(prev, hit.row, hit.col), after },
+        ]
+        historyOf(tab.id).push({ label: 'replace', changes })
+        const next = applyChanges(prev, changes, 'after')
+        applyFormulaChanges(prev, next, changes)
+        patchTab(hit.tab, next)
+        set({ dirty: true, replace: { ...get().replace, lastCount: 1, replacedKeys: replaced } })
+      } else {
+        set({ replace: { ...get().replace, replacedKeys: replaced } })
+      }
+      // совпадения пересчитать и шагнуть к следующему: заменённая ячейка
+      // исчезает из списка, а если замена снова совпала (Иван → Иванов) —
+      // серия «Заменить» обходит её по replacedKeys и не зацикливается
+      const wasIndex = r.index
+      refreshReplace()
+      const next = get().replace
+      if (next.hits.length > 0) {
+        let idx = Math.min(wasIndex, next.hits.length - 1)
+        for (let step = 0; step < next.hits.length; step++) {
+          const h = next.hits[idx]
+          if (!replaced.has(`${h.tab}:${h.row}:${h.col}`)) break
+          idx = (idx + 1) % next.hits.length
+        }
+        set({ replace: { ...next, index: idx } })
+        focusHit(next.hits[idx])
+      }
+      refreshSearch()
+    },
+
+    replaceAll: () => runReplaceAll(),
   }
 })
 

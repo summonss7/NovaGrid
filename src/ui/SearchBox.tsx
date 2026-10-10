@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronUp, Search, Settings, X } from 'lucide-react'
+import { ChevronDown, ChevronUp, Replace, Search, Settings, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useStore } from 'zustand'
 import { gridStore } from '../core/store'
@@ -144,6 +144,16 @@ export function SearchBox() {
               onClick={() => setOptionsOpen((v) => !v)}
             >
               <Settings size={15} strokeWidth={1.5} aria-hidden />
+            </button>
+            {/* Этап 7: Ctrl+H из панели поиска — запрос наследуется диалогом */}
+            <button
+              type="button"
+              className="btn btn-ghost btn-icon btn-xs"
+              aria-label={t.replaceOpenAction}
+              title={`${t.replaceOpenAction} (${t.replaceHint})`}
+              onClick={() => gridStore.getState().openReplace()}
+            >
+              <Replace size={15} strokeWidth={1.5} aria-hidden />
             </button>
             <button
               type="button"
