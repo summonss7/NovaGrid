@@ -26,7 +26,7 @@ jobs:
         run: npm run typecheck
       - name: Unit tests (Vitest)
         run: npm run test
-      - name: Install Playwright browsers (матрица: chromium + firefox + webkit, Этап 6.4)
+      - name: 'Install Playwright browsers (матрица: chromium + firefox + webkit, Этап 6.4)'
         run: npx playwright install --with-deps chromium firefox webkit
       - name: E2e (Playwright)
         run: npm run e2e
