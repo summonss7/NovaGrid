@@ -12,9 +12,10 @@
 > (Chromium · Firefox · WebKit · Android-эмуляция); сценарий ТЗ проходится за секунды.
 > Публикация на GitHub Pages готова и ждёт решения владельца по плану —
 > [docs/RELEASE-V1.0.md](docs/RELEASE-V1.0.md).
-> Дальше (аудит novagrid-011, каждый этап — отдельная сессия): карточка
-> novagrid-012 «Lighthouse PWA ≥ 90 (КТ-4)» → novagrid-013 «Найти и заменить
-> (Ctrl+H), v1.1.0»; живые устройства (Android/iPad) — ручная проверка владельца.
+> Дальше (каждый этап — отдельная сессия): карточка novagrid-013 «Найти и заменить
+> (Ctrl+H), v1.1.0»; КТ-4 автоматизирован и закрыт — Lighthouse PWA 100/100 mobile
+> и desktop ([LIGHTHOUSE-REPORT](docs/LIGHTHOUSE-REPORT.md), novagrid-012); живые
+> устройства (Android/iPad) — ручная проверка владельца.
 
 ---
 

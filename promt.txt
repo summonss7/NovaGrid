@@ -378,3 +378,32 @@ Deploy to GitHub Pages ран 38018213931 success (шаги деплоя кор�
 КОММИТЫ: 29197fa «fix(ci): кавычки в имени шага матрицы браузеров…» + финальный коммит
 аудита (карточки 009/010/011/012/013, ROADMAP, README, promt.txt); пуш на GitHub.
 Бэкап до изменений: backups/NovaGrid-backup-2026-10-10_054300.zip.
+
+## 10.10.2026 06:37 — Lighthouse PWA ≥ 90, автоматизируемая часть КТ-4 (карточка novagrid-012)
+- Что было сделано:
+  - Production-сборка (npm run build, PWA precache 20 файлов) + npm run preview :4173;
+    Lighthouse прогнан на профилях mobile и desktop (браузер Playwright Chromium 153,
+    CHROME_PATH — системного Chrome на машине нет).
+  - Итог по КТ-4: PWA = 100/100 на ОБОИХ профилях, с первого прогона, фиксы не
+    потребовались — типовые причины (maskable 512, theme_color в манифесте + meta,
+    apple-touch-icon, viewport, офлайн-200 через precache SW, splash) были закрыты
+    ещё в Этапе 5. Все бинарные аудиты зелёные: installable-manifest, viewport,
+    splash-screen, themed-omnibox, maskable-icon, content-width (на desktop N/A —
+    не влияет); ручные аудиты (вес 0) = остаток КТ-4 за владельцем (карточка 009).
+  - Попутные категории: Performance mobile 92 / desktop 100 (TBT 0 мс на обоих —
+    парсер ExcelJS+SheetJS в IO-воркере вне критического пути), Best Practices 100/100.
+  - Инструментальная деталь 2026 года: категория PWA удалена из Lighthouse 12+
+    (аудитов в ядре 13.x нет) — PWA снят Lighthouse 11.7.1 (последняя с категорией;
+    прогон --only-categories=pwa не использует трассировку, несовместимость старого
+    LH с новым Chrome не применима), Performance/Best Practices — актуальным 13.5.0.
+  - Документация: создан docs/LIGHTHOUSE-REPORT.md (цифры, аудит-таблица, методика,
+    воспроизведение) + 4 JSON-отчёта в docs/lighthouse/; обновлены RELEASE-V1.0.md
+    (раздел «Проверка релиза»), ROADMAP.md (КТ-4: Lighthouse ✅ 100/100, остаток —
+    живые устройства за владельцем; строка Этапа 5, история изменений), README.md
+    (план доделок: 012 закрыта, следующая 013); журнал карточки 009 дополнен.
+- Как проверено: lint ✓, typecheck ✓, 166 юнит ✓, build ✓ (после прогона; код не
+  менялся — фиксы не потребовались, поэтому локальный e2e не гонялся, полную матрицу
+  прогоняет CI на закоммиченном пуше — результат в журнале карточки). Целевые цифры
+  взяты из JSON-отчётов docs/lighthouse/*.json (4 прогона: pwa mobile/desktop LH
+  11.7.1, perf+bp mobile/desktop LH 13.5.0).
+- Бэкап до изменений: backups/NovaGrid-backup-2026-10-10_062123.zip.
