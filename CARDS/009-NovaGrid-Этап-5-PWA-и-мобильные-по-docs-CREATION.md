@@ -1,10 +1,10 @@
 ---
 id: novagrid-009
 title: NovaGrid: Этап 5 «PWA и мобильные» по docs/CREATION-MAP.md — офлайн и установка
-status: blocked
+status: done
 priority: 4
 created: 2026-10-08
-updated: 2026-10-10
+updated: 2026-10-11
 session: ""
 src: TASKS
 head: 0bcf5b59184d27f7042f5b87da2ff4fe62fdff32
@@ -59,3 +59,4 @@ NovaGrid: Этап 5 «PWA и мобильные» по docs/CREATION-MAP.md —
   **100/100 на mobile и desktop** против production-сборки (npm run preview),
   фиксы не потребовались. Отчёт: docs/LIGHTHOUSE-REPORT.md. У этой карточки
   остаётся единственный остаток: ручная проверка живых устройств владельцем.
+- 11.10.2026, 20:22:41: задание отменено папой через Aila (хаб заданий): карточка закрыта без выполнения.
