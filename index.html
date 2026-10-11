@@ -7,8 +7,30 @@
       name="viewport"
       content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
     />
-    <meta name="color-scheme" content="light" />
+    <meta name="color-scheme" content="light dark" />
     <meta name="theme-color" content="#ededeb" />
+    <script>
+      // Тема до первого кадра (Этап 7.2): тёмная тема не вспыхивает светлым —
+      // data-theme на <html> ставится до отрисовки, CSS-токены и meta theme-color
+      // уже верны. Логика зеркалит src/ui/theme.ts (резолв «Системы» через
+      // prefers-color-scheme), персист настроек — localStorage (zustand persist).
+      ;(function () {
+        try {
+          var saved = JSON.parse(localStorage.getItem('novagrid-settings') || '{}').state || {}
+          var pref = saved.theme || 'system'
+          var dark =
+            pref === 'dark' ||
+            (pref !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches)
+          if (dark) {
+            document.documentElement.dataset.theme = 'dark'
+            var meta = document.querySelector('meta[name="theme-color"]')
+            if (meta) meta.setAttribute('content', '#24282b')
+          }
+        } catch (e) {
+          /* нет доступа к localStorage (приватный режим) — старт светлой, как раньше */
+        }
+      })()
+    </script>
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />

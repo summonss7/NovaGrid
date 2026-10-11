@@ -27,6 +27,7 @@ import { SheetsBar } from '../ui/SheetsBar'
 import { StartScreen } from '../ui/StartScreen'
 import { StatusBar } from '../ui/StatusBar'
 import { Toolbar } from '../ui/Toolbar'
+import { useThemeSync } from '../ui/theme'
 
 type Mode = 'boot' | 'start' | 'book'
 
@@ -213,8 +214,10 @@ export default function App() {
   useEffect(() => installAutosave(), [])
 
   // ── настройки (6.3): размер таблицы из персиста — стартовый зум, ─────
-  // document.lang для скринридеров идёт за языком интерфейса
+  // document.lang для скринридеров идёт за языком интерфейса;
+  // тема (7.2) применяется живьём (data-theme + PWA theme-color)
   useDocumentLang()
+  useThemeSync()
   useEffect(() => {
     const { tableSize, csvDelimiter } = useSettings.getState()
     zoomStore.getState().setZoom(TABLE_SIZE_SCALE[tableSize])

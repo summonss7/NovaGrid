@@ -7,6 +7,7 @@ import {
   type CsvDelimiter,
   type Lang,
   type TableSize,
+  type ThemePref,
 } from '../i18n'
 import { zoomStore } from '../grid/zoom'
 import { gridStore } from '../core/store'
@@ -15,11 +16,14 @@ import { useMenuKeys } from './menuKeys'
 /**
  * Настройки (Этап 6.3): язык интерфейса ru/en, размер таблицы (масштаб
  * ячеек/шрифта через зум 5.3 — переживает перезагрузку), разделитель CSV
- * по умолчанию для «Сохранить как…». Персист — localStorage (novagrid-settings).
+ * по умолчанию для «Сохранить как…». Этап 7.2 добавляет тему
+ * «Система / Светлая / Тёмная» (применяется живьём, см. ui/theme.ts).
+ * Персист — localStorage (novagrid-settings).
  */
 export function SettingsDialog(props: { onClose: () => void }) {
   const t = useT()
-  const { lang, tableSize, csvDelimiter, setLang, setTableSize, setCsvDelimiter } = useSettings()
+  const { lang, tableSize, csvDelimiter, theme, setLang, setTableSize, setCsvDelimiter, setTheme } =
+    useSettings()
   const ref = useRef<HTMLDivElement>(null)
   useMenuKeys(ref, props.onClose, { itemSelector: null, autoFocusSelector: '.settings-close' })
 
@@ -37,6 +41,11 @@ export function SettingsDialog(props: { onClose: () => void }) {
   const langs: readonly { value: Lang; label: string }[] = [
     { value: 'ru', label: 'Русский' },
     { value: 'en', label: 'English' },
+  ]
+  const themes: readonly { value: ThemePref; label: string }[] = [
+    { value: 'system', label: t.settingsThemeSystem },
+    { value: 'light', label: t.settingsThemeLight },
+    { value: 'dark', label: t.settingsThemeDark },
   ]
   const sizes: readonly { value: TableSize; label: string }[] = [
     { value: 's', label: t.settingsSizeS },
@@ -78,6 +87,23 @@ export function SettingsDialog(props: { onClose: () => void }) {
                 onClick={() => setLang(l.value)}
               >
                 {l.label}
+              </button>
+            ))}
+          </div>
+        </label>
+
+        <label className="settings-row">
+          <span className="settings-name">{t.settingsTheme}</span>
+          <div className="settings-seg" role="group" aria-label={t.settingsTheme}>
+            {themes.map((th) => (
+              <button
+                key={th.value}
+                type="button"
+                className={seg(theme === th.value)}
+                aria-pressed={theme === th.value}
+                onClick={() => setTheme(th.value)}
+              >
+                {th.label}
               </button>
             ))}
           </div>

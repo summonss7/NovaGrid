@@ -22,7 +22,7 @@ import { visibleRowsOf, type ColumnFilter } from '../core/filter'
 import { normalize, inSelection } from '../core/selection'
 import { gridStore, rangeMetrics } from '../core/store'
 import type { SheetModel } from '../core/sheet'
-import { useT } from '../i18n'
+import { useSettings, useT } from '../i18n'
 import { AssistPopup } from '../ui/AssistPopup'
 import { useFormulaAssist } from '../ui/useFormulaAssist'
 import { ContextMenu } from '../ui/ContextMenu'
@@ -227,6 +227,15 @@ export function GridCanvas() {
     scheduleDraw()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [zoom])
+
+  // смена темы (7.2): токены на корне уже новые — перечитать тему канваса
+  // и перерисовать кадр без перезагрузки страницы
+  const resolvedTheme = useSettings((s) => s.resolvedTheme)
+  useEffect(() => {
+    themeRef.current = themeFromCSS(zoomOf())
+    scheduleDraw()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resolvedTheme])
 
   const ensureActiveVisible = () => {
     const el = scrollRef.current

@@ -20,6 +20,10 @@ export type Lang = 'ru' | 'en'
 export type CsvDelimiter = ';' | ',' | '\t'
 /** масштаб таблицы: применяется к зуму (5.3) при старте и смене настройки */
 export type TableSize = 's' | 'm' | 'l' | 'xl'
+/** тема интерфейса (7.2): «Система» следует prefers-color-scheme живьём */
+export type ThemePref = 'system' | 'light' | 'dark'
+/** тема после разрешения «Системы» — то, что реально стоит на <html> */
+export type ResolvedTheme = 'light' | 'dark'
 
 export const TABLE_SIZE_SCALE: Record<TableSize, number> = { s: 0.85, m: 1, l: 1.15, xl: 1.3 }
 
@@ -27,9 +31,13 @@ interface SettingsState {
   lang: Lang
   tableSize: TableSize
   csvDelimiter: CsvDelimiter
+  theme: ThemePref
+  /** вычисленная тема (runtime, не персистится): на неё подписан канвас-грид */
+  resolvedTheme: ResolvedTheme
   setLang: (lang: Lang) => void
   setTableSize: (size: TableSize) => void
   setCsvDelimiter: (d: CsvDelimiter) => void
+  setTheme: (theme: ThemePref) => void
 }
 
 export const useSettings = create<SettingsState>()(
@@ -38,11 +46,23 @@ export const useSettings = create<SettingsState>()(
       lang: 'ru',
       tableSize: 'm',
       csvDelimiter: ';',
+      theme: 'system',
+      resolvedTheme: 'light',
       setLang: (lang) => set({ lang }),
       setTableSize: (tableSize) => set({ tableSize }),
       setCsvDelimiter: (csvDelimiter) => set({ csvDelimiter }),
+      setTheme: (theme) => set({ theme }),
     }),
-    { name: 'novagrid-settings' },
+    {
+      name: 'novagrid-settings',
+      // resolvedTheme — runtime-значение (считается из theme + ОС), не храним
+      partialize: (s) => ({
+        lang: s.lang,
+        tableSize: s.tableSize,
+        csvDelimiter: s.csvDelimiter,
+        theme: s.theme,
+      }),
+    },
   ),
 )
 

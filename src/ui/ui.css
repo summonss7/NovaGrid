@@ -34,7 +34,7 @@
 }
 
 .btn-ghost:hover {
-  background: rgba(43, 43, 43, 0.07);
+  background: var(--nv-hover);
 }
 
 .btn-icon {
@@ -187,7 +187,7 @@
   gap: 7px;
   margin-top: 10px;
   padding: 10px 12px;
-  background: var(--nv-mint, #e8f8ec);
+  background: var(--nv-mint);
   border-radius: var(--nv-radius-btn);
 }
 
@@ -564,7 +564,7 @@
 }
 
 .tab-menu-danger {
-  color: var(--nv-danger, #e8481c);
+  color: var(--nv-danger);
 }
 
 /* ── Стартовый экран «Недавние» (Этап 2.4) ───────────────────────────── */
@@ -683,7 +683,7 @@
 
 .start-recent-open:hover:not(:disabled) {
   border-color: var(--nv-primary);
-  background: var(--nv-mint, #e8f8ec);
+  background: var(--nv-mint);
 }
 
 .start-recent-open:disabled {
@@ -788,7 +788,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(43, 43, 43, 0.42);
+  background: var(--nv-backdrop);
 }
 
 .dialog {
@@ -894,7 +894,7 @@
   flex-direction: column;
   gap: 7px;
   padding: 10px 12px;
-  background: var(--nv-mint, #e8f8ec);
+  background: var(--nv-mint);
   border-radius: var(--nv-radius-btn);
   margin-bottom: 14px;
 }
@@ -999,7 +999,7 @@
 }
 
 .toast-error {
-  background: var(--nv-accent-deep, #e8481c);
+  background: var(--nv-accent-deep);
   color: var(--nv-bg);
 }
 
@@ -1084,7 +1084,7 @@
 }
 
 .sum-card-row-strong:hover {
-  background: var(--nv-accent-deep, #e8481c);
+  background: var(--nv-accent-deep);
 }
 
 .sum-card-row-strong .sum-card-value {
@@ -1145,7 +1145,7 @@
 }
 
 .ctx-item-primary:hover:not(:disabled) {
-  background: var(--nv-mint, #e8f8ec);
+  background: var(--nv-mint);
 }
 
 .ctx-item-text {
@@ -1308,8 +1308,8 @@
 .filter-chip {
   display: inline-flex;
   align-items: stretch;
-  background: var(--nv-mint, #e8f8ec);
-  border: 1px solid #dff5e3;
+  background: var(--nv-mint);
+  border: 1px solid var(--nv-mint-deep);
   border-radius: var(--nv-radius-btn);
   overflow: hidden;
 }
@@ -1338,7 +1338,7 @@
   align-items: center;
   padding: 0 7px;
   border: none;
-  border-left: 1px solid #dff5e3;
+  border-left: 1px solid var(--nv-mint-deep);
   background: transparent;
   color: var(--nv-ink-soft);
   cursor: pointer;
@@ -1346,7 +1346,7 @@
 
 .filter-chip-x:hover {
   background: rgba(242, 107, 33, 0.12);
-  color: var(--nv-accent-deep, #e8481c);
+  color: var(--nv-accent-deep);
 }
 
 .filter-reset {
