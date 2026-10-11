@@ -17,9 +17,14 @@
 > (Chromium · Firefox · WebKit · Android-эмуляция); сценарий ТЗ проходится за секунды.
 > Публикация на GitHub Pages готова и ждёт решения владельца по плану —
 > [docs/RELEASE-V1.0.md](docs/RELEASE-V1.0.md).
-> Дальше: живые устройства (Android/iPad) — ручная проверка владельца;
-> КТ-4 закрыт — Lighthouse PWA 100/100 mobile и desktop
-> ([LIGHTHOUSE-REPORT](docs/LIGHTHOUSE-REPORT.md), novagrid-012).
+> Дальше — план доработки Этапа 7 (утверждён владельцем, карточка novagrid-014,
+> 11.10.2026; карточки 015–019 со скоростью/приоритетом 8, поэтапно — одна
+> карточка на сессию): 7.2 тёмная тема (v1.2.0) → 7.3 импорт .ods (v1.3.0) →
+> 7.4 печатные формы (v1.4.0) → 7.5 обёртки Tauri/Capacitor → 7.6 облачная
+> синхронизация (после согласования схемы). На владельце: живые устройства
+> Android/iPad для КТ-4 (карточка 009; Lighthouse PWA 100/100 mobile и desktop —
+> [LIGHTHOUSE-REPORT](docs/LIGHTHOUSE-REPORT.md), novagrid-012) и включение
+> GitHub Pages (риск 8).
 
 ---
 
