@@ -2,24 +2,16 @@ import { X } from 'lucide-react'
 import { useState } from 'react'
 import { useStore } from 'zustand'
 import { colName } from '../grid/geometry'
+import { filterChipLabel } from '../core/print'
 import { gridStore } from '../core/store'
-import { dict, useT } from '../i18n'
+import { useT } from '../i18n'
 import { ColumnMenu } from './ColumnMenu'
-
-/** Подпись чипа: главное значение + счётчик остальных. */
-function chipLabel(col: number, mode: 'include' | 'exclude', values: string[]): string {
-  const letter = colName(col)
-  const sign = mode === 'include' ? '=' : '≠'
-  const d = dict()
-  const first = values[0] === '' ? d.filterBlanks : values[0]
-  const more = values.length > 1 ? ` ${d.filterChipMore(values.length - 1)}` : ''
-  return `${letter} ${sign} ${first}${more}`
-}
 
 /**
  * Лента чипов активных фильтров (CONCEPT Ф3.4, DESIGN-SYSTEM §6): строка под
  * тулбаром — [A: Иванов ×] [C: 10000 ×] … [Сбросить всё]. Крестик снимает
  * один фильтр, клик по чипу открывает меню колонки (редактирование списка).
+ * Подпись чипа — общий помощник core/print (та же подпись в колонтитуле печати).
  */
 export function FilterBar() {
   const t = useT()
@@ -42,7 +34,7 @@ export function FilterBar() {
               setMenu({ col: f.col, x: r.left, y: r.bottom + 4 })
             }}
           >
-            {chipLabel(f.col, f.mode, f.values)}
+            {filterChipLabel(f.col, f.mode, f.values, t)}
           </button>
           <button
             type="button"

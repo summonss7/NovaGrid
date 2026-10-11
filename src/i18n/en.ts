@@ -41,6 +41,7 @@ const en: RuDict = {
   sheetsEmpty: '.xlsx/.xls/.ods/.csv files open here',
   statusPhase: 'v1.0',
   num: (n: number) => n.toLocaleString('en-US'),
+  localeTag: 'en-US',
 
   searchScopeSheet: 'This sheet',
   searchScopeBook: 'All sheets',
@@ -156,6 +157,21 @@ const en: RuDict = {
   tabMenuLabel: 'Sheet menu',
   xlsSaveNote: '.xls files are saved as .xlsx (the modern format)',
   odsSaveNote: '.ods files are saved as .xlsx — NovaGrid cannot write .ods directly',
+
+  printOpenAction: 'Print',
+  printTitle: 'Print',
+  printWhatLabel: 'What to print',
+  printScopeVisible: (shown: number, total: number) =>
+    `Visible rows (${shown.toLocaleString('en-US')} of ${total.toLocaleString('en-US')})`,
+  printScopeAll: (total: number) => `Entire sheet (${total.toLocaleString('en-US')})`,
+  printOrientationLabel: 'Orientation',
+  printLandscape: 'Landscape',
+  printPortrait: 'Portrait',
+  printPaperLabel: 'Paper size',
+  printA4: 'A4',
+  printLetter: 'Letter',
+  printAction: 'Print…',
+  printTruncated: (n: number) => `Printing is limited to the first ${n.toLocaleString('en-US')} rows`,
 
   formulaFrozen: '∛ not recalculated',
   formulaFrozenHint:

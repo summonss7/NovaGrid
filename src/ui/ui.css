@@ -859,6 +859,30 @@
   margin-top: 6px;
 }
 
+/* ── Диалог печати (Этап 7.4): выбор «что печатать» ──────────────────── */
+.print-what {
+  border: 0;
+  padding: 0;
+  margin: 0 0 14px;
+}
+
+.print-choice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 7px;
+  font-size: 13.5px;
+  color: var(--nv-ink);
+  cursor: pointer;
+}
+
+.print-choice input[type='radio'] {
+  accent-color: var(--nv-primary-deep);
+  width: 15px;
+  height: 15px;
+  margin: 0;
+}
+
 /* ── Диалог «Найти и заменить» (Этап 7) ──────────────────────────────── */
 .replace-head {
   display: flex;

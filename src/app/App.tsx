@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useStore } from 'zustand'
 import { gridStore } from '../core/store'
+import { printStore } from '../core/print'
 import { TABLE_SIZE_SCALE, useDocumentLang, useSettings, useT } from '../i18n'
 import { installAutosave } from '../storage/autosave'
 import type { SessionRow } from '../storage/db'
@@ -21,6 +23,8 @@ import { FilterBar } from '../ui/FilterBar'
 import { FormulaBar } from '../ui/FormulaBar'
 import { GridCanvas } from '../grid/GridCanvas'
 import { MobileBar } from '../ui/MobileBar'
+import { PrintDialog } from '../ui/PrintDialog'
+import { PrintView } from '../ui/PrintView'
 import { ReplaceHost } from '../ui/ReplaceDialog'
 import { SaveAsDialog, type SaveAsChoice, type SaveAsFormat } from '../ui/SaveAsDialog'
 import { SheetsBar } from '../ui/SheetsBar'
@@ -51,6 +55,7 @@ export default function App() {
   const [saveAsOpen, setSaveAsOpen] = useState(false)
   const [dropping, setDropping] = useState(false)
   const [swReload, setSwReload] = useState<(() => void) | null>(null)
+  const printOpen = useStore(printStore, (s) => s.dialogOpen)
   const bootedRef = useRef(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const toastTimer = useRef(0)
@@ -246,6 +251,10 @@ export default function App() {
       } else if (e.code === 'KeyO') {
         e.preventDefault()
         void onOpenClicked()
+      } else if (e.code === 'KeyP') {
+        // печать — через диалог настроек (Этап 7.4), не системный предпросмотр
+        e.preventDefault()
+        printStore.getState().openDialog()
       }
     }
     window.addEventListener('keydown', onKey)
@@ -301,20 +310,25 @@ export default function App() {
       )}
 
       {mode === 'book' && (
-        <div className="app-shell">
-          <Toolbar
-            onOpen={() => void onOpenClicked()}
-            onSave={() => void save()}
-            onSaveAs={() => setSaveAsOpen(true)}
-          />
-          <FilterBar />
-          <FormulaBar />
-          <GridCanvas />
-          <SheetsBar />
-          <StatusBar />
-          <MobileBar onOpen={() => void onOpenClicked()} />
-          <ReplaceHost />
-        </div>
+        <>
+          <div className="app-shell">
+            <Toolbar
+              onOpen={() => void onOpenClicked()}
+              onSave={() => void save()}
+              onSaveAs={() => setSaveAsOpen(true)}
+            />
+            <FilterBar />
+            <FormulaBar />
+            <GridCanvas />
+            <SheetsBar />
+            <StatusBar />
+            <MobileBar onOpen={() => void onOpenClicked()} />
+            <ReplaceHost />
+          </div>
+          {/* печатная страница (Этап 7.4): прямой ребёнок app-root — в @media print
+              виден только он, весь интерфейс скрыт одним CSS-правилом */}
+          <PrintView />
+        </>
       )}
 
       {swReload && (
@@ -369,6 +383,8 @@ export default function App() {
           onCancel={() => setSaveAsOpen(false)}
         />
       )}
+
+      {printOpen && <PrintDialog onClose={() => printStore.getState().closeDialog()} />}
     </div>
   )
 }

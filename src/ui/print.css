@@ -1,0 +1,111 @@
+/* ── Печатная форма (Этап 7.4, novagrid-017) ─────────────────────────────
+   Канвас не печатается: по модели книги собирается DOM-таблица (ui/PrintView),
+   которую видит только print-среда. Весь интерфейс (тулбар, лента фильтров,
+   строка формул, канвас, панель листов, статус-бар, мобильная панель,
+   диалоги, тосты) скрывается одним правилом: у корня приложения остаётся
+   только .print-root. Анти-скоуп CONCEPT §5: без разбивки Excel-класса —
+   шапка повторяется нативным thead, строки печатаются как есть. */
+
+.print-root {
+  display: none;
+}
+
+@media print {
+  html,
+  body,
+  #root,
+  .app-root {
+    height: auto !important;
+    background: #fff !important;
+  }
+
+  /* печатаются только данные: всё, кроме печатного корня, скрыто */
+  .app-root > :not(.print-root) {
+    display: none !important;
+  }
+
+  .print-root {
+    display: block;
+  }
+
+  /* колонтитул: файл · лист · чипы фильтров · «Показано N из M» */
+  .print-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4mm 6mm;
+    margin-bottom: 3mm;
+    font-family: Arial, 'Helvetica Neue', Helvetica, sans-serif;
+    font-size: 9pt;
+    color: #444;
+  }
+
+  .print-title {
+    font-weight: 700;
+    color: #000;
+  }
+
+  .print-note {
+    color: #777;
+  }
+
+  /* таблица: тонкие линии, печатный системный шрифт (без веб-шрифтов),
+     равные ширины колонок — как в гриде */
+  .print-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+    font-family: Arial, 'Helvetica Neue', Helvetica, sans-serif;
+    font-size: 9.5pt;
+    line-height: 1.25;
+    color: #000;
+  }
+
+  /* повтор заголовков колонок на каждой странице */
+  .print-table thead {
+    display: table-header-group;
+  }
+
+  .print-table th,
+  .print-table td {
+    border: 0.5pt solid #b5b5b5;
+    padding: 1mm 1.8mm;
+    text-align: left;
+    vertical-align: top;
+    overflow-wrap: break-word;
+  }
+
+  .print-table thead th {
+    background: #efefef !important;
+    font-weight: 700;
+    text-align: center;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* заголовки строк: уже колонок данных, номера выровнены вправо */
+  .print-row-head {
+    width: 11mm;
+    text-align: right !important;
+    color: #555;
+    font-weight: 400;
+  }
+
+  .print-c-right {
+    text-align: right;
+  }
+
+  .print-c-center {
+    text-align: center;
+  }
+
+  .print-c-bold {
+    font-weight: 700;
+  }
+
+  /* ссылки не тянут адреса на бумагу */
+  a {
+    text-decoration: none;
+    color: inherit;
+  }
+}

@@ -1,7 +1,17 @@
-import { FileDown, FolderOpen, HelpCircle, MoreVertical, Replace, Save, Settings } from 'lucide-react'
+import {
+  FileDown,
+  FolderOpen,
+  HelpCircle,
+  MoreVertical,
+  Printer,
+  Replace,
+  Save,
+  Settings,
+} from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useStore } from 'zustand'
 import { visibleRowsOf } from '../core/filter'
+import { printStore } from '../core/print'
 import { normalize } from '../core/selection'
 import { gridStore, rangeMetrics } from '../core/store'
 import { useT } from '../i18n'
@@ -109,6 +119,19 @@ export function Toolbar(props: { onOpen: () => void; onSave: () => void; onSaveA
               >
                 <FileDown size={15} strokeWidth={1.5} aria-hidden />
                 {t.saveAs}
+              </button>
+              {/* Этап 7.4: печать на мобильном — из «⋯» (на десктопе Ctrl+P) */}
+              <button
+                type="button"
+                className="tab-menu-item"
+                role="menuitem"
+                onClick={() => {
+                  setMoreOpen(false)
+                  printStore.getState().openDialog()
+                }}
+              >
+                <Printer size={15} strokeWidth={1.5} aria-hidden />
+                {t.printOpenAction}
               </button>
               <button
                 type="button"

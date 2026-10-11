@@ -25,6 +25,8 @@ export const ru = {
   statusPhase: 'v1.0',
   /** число в текущей локали словаря (Этап 6.3) */
   num: (n: number) => n.toLocaleString('ru-RU'),
+  /** BCP-47 тег локали словаря — печать чисел/дат (Этап 7.4) */
+  localeTag: 'ru-RU',
 
   // поиск (Ф2, Этап 3)
   searchScopeSheet: 'Этот лист',
@@ -146,6 +148,23 @@ export const ru = {
   tabMenuLabel: 'Меню листа',
   xlsSaveNote: 'Файл .xls сохранится как .xlsx (современный формат)',
   odsSaveNote: 'Файл .ods сохранится как .xlsx — прямой записи .ods в NovaGrid нет',
+
+  // печать (Этап 7.4)
+  printOpenAction: 'Печать',
+  printTitle: 'Печать',
+  printWhatLabel: 'Что печатать',
+  printScopeVisible: (shown: number, total: number) =>
+    `Видимые строки (${shown.toLocaleString('ru-RU')} из ${total.toLocaleString('ru-RU')})`,
+  printScopeAll: (total: number) => `Весь лист (${total.toLocaleString('ru-RU')})`,
+  printOrientationLabel: 'Ориентация',
+  printLandscape: 'Альбомная',
+  printPortrait: 'Книжная',
+  printPaperLabel: 'Формат бумаги',
+  printA4: 'A4',
+  printLetter: 'Letter',
+  printAction: 'Печать…',
+  printTruncated: (n: number) =>
+    `Печать ограничена первыми ${n.toLocaleString('ru-RU')} строками`,
 
   // формулы (Ф6, Этап 4)
   formulaFrozen: '∛ не пересчитывается',
