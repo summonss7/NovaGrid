@@ -1,0 +1,29 @@
+[package]
+name = "novagrid"
+version = "1.5.0"
+description = "NovaGrid — таблицы без изучения Excel (десктоп-оболочка)"
+edition = "2021"
+
+[features]
+# production build: serve the frontend from the assets embedded in the exe
+# (without it the window loads the devUrl — vite dev server — instead).
+# scripts/desktop-build.sh passes --features custom-protocol, mirroring
+# `tauri build`.
+custom-protocol = ["tauri/custom-protocol"]
+
+[build-dependencies]
+tauri-build = { version = "2.7.1", features = [] }
+
+[dependencies]
+# =2.12.1: точная версия, проверенная связкой GNU+статический WebView2Loader
+# (2.12.3 тянет из loader-архива MSVC-объекты с зависимостями от MSVC-CRT)
+tauri = { version = "=2.12.1", features = [] }
+# нативные диалоги «Файл → Открыть/Сохранить как» (синхронные, Windows)
+rfd = "0.15.4"
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true

@@ -1,0 +1,87 @@
+/*
+ * Мост к десктоп-обёртке Tauri (Этап 7.5, карточка novagrid-018). Всё спрятано
+ * за isDesktop() — признаком window.__TAURI__ (withGlobalTauri в tauri.conf.json):
+ * браузерная сборка ни одного вызова не выполняет. npm-пакеты @tauri-apps
+ * сознательно не подключаются — глобальный invoke не меняет веб-бандл.
+ */
+
+type TauriGlobal = {
+  core: { invoke: <T>(cmd: string, args?: Record<string, unknown>) => Promise<T> }
+  event: {
+    listen: (
+      event: string,
+      handler: (e: { payload: unknown }) => void,
+    ) => Promise<() => void>
+  }
+}
+
+declare global {
+  interface Window {
+    __TAURI__?: TauriGlobal
+  }
+}
+
+export function isDesktop(): boolean {
+  return typeof window !== 'undefined' && window.__TAURI__ !== undefined
+}
+
+function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
+  return window.__TAURI__!.core.invoke<T>(cmd, args)
+}
+
+function baseName(path: string): string {
+  return path.replace(/\\/g, '/').split('/').pop() ?? path
+}
+
+/** Открытая в обёртке книга: File для конвейера + путь для Ctrl+S. */
+export interface DesktopBook {
+  file: File
+  path: string
+}
+
+async function readBook(path: string): Promise<DesktopBook> {
+  // ipc::Response приходит ArrayBuffer'ом — бинарный канал без JSON-оверхеда
+  const bytes = await invoke<ArrayBuffer>('read_book_bytes', { path })
+  return { file: new File([bytes], baseName(path)), path }
+}
+
+/** Нативный «Файл → Открыть» (rfd): книга или null — отмена диалога. */
+export async function desktopOpenBook(): Promise<DesktopBook | null> {
+  const path = await invoke<string | null>('pick_open_book')
+  return path ? readBook(path) : null
+}
+
+/** Книга из аргумента запуска (ассоциации .xlsx/.csv/.xls/.ods), однократно. */
+export async function desktopStartupBook(): Promise<DesktopBook | null> {
+  const path = await invoke<string | null>('startup_book')
+  return path ? readBook(path) : null
+}
+
+/** Нативный «Сохранить как»: путь или null — отмена диалога. */
+export function desktopPickSavePath(
+  defaultName: string,
+  format: 'xlsx' | 'csv',
+): Promise<string | null> {
+  return invoke<string | null>('pick_save_book', { defaultName, format })
+}
+
+/** Запись книги по пути (JSON-массив байтов — книги таблиц малы). */
+export function desktopWriteFile(path: string, buffer: ArrayBuffer): Promise<void> {
+  return invoke<void>('write_book_file', { path, bytes: Array.from(new Uint8Array(buffer)) })
+}
+
+/** Подписка на нативное меню «Файл» (действия open|save|save-as|print). */
+export function onDesktopMenu(handler: (action: string) => void): () => void {
+  let unlisten: (() => void) | null = null
+  let disposed = false
+  void window.__TAURI__!.event.listen('novagrid:menu', (e) => {
+    if (typeof e.payload === 'string') handler(e.payload)
+  }).then((fn) => {
+    if (disposed) fn()
+    else unlisten = fn
+  })
+  return () => {
+    disposed = true
+    unlisten?.()
+  }
+}

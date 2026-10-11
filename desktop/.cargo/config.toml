@@ -1,0 +1,8 @@
+# WebView2Loader.dll (в desktop/lib) линкуется напрямую: MinGW ld читает
+# таблицу экспортов DLL сам, без import-библиотеки. Тот же DLL кладём рядом
+# с exe в сборках (портабельная папка и установщик) — сам exe его не несёт.
+# Статический MSVC-архив libWebView2Loader.dll.a (путь Al-Navi) здесь не
+# сросся: его объекты требуют MSVC-CRT символы (operator new, _Init_thread_*),
+# которых нет в ucrt64-рунтайме.
+[target.x86_64-pc-windows-gnu]
+rustflags = ["-L", "native=D:/NovaGrid/desktop/lib"]

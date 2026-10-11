@@ -165,6 +165,8 @@ export interface GridState {
   dirty: boolean
   /** хэндл прямой записи (File System Access, Chromium-десктоп) — не сериализуется */
   fileHandle: FileSystemFileHandle | null
+  /** путь прямой записи в обёртке Tauri (Этап 7.5) — аналог fileHandle */
+  desktopPath: string | null
 
   /** Загрузить книгу из IO (файл/фикстура/сессия) — полный сброс состояния. */
   loadBook: (
@@ -178,6 +180,7 @@ export interface GridState {
     meta?: { fileFormat?: FileFormat | null; csvDelimiter?: string },
   ) => void
   setFileHandle: (handle: FileSystemFileHandle | null) => void
+  setDesktopPath: (path: string | null) => void
   /** стартовый разделитель CSV из настроек (6.3); при открытии файла замещается детектом */
   setCsvDelimiter: (d: string) => void
 
@@ -706,6 +709,7 @@ export const gridStore = createStore<GridState>((set, get) => {
     csvDelimiter: ';',
     dirty: false,
     fileHandle: null,
+    desktopPath: null,
 
     loadBook: (wire, meta) => {
       const tabs = tabsFromWire(wire)
@@ -727,6 +731,7 @@ export const gridStore = createStore<GridState>((set, get) => {
         csvDelimiter: meta?.csvDelimiter ?? ';',
         dirty: false,
         fileHandle: null,
+        desktopPath: null,
       })
     },
 
@@ -744,6 +749,7 @@ export const gridStore = createStore<GridState>((set, get) => {
     },
 
     setFileHandle: (handle) => set({ fileHandle: handle }),
+    setDesktopPath: (path) => set({ desktopPath: path }),
     setCsvDelimiter: (d) => set({ csvDelimiter: d }),
 
     activateTab: (index) => {

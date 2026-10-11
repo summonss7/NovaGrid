@@ -19,6 +19,14 @@ import {
   writeToHandle,
   xlsxMime,
 } from '../io/fileActions'
+import {
+  desktopOpenBook,
+  desktopPickSavePath,
+  desktopStartupBook,
+  desktopWriteFile,
+  isDesktop,
+  onDesktopMenu,
+} from '../io/desktop'
 import { FilterBar } from '../ui/FilterBar'
 import { FormulaBar } from '../ui/FormulaBar'
 import { GridCanvas } from '../grid/GridCanvas'
@@ -86,6 +94,22 @@ export default function App() {
   )
 
   const onOpenClicked = useCallback(async () => {
+    // десктоп-обёртка (Этап 7.5): нативный диалог rfd вместо FSA/инпута
+    if (isDesktop()) {
+      try {
+        const book = await desktopOpenBook()
+        if (book) {
+          await openFile(book.file)
+          gridStore.getState().setDesktopPath(book.path)
+        }
+      } catch (err) {
+        showToast(
+          `${t.openErrorTitle}: ${err instanceof Error ? err.message : String(err)}`,
+          'error',
+        )
+      }
+      return
+    }
     if (isFsaAvailable()) {
       try {
         const file = await pickOpenFile()
@@ -98,7 +122,7 @@ export default function App() {
       return
     }
     fileInputRef.current?.click()
-  }, [openFile])
+  }, [openFile, showToast, t])
 
   /** Ctrl+S: прямая запись в открытый файл, иначе — «Сохранить как…». */
   const save = useCallback(async () => {
@@ -106,6 +130,31 @@ export default function App() {
     if (st.edit) st.commitEdit('none')
     // .xls/.ods напрямую не пишем — только конверт в .xlsx/.csv через диалог
     const directFormat = st.fileFormat === 'csv' || st.fileFormat === 'xlsx'
+    // десктоп-обёртка: прямая запись по пути вместо FSA-хэндла
+    if (isDesktop()) {
+      if (st.desktopPath && st.fileFormat && directFormat) {
+        setBusy(t.savingFile)
+        try {
+          const buffer = await buildBookBuffer(
+            st.fileFormat === 'csv' ? 'csv' : 'xlsx',
+            st.csvDelimiter,
+          )
+          await desktopWriteFile(st.desktopPath, buffer)
+          gridStore.getState().markSaved()
+          showToast(t.savedToast(st.fileName ?? ''), 'ok')
+        } catch (err) {
+          showToast(
+            `${t.saveErrorTitle}: ${err instanceof Error ? err.message : String(err)}`,
+            'error',
+          )
+        } finally {
+          setBusy(null)
+        }
+        return
+      }
+      setSaveAsOpen(true)
+      return
+    }
     if (st.fileHandle && st.fileFormat && directFormat) {
       setBusy(t.savingFile)
       try {
@@ -135,7 +184,18 @@ export default function App() {
       setBusy(t.savingFile)
       try {
         const buffer = await buildBookBuffer(choice.format, choice.delimiter)
-        if (isFsaAvailable()) {
+        if (isDesktop()) {
+          // нативный «Сохранить как…» обёртки (rfd); отмена — тихо
+          const path = await desktopPickSavePath(choice.fileName, choice.format)
+          if (path === null) return
+          await desktopWriteFile(path, buffer)
+          const name = path.replace(/\\/g, '/').split('/').pop() ?? choice.fileName
+          gridStore.getState().setDesktopPath(path)
+          gridStore
+            .getState()
+            .markSaved(name, { fileFormat: choice.format, csvDelimiter: choice.delimiter })
+          showToast(t.savedToast(name), 'ok')
+        } else if (isFsaAvailable()) {
           const handle = await window.showSaveFilePicker!({
             suggestedName: choice.fileName,
             types: [
@@ -220,6 +280,33 @@ export default function App() {
   // ── автосохранение сессии (отдельный эффект: переживёт StrictMode) ──
   useEffect(() => installAutosave(), [])
 
+  // ── десктоп-обёртка (Этап 7.5): книга из аргумента запуска ──────────
+  // (ассоциации .xlsx/.csv/.xls/.ods: «NovaGrid.exe <путь>»); startup_book
+  // отвечает один раз, повторный вызов после смены языка вернёт null
+  useEffect(() => {
+    if (!isDesktop()) return
+    let alive = true
+    void desktopStartupBook().then((book) => {
+      if (alive && book) {
+        void openFile(book.file).then(() => gridStore.getState().setDesktopPath(book.path))
+      }
+    })
+    return () => {
+      alive = false
+    }
+  }, [openFile])
+
+  // ── десктоп-обёртка: нативное меню «Файл» → те же обработчики ───────
+  useEffect(() => {
+    if (!isDesktop()) return
+    return onDesktopMenu((action) => {
+      if (action === 'open') void onOpenClicked()
+      else if (action === 'save') void save()
+      else if (action === 'save-as') setSaveAsOpen(true)
+      else if (action === 'print') printStore.getState().openDialog()
+    })
+  }, [onOpenClicked, save])
+
   // ── настройки (6.3): размер таблицы из персиста — стартовый зум, ─────
   // document.lang для скринридеров идёт за языком интерфейса;
   // тема (7.2) применяется живьём (data-theme + PWA theme-color)
@@ -232,8 +319,10 @@ export default function App() {
   }, [])
 
   // ── PWA (Этап 5.1): офлайн-оболочка + обновление по кнопке ──────────
-  // (registerServiceWorker гасит и Safari-пинч страницы — см. pwa/registerSW)
+  // (registerServiceWorker гасит и Safari-пинч страницы — см. pwa/registerSW;
+  // в десктоп-обёртке SW не нужен: контент уже в exe, тосты обновления ни к чему)
   useEffect(() => {
+    if (isDesktop()) return
     registerServiceWorker()
     return onPwaUpdate((reload) => setSwReload(() => reload))
   }, [])

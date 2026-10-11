@@ -1,7 +1,7 @@
 ---
 id: novagrid-018
 title: NovaGrid: обёртки Tauri/Capacitor (Этап 7.5 плана novagrid-014) — десктоп-оболочка Tauri, сборки в builds/
-status: todo
+status: in_progress
 priority: 8
 created: 2026-10-11
 updated: 2026-10-11
@@ -66,3 +66,6 @@ parent: novagrid-014
   один этап — одна сессия). Основание: бэклог Этапа 7 CREATION-MAP «Tauri/Capacitor
   обёртки»; заложено право blocked по тулчейну — среда исполнения может не иметь
   Rust/VS Build Tools.
+
+
+- 11.10.2026, 22:38:31: диспетчер взял задачу в работу (новый запуск).

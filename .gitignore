@@ -27,3 +27,8 @@ test-results/
 
 # Файлы интерфейса ZCode, не относящиеся к проекту
 .zcodeignore
+
+# Десктоп-обёртка (Этап 7.5): сборки и Rust-артефакты не для git
+builds/
+desktop/target/
+desktop/gen/
