@@ -706,3 +706,65 @@ Deploy to GitHub Pages ран 38018213931 success (шаги деплоя кор�
   чисел/дат, v1.4.0» (+ пуш). Попутно закоммичено закрытие карточки
   novagrid-009 папой через Aila (c251764, статус done — задание отменено
   владельцем, живые устройства больше не ждутся).
+
+## 2026-10-11/12 — Этап 7.5: десктоп-обёртка Tauri 2 (novagrid-018, v1.5.0)
+
+- Начало работы: 11.10.2026, 22:38
+- Окончание работы: 12.10.2026, 00:11
+- Что сделано (Этап 7.5 плана novagrid-014, бэклог Этапа 7 CREATION-MAP;
+  сессия выполнена в два запуска — второй дозакрыл документацию/отчёт/CI):
+  - Каркас desktop/: Rust-оболочка Tauri 2 — окно 1280×800 (мин. 960×600,
+    productName NovaGrid, CSP), production грузится из dist/ (custom-protocol
+    встраивает фронтенд в exe), dev-режим — vite devserver :5173. Иконки —
+    растеризация favicon.svg (scripts/make-desktop-icons.mjs, многослойный
+    icon.ico). Тулчейн: rustup GNU + MSYS2 ucrt64 (среда без VS Build Tools),
+    WebView2Loader.dll в desktop/lib линкуется напрямую (.cargo/config.toml),
+    tauri зафиксирован =2.12.1 (2.12.3+ тянет MSVC-объекты — не собирается GNU).
+  - Команды в package.json: desktop:build (release: фронтенд → exe →
+    портабельная папка+zip → Inno Setup установщик; debug — только портабель),
+    desktop:dev (окно + HMR), desktop:icons. Версия — единый источник
+    package.json; артефакты в builds/ с версией и типом: 
+    builds/novagrid-1.5.0-setup-release.exe (5,2 МБ, per-user без UAC,
+    ярлыки «Пуск»/рабочий стол, чекбокс ассоциаций) и
+    novagrid-1.5.0-portable-release.zip (3,6 МБ). builds/ и desktop/target/
+    (+ desktop/gen/ — генерация tauri-build) в .gitignore.
+  - Фичи оболочки: нативное меню «Файл» (Открыть/Сохранить/Сохранить как/
+    Печать — акселераторы шлют события novagrid:menu тем же обработчикам,
+    что Ctrl+O/S/Shift+S/P) и «Справка» (О программе, сайт); системные
+    диалоги rfd вместо браузерных; Ctrl+S — прямая запись по пути
+    (desktopPath в сторе — аналог FSA-хэндла); файловые ассоциации
+    .xlsx/.xls/.ods/.csv — ProgId NovaGrid.Book через OpenWithProgids
+    (в «Открыть с помощью», дефолтный владелец не перехватывается),
+    «NovaGrid.exe <путь>» открывает книгу на старте (startup_book,
+    однократно); внешние ссылки — в системном браузере (cmd start,
+    только http(s)).
+  - Веб-часть не изменилась: мост src/io/desktop.ts целиком за isDesktop()
+    (признак window.__TAURI__, withGlobalTauri), npm-пакеты @tauri-apps
+    не подключаются — браузерная сборка и PWA идентичны прежним; в обёртке
+    service worker не регистрируется (контент уже в exe). Интеграция в
+    App.tsx: открытие/сохранение через обёртку, стартовая книга, меню.
+  - Версия 1.5.0 (package.json, Cargo.toml, tauri.conf.json). Документация:
+    docs/WRAPPER.md (состав, пререквизиты Windows, команды, ассоциации,
+    смоук-протокол, входная точка Capacitor), README (шапка v1.5, раздел
+    «Этап 7.5 — десктоп-приложение», технология, документация, структура),
+    ROADMAP (сводка Этапа 7 + история), CREATION-MAP (Этап 7).
+  - Capacitor/Android не собирался — приоритет веток карточки: только при
+    быстром закрытии Tauri и готовой Android-базе; зафиксировано в
+    docs/WRAPPER.md как входная точка следующей итерации (отдельной
+    карточкой по запросу). eslint.config.js: desktop/ в ignores (раньше
+    линтер ломался о сгенерированные ассеты tauri в desktop/target).
+- Как проверено: lint ✓ typecheck ✓ юнит 203 ✓ build ✓ (PWA precache 20),
+  e2e 68 ✓ (полная матрица: Chromium полный + Firefox/WebKit смок +
+  Android-эмуляция), cargo check ✓ (Rust, --features custom-protocol);
+  живой смоук обёртки на портабельной сборке: запуск «NovaGrid.exe
+  demo-book.xlsx» — книга загружена (путь ассоциаций); «Файл → Открыть»
+  (Ctrl+O нативного меню) — системный диалог «Открыть книгу», выбран
+  formula-book.xlsx — книга открылась, диалог закрылся, ошибок нет
+  (скриншоты builds/smoke-live-*.png; плюс smoke-window/smoke-debug
+  первого запуска: release/debug окна с загруженными книгами). CI на
+  GitHub зелёный на коммите этапа.
+- Бэкап до изменений: backups/NovaGrid-backup-2026-10-11_224355.zip.
+- Коммит: 5e7b918 «feat(novagrid-018): десктоп-обёртка Tauri 2 (Этап 7.5) —
+  окно поверх production-сборки, нативное меню «Файл», rfd-диалоги,
+  ассоциации .xlsx/.xls/.ods/.csv, Inno Setup установщик + портабель
+  в builds/, v1.5.0» (+ пуш).
