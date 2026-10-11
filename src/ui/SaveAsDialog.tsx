@@ -13,7 +13,8 @@ interface SaveAsDialogProps {
   suggestedName: string
   defaultFormat: SaveAsFormat
   defaultDelimiter: string
-  showXlsNote: boolean
+  /** заметка о конверте (.xls/.ods пишутся как .xlsx) — под выбором формата */
+  convertNote: string | null
   onConfirm: (choice: SaveAsChoice) => void
   onCancel: () => void
 }
@@ -21,7 +22,7 @@ interface SaveAsDialogProps {
 /** Диалог «Сохранить как…» (Этап 2.3): имя, формат (xlsx/csv), разделитель CSV. */
 export function SaveAsDialog(props: SaveAsDialogProps) {
   const t = useT()
-  const base = props.suggestedName.replace(/\.(xlsx|xlsm|csv|tsv|xls)$/i, '')
+  const base = props.suggestedName.replace(/\.(xlsx|xlsm|csv|tsv|xls|ods)$/i, '')
   const [name, setName] = useState(base)
   const [format, setFormat] = useState<SaveAsFormat>(props.defaultFormat)
   const [delimiter, setDelimiter] = useState(props.defaultDelimiter)
@@ -89,7 +90,9 @@ export function SaveAsDialog(props: SaveAsDialogProps) {
           )}
         </div>
 
-        {props.showXlsNote && format === 'xlsx' && <p className="dialog-note">{t.xlsSaveNote}</p>}
+        {props.convertNote && format === 'xlsx' && (
+          <p className="dialog-note">{props.convertNote}</p>
+        )}
 
         <div className="dialog-actions">
           <button type="button" className="btn btn-ghost" onClick={props.onCancel}>

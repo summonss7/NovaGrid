@@ -6,7 +6,7 @@
  */
 
 import { csvToSheet } from './csv'
-import { type SheetWire, xlsToSheets, xlsxToSheets, sheetsToXlsx } from './excel'
+import { type SheetWire, odsToSheets, xlsToSheets, xlsxToSheets, sheetsToXlsx } from './excel'
 import { sheetToCsv } from './csv'
 import type { SheetModel } from '../core/sheet'
 
@@ -41,6 +41,9 @@ async function handle(msg: IoRequest): Promise<IoResponse> {
     }
     if (ext === 'xls') {
       return { id: msg.id, ok: true, kind: 'read', sheets: xlsToSheets(msg.buffer) }
+    }
+    if (ext === 'ods') {
+      return { id: msg.id, ok: true, kind: 'read', sheets: odsToSheets(msg.buffer) }
     }
     // .xlsx / .xlsm и всё zip-подобное — ExcelJS
     return { id: msg.id, ok: true, kind: 'read', sheets: await xlsxToSheets(msg.buffer) }

@@ -136,6 +136,57 @@ test.describe('файловой цикл: открыл → изменил → с
     expect(book.tabs).toEqual(['Лист1'])
     expect(book.fileName).toBe('legacy-demo.xls')
   })
+
+  test('.ods: листы → вкладки, даты ISO, правка → сохранить как .xlsx → переоткрыть', async ({
+    page,
+  }) => {
+    await page.goto('/?testui=1')
+    await openFixtureFile(page, 'public/fixtures/ods-book.ods')
+    await expect
+      .poll(() => page.evaluate(() => window.__nv?.cell(1, 0) ?? ''), { timeout: 3000 })
+      .toBe('Иванов')
+
+    // два листа ODS-книги → две вкладки; даты читаются ISO-строками
+    const api = nv(page)
+    let book = await api.book()
+    expect(book.tabs).toEqual(['Данные', 'Справка'])
+    expect(book.fileName).toBe('ods-book.ods')
+    await expect.poll(() => api.cell(1, 3)).toBe('2026-09-01')
+
+    // второй лист книги ODS открывается вкладкой
+    await page.getByRole('tab', { name: 'Справка' }).click()
+    await expect.poll(() => api.cell(0, 0)).toBe('Отдел')
+    await page.getByRole('tab', { name: 'Данные' }).click()
+
+    // правка C2 → 4242
+    const center = await api.cellCenter(1, 2)
+    await page.mouse.click(center.x, center.y)
+    await page.keyboard.press('4')
+    await page.keyboard.type('242')
+    await page.keyboard.press('Enter')
+    await expect.poll(() => api.cell(1, 2)).toBe('4242')
+
+    // «Сохранить как…»: формат .xlsx по умолчанию, заметка о конверте видна
+    const downloadPromise = page.waitForEvent('download')
+    await page.getByRole('button', { name: 'Сохранить как…' }).click()
+    const dialog = page.getByRole('dialog', { name: 'Сохранить как' })
+    await expect(dialog).toBeVisible()
+    await expect(dialog.locator('.dialog-note')).toContainText('.xlsx')
+    await dialog.getByRole('button', { name: 'Сохранить', exact: true }).click()
+    const download = await downloadPromise
+    expect(download.suggestedFilename()).toBe('ods-book.xlsx')
+    const savedPath = test.info().outputPath('ods-saved.xlsx')
+    await download.saveAs(savedPath)
+
+    // переоткрыли сохранённый .xlsx: правка и второй лист на месте
+    await openFixtureFile(page, savedPath)
+    await expect
+      .poll(() => page.evaluate(() => window.__nv?.cell(1, 2) ?? ''), { timeout: 3000 })
+      .toBe('4242')
+    book = await api.book()
+    expect(book.tabs).toEqual(['Данные', 'Справка'])
+    expect(book.fileName).toBe('ods-book.xlsx')
+  })
 })
 
 test.describe('вкладки листов (2.2)', () => {

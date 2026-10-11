@@ -1,12 +1,14 @@
 /*
  * Адаптер Excel (Этап 2.1/2.3, ARCHITECTURE §4): ExcelJS читает и пишет
- * .xlsx/.xlsm со стилями; SheetJS CE читает старый .xls (BIFF8). Модуль
- * исполняется в IO-воркере и в юнит-тестах Node — без DOM.
+ * .xlsx/.xlsm со стилями; SheetJS CE читает старый .xls (BIFF8) и .ods
+ * (Этап 7.3 — значения, без стилей). Модуль исполняется в IO-воркере
+ * и в юнит-тестах Node — без DOM.
  *
  * Ограничения v1 (сознательные, см. CONCEPT Ф1/Этап 4): формулы чужих файлов
  * читаются кэшем значений (пересчёт — свой движок на Этапе 4); макросы .xlsm
  * не сохраняются; объединённые ячейки читаются как значение левой ячейки;
- * стили переносятся только для .xlsx.
+ * стили переносятся только для .xlsx; .ods читается значениями и не пишется
+ * (прямой записи .ods нет — «Сохранить как .xlsx/.csv»).
  */
 
 import ExcelJS from 'exceljs'
@@ -152,10 +154,21 @@ export async function xlsxToSheets(buffer: ArrayBuffer): Promise<SheetWire[]> {
   return out
 }
 
-/* ── чтение .xls (SheetJS CE, значения как отображаются) ─────────────── */
+/* ── чтение .xls/.ods (SheetJS CE, значения; стили не переносятся) ────── */
 
-export function xlsToSheets(buffer: ArrayBuffer): SheetWire[] {
-  const wb = XLSX.read(buffer, { type: 'array' })
+/** Значение AOA SheetJS → сырая строка модели (даты — ISO, как у .xlsx). */
+function aoaValueToString(value: unknown): string {
+  if (value === null || value === undefined) return ''
+  if (value instanceof Date) {
+    const date = value.toISOString().slice(0, 10)
+    const time = value.toISOString().slice(11, 16)
+    return time === '00:00' ? date : `${date} ${time}`
+  }
+  if (typeof value === 'boolean') return value ? 'ИСТИНА' : 'ЛОЖЬ'
+  return String(value).trim()
+}
+
+function sheetsFromSheetJs(wb: XLSX.WorkBook, raw: boolean): SheetWire[] {
   const out: SheetWire[] = []
   const used = new Set<string>()
   for (const wsName of wb.SheetNames) {
@@ -166,9 +179,11 @@ export function xlsToSheets(buffer: ArrayBuffer): SheetWire[] {
     if (used.has(name)) name = uniqueTabName([...used], name)
     used.add(name)
 
-    const aoa = XLSX.utils.sheet_to_json<string[]>(ws, {
+    // raw:false — форматированные строки «как отображаются» (.xls);
+    // raw:true — сами значения (числа, даты-Date у .ods через cellDates)
+    const aoa = XLSX.utils.sheet_to_json<unknown[]>(ws, {
       header: 1,
-      raw: false,
+      raw,
       defval: '',
       blankrows: false,
     })
@@ -177,7 +192,7 @@ export function xlsToSheets(buffer: ArrayBuffer): SheetWire[] {
     let maxCol = -1
     aoa.forEach((fields, r) =>
       (fields ?? []).forEach((v, c) => {
-        const value = String(v ?? '').trim()
+        const value = raw ? aoaValueToString(v) : String(v ?? '').trim()
         if (value !== '') {
           cells.set(cellKey(r, c), value)
           maxRow = Math.max(maxRow, r)
@@ -198,6 +213,15 @@ export function xlsToSheets(buffer: ArrayBuffer): SheetWire[] {
     })
   }
   return out
+}
+
+export function xlsToSheets(buffer: ArrayBuffer): SheetWire[] {
+  return sheetsFromSheetJs(XLSX.read(buffer, { type: 'array' }), false)
+}
+
+/** ODS: значения; даты — Date (cellDates) → ISO. Стили ODS не читаются. */
+export function odsToSheets(buffer: ArrayBuffer): SheetWire[] {
+  return sheetsFromSheetJs(XLSX.read(buffer, { type: 'array', cellDates: true }), true)
 }
 
 /* ── запись .xlsx со стилями ────────────────────────────────────────── */

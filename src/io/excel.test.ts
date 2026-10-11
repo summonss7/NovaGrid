@@ -3,7 +3,7 @@ import ExcelJS from 'exceljs'
 import * as XLSX from 'xlsx'
 import { cellKey, createSheet, getCell, withCell } from '../core/sheet'
 import { cellText, cellIsFrozen, recalcSheet } from '../formula/engine'
-import { type SheetWire, sheetsToXlsx, xlsToSheets, xlsxToSheets } from './excel'
+import { type SheetWire, odsToSheets, sheetsToXlsx, xlsToSheets, xlsxToSheets } from './excel'
 
 /* exceljs в Node отдаёт Buffer (view над пулом) — копируем в чистый ArrayBuffer */
 async function xlsxRoundBuffer(wb: ExcelJS.Workbook): Promise<ArrayBuffer> {
@@ -92,6 +92,42 @@ describe('excel: запись .xlsx со стилями', () => {
     await wb.xlsx.load(buffer)
     expect(wb.getWorksheet('L')!.getCell('A1').value).toBe(10000)
     expect(wb.getWorksheet('L')!.getCell('A2').value).toBe('Иванов')
+  })
+})
+
+describe('excel: чтение .ods (SheetJS, значения)', () => {
+  it('несколько листов → вкладки; кириллица/числа/даты-ISO; пустые не хранятся', () => {
+    const wb = XLSX.utils.book_new()
+    const ws = XLSX.utils.aoa_to_sheet(
+      [
+        ['Фамилия', 'Сумма', 'Дата'],
+        ['Иванов', 10000, new Date(Date.UTC(2026, 8, 1))],
+        [null, 12500, null], // пустые ячейки в строке
+        ['Петров', '', new Date(Date.UTC(2026, 8, 3, 14, 30))],
+      ],
+      { cellDates: true },
+    )
+    XLSX.utils.book_append_sheet(wb, ws, 'Лист1')
+    const ref = XLSX.utils.aoa_to_sheet([['Справка'], [true, 42]])
+    XLSX.utils.book_append_sheet(wb, ref, 'Лист2')
+    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'ods' }) as Buffer
+    const arrayBuf = buf.buffer.slice(
+      buf.byteOffset,
+      buf.byteOffset + buf.byteLength,
+    ) as ArrayBuffer
+
+    const sheets: SheetWire[] = odsToSheets(arrayBuf)
+    expect(sheets.map((s) => s.name)).toEqual(['Лист1', 'Лист2'])
+    const data = sheets[0].sheet
+    expect(getCell(data, 0, 0)).toBe('Фамилия')
+    expect(getCell(data, 1, 1)).toBe('10000')
+    expect(getCell(data, 1, 2)).toBe('2026-09-01') // дата — ISO, как у .xlsx
+    expect(getCell(data, 3, 2)).toBe('2026-09-03 14:30') // дата+время
+    expect(getCell(data, 2, 0)).toBe('') // пустые ячейки не хранятся
+    expect(getCell(data, 3, 1)).toBe('')
+    expect(data.styles.size).toBe(0) // стили ODS не переносятся
+    expect(getCell(sheets[1].sheet, 1, 0)).toBe('ИСТИНА') // булевы — как в .xlsx
+    expect(getCell(sheets[1].sheet, 1, 1)).toBe('42')
   })
 })
 

@@ -65,7 +65,7 @@ import {
 export type EditMove = 'down' | 'up' | 'right' | 'left' | 'none'
 
 /** Формат файла на диске — определяет поведение «Сохранить». */
-export type FileFormat = 'xlsx' | 'csv' | 'xls'
+export type FileFormat = 'xlsx' | 'csv' | 'xls' | 'ods'
 
 const MOVE_DELTA: Record<EditMove, [number, number]> = {
   down: [1, 0],

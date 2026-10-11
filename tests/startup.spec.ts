@@ -18,6 +18,7 @@ test.describe('стартовый экран — Этап 2.4', () => {
     await expect(page.getByRole('button', { name: 'Новая таблица' })).toBeVisible()
     await expect(page.getByRole('region', { name: 'Недавние' })).toBeVisible()
     await expect(page.getByRole('button', { name: /Демо-книга сценария ТЗ/ })).toBeVisible()
+    await expect(page.getByRole('button', { name: /Книга ODS/ })).toBeVisible()
     await expect(page.getByRole('button', { name: /Стресс 100 000 строк/ })).toBeVisible()
     await expect(page.locator('.start-privacy')).toContainText('локально')
 

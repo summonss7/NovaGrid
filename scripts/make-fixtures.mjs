@@ -159,6 +159,36 @@ async function makeLegacyXls() {
   }
 }
 
+/* ── ODS-книга (Этап 7.3): 2 листа, числа/текст/даты ─────────────────── */
+
+async function makeOdsBook() {
+  const XLSX = await import('xlsx')
+  const wb = XLSX.utils.book_new()
+  // cellDates: true — даты пишутся как office:date-value (разметка LibreOffice),
+  // читатель odsToSheets вернёт их ISO-датами
+  const ws = XLSX.utils.aoa_to_sheet(
+    [
+      ['Фамилия', 'Отдел', 'Сумма', 'Дата'],
+      ['Иванов', 'Продажи', 10000, new Date(Date.UTC(2026, 8, 1))],
+      ['Петров', 'Логистика', 12500, new Date(Date.UTC(2026, 8, 3))],
+      ['Сидоров', 'Бухгалтерия', 8000, new Date(Date.UTC(2026, 8, 7))],
+      ['Кузнецова', 'Снабжение', 15400, new Date(Date.UTC(2026, 8, 10))],
+    ],
+    { cellDates: true },
+  )
+  XLSX.utils.book_append_sheet(wb, ws, 'Данные')
+  const ref = XLSX.utils.aoa_to_sheet([
+    ['Отдел', 'Руководитель', 'Телефон'],
+    ['Продажи', 'Алексеева М.', '101'],
+    ['Логистика', 'Титов В.', '102'],
+    ['Бухгалтерия', 'Гусева О.', '103'],
+  ])
+  XLSX.utils.book_append_sheet(wb, ref, 'Справка')
+  const path = join(outDir, 'ods-book.ods')
+  XLSX.writeFile(wb, path, { bookType: 'ods' })
+  return path
+}
+
 /* ── книга формул (Этап 4): свои и чужие формулы с кэшем результатов ─── */
 
 async function makeFormulaBook() {
@@ -187,6 +217,8 @@ const demo = await makeDemoBook()
 console.log(`OK: ${demo}`)
 const formulas = await makeFormulaBook()
 console.log(`OK: ${formulas}`)
+const ods = await makeOdsBook()
+console.log(`OK: ${ods}`)
 const stress = await makeStressCsv()
 console.log(`OK: ${stress}`)
 const legacy = await makeLegacyXls()

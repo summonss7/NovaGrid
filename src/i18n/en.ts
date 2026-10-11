@@ -38,7 +38,7 @@ const en: RuDict = {
   altSum: 'Σ',
   sheet: 'Sheet 1',
   addSheetLabel: 'Add sheet',
-  sheetsEmpty: '.xlsx/.xls/.csv files open here',
+  sheetsEmpty: '.xlsx/.xls/.ods/.csv files open here',
   statusPhase: 'v1.0',
   num: (n: number) => n.toLocaleString('en-US'),
 
@@ -123,6 +123,8 @@ const en: RuDict = {
   restoreSession: 'Continue',
   demoBookTitle: 'Demo book (spec scenario)',
   demoBookHint: 'Names and sums · xlsx · 2 sheets',
+  demoOdsTitle: 'ODS book (LibreOffice)',
+  demoOdsHint: 'Numbers, text, dates · ods · 2 sheets',
   stressBookTitle: 'Stress: 100,000 rows',
   stressBookHint: 'Speed check · csv',
   demoSectionTitle: 'Try it',
@@ -153,6 +155,7 @@ const en: RuDict = {
   tabDeleteConfirm: (name: string) => `Delete sheet "${name}"? This cannot be undone.`,
   tabMenuLabel: 'Sheet menu',
   xlsSaveNote: '.xls files are saved as .xlsx (the modern format)',
+  odsSaveNote: '.ods files are saved as .xlsx — NovaGrid cannot write .ods directly',
 
   formulaFrozen: '∛ not recalculated',
   formulaFrozenHint:

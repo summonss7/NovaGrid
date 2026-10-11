@@ -21,7 +21,7 @@ export const ru = {
   altSum: 'Σ',
   sheet: 'Лист 1',
   addSheetLabel: 'Добавить лист',
-  sheetsEmpty: 'Файлы .xlsx/.xls/.csv откроются здесь',
+  sheetsEmpty: 'Файлы .xlsx/.xls/.ods/.csv откроются здесь',
   statusPhase: 'v1.0',
   /** число в текущей локали словаря (Этап 6.3) */
   num: (n: number) => n.toLocaleString('ru-RU'),
@@ -113,6 +113,8 @@ export const ru = {
   restoreSession: 'Продолжить',
   demoBookTitle: 'Демо-книга сценария ТЗ',
   demoBookHint: 'Фамилии и суммы · xlsx · 2 листа',
+  demoOdsTitle: 'Книга ODS (LibreOffice)',
+  demoOdsHint: 'Числа, текст, даты · ods · 2 листа',
   stressBookTitle: 'Стресс 100 000 строк',
   stressBookHint: 'Проверка скорости · csv',
   demoSectionTitle: 'Попробовать',
@@ -143,6 +145,7 @@ export const ru = {
   tabDeleteConfirm: (name: string) => `Удалить лист «${name}»? Отменить будет нельзя.`,
   tabMenuLabel: 'Меню листа',
   xlsSaveNote: 'Файл .xls сохранится как .xlsx (современный формат)',
+  odsSaveNote: 'Файл .ods сохранится как .xlsx — прямой записи .ods в NovaGrid нет',
 
   // формулы (Ф6, Этап 4)
   formulaFrozen: '∛ не пересчитывается',

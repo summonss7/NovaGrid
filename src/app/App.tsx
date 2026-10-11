@@ -99,7 +99,9 @@ export default function App() {
   const save = useCallback(async () => {
     const st = gridStore.getState()
     if (st.edit) st.commitEdit('none')
-    if (st.fileHandle && st.fileFormat && st.fileFormat !== 'xls') {
+    // .xls/.ods напрямую не пишем — только конверт в .xlsx/.csv через диалог
+    const directFormat = st.fileFormat === 'csv' || st.fileFormat === 'xlsx'
+    if (st.fileHandle && st.fileFormat && directFormat) {
       setBusy(t.savingFile)
       try {
         const buffer = await buildBookBuffer(
@@ -276,7 +278,7 @@ export default function App() {
         id="nv-file-input"
         type="file"
         hidden
-        accept=".xlsx,.xlsm,.xls,.csv,.tsv"
+        accept=".xlsx,.xlsm,.xls,.ods,.csv,.tsv"
         aria-label={t.fileInputLabel}
         onChange={(e) => {
           const file = e.target.files?.[0]
@@ -356,7 +358,13 @@ export default function App() {
           suggestedName={suggestedName}
           defaultFormat={defaultFormat}
           defaultDelimiter={gridStore.getState().csvDelimiter}
-          showXlsNote={gridStore.getState().fileFormat === 'xls'}
+          convertNote={
+            gridStore.getState().fileFormat === 'xls'
+              ? t.xlsSaveNote
+              : gridStore.getState().fileFormat === 'ods'
+                ? t.odsSaveNote
+                : null
+          }
           onConfirm={(choice) => void saveAsChosen(choice)}
           onCancel={() => setSaveAsOpen(false)}
         />

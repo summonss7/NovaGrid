@@ -123,6 +123,16 @@ export function StartScreen(props: StartScreenProps) {
             <button
               type="button"
               className="start-demo-card"
+              onClick={() => props.onOpenFixture('fixtures/ods-book.ods', 'ods-book.ods')}
+              disabled={props.busy !== null}
+            >
+              <FileSpreadsheet size={20} strokeWidth={1.5} aria-hidden />
+              <span className="start-demo-title">{t.demoOdsTitle}</span>
+              <span className="start-demo-hint">{t.demoOdsHint}</span>
+            </button>
+            <button
+              type="button"
+              className="start-demo-card"
               onClick={() => props.onOpenFixture('fixtures/stress-100k.csv', 'stress-100k.csv')}
               disabled={props.busy !== null}
             >
