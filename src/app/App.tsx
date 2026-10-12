@@ -4,7 +4,7 @@ import { gridStore } from '../core/store'
 import { printStore } from '../core/print'
 import { TABLE_SIZE_SCALE, useDocumentLang, useSettings, useT } from '../i18n'
 import { installAutosave } from '../storage/autosave'
-import { recordOpening, type SessionRow } from '../storage/db'
+import { OPENING_BYTES_LIMIT, recordOpening, type SessionRow } from '../storage/db'
 import type { OpeningRow } from '../storage/recents'
 import { onPwaUpdate, registerServiceWorker } from '../pwa/registerSW'
 import { zoomStore } from '../grid/zoom'
@@ -22,10 +22,13 @@ import {
   xlsxMime,
 } from '../io/fileActions'
 import {
-  desktopOpenBook,
+  desktopOpenBookWindow,
   desktopOpenPath,
+  desktopPickBookPaths,
   desktopPickSavePath,
-  desktopStartupBook,
+  desktopStageBookBytes,
+  desktopStartupBooks,
+  desktopTakeStagedBook,
   desktopWriteFile,
   isDesktop,
   onDesktopMenu,
@@ -102,6 +105,21 @@ export default function App() {
 [showToast, t],
   )
 
+  /**
+   * Доп. книги — в отдельные нативные окна (novagrid-023): каждая книга своё
+   * окно, как классические табличные редакторы Windows. Окно читает книгу
+   * само по ?file=; тост объясняет, куда делись остальные файлы.
+   */
+  const openRestInWindows = useCallback(
+    async (paths: string[]) => {
+      for (const path of paths) {
+        await desktopOpenBookWindow(`file=${encodeURIComponent(path)}`)
+      }
+      showToast(t.extraWindowsToast(paths.length), 'ok')
+    },
+    [showToast, t],
+  )
+
   /** Переоткрытие файла из «Недавних» (novagrid-022): путь / FSA-хэндл / снимок. */
   const openRecent = useCallback(
     async (row: OpeningRow) => {
@@ -135,11 +153,15 @@ export default function App() {
   )
 
   const onOpenClicked = useCallback(async () => {
-    // десктоп-обёртка (Этап 7.5): нативный диалог rfd вместо FSA/инпута
+    // десктоп-обёртка (Этап 7.5): нативный диалог rfd с мультивыбором —
+    // первая книга в текущее окно, остальные в новые (novagrid-023)
     if (isDesktop()) {
       try {
-        const book = await desktopOpenBook()
-        if (book) await openFile(book.file, { path: book.path })
+        const paths = await desktopPickBookPaths()
+        if (paths.length === 0) return
+        const first = await desktopOpenPath(paths[0])
+        await openFile(first.file, { path: first.path })
+        if (paths.length > 1) await openRestInWindows(paths.slice(1))
       } catch (err) {
         showToast(
           `${t.openErrorTitle}: ${err instanceof Error ? err.message : String(err)}`,
@@ -160,7 +182,7 @@ export default function App() {
       return
     }
     fileInputRef.current?.click()
-  }, [openFile, showToast, t])
+  }, [openFile, openRestInWindows, showToast, t])
 
   /** Ctrl+S: прямая запись в открытый файл, иначе — «Сохранить как…». */
   const save = useCallback(async () => {
@@ -297,6 +319,35 @@ export default function App() {
 [showToast, t],
   )
 
+  /**
+   * Перетащенные сверх первого — в новые окна (novagrid-023). Пути у HTML5
+   * File нет, поэтому байты едут через staging обёртки (?staged=…&name=…);
+   * в браузере несколько книг — это вкладки браузера, там открывается первая.
+   */
+  const dropRestToWindows = useCallback(
+    async (files: File[]) => {
+      let opened = 0
+      for (const file of files) {
+        try {
+          if (file.size > OPENING_BYTES_LIMIT) {
+            showToast(t.dropTooLarge(file.name), 'error')
+            continue
+          }
+          const id = await desktopStageBookBytes(await file.arrayBuffer())
+          await desktopOpenBookWindow(`staged=${id}&name=${encodeURIComponent(file.name)}`)
+          opened += 1
+        } catch (err) {
+          showToast(
+            `${t.openErrorTitle}: ${err instanceof Error ? err.message : String(err)}`,
+            'error',
+          )
+        }
+      }
+      if (opened > 0) showToast(t.extraWindowsToast(opened), 'ok')
+    },
+    [showToast, t],
+  )
+
   // ── старт: разбор режима (демо/стресс/стартовый экран) ───────────────
   useEffect(() => {
     if (bootedRef.current) return
@@ -318,19 +369,66 @@ export default function App() {
   // ── автосохранение сессии (отдельный эффект: переживёт StrictMode) ──
   useEffect(() => installAutosave(), [])
 
-  // ── десктоп-обёртка (Этап 7.5): книга из аргумента запуска ──────────
-  // (ассоциации .xlsx/.csv/.xls/.ods: «NovaGrid.exe <путь>»); startup_book
-  // отвечает один раз, повторный вызов после смены языка вернёт null
+  // ── десктоп-обёртка (Этап 7.5): книги из аргументов запуска ──────────
+  // (ассоциации .xlsx/.csv/.xls/.ods: «NovaGrid.exe <путь> [путь …]» —
+  // Explorer может передать несколько файлов одной командой); startup_books
+  // отвечает один раз, повторный вызов после смены языка вернёт пусто.
+  // Первый файл — в это окно, остальные — в новые (novagrid-023).
   useEffect(() => {
     if (!isDesktop()) return
     let alive = true
-    void desktopStartupBook().then((book) => {
-      if (alive && book) void openFile(book.file, { path: book.path })
-    })
+    void (async () => {
+      const paths = await desktopStartupBooks()
+      if (!alive || paths.length === 0) return
+      try {
+        const first = await desktopOpenPath(paths[0])
+        if (alive) await openFile(first.file, { path: first.path })
+        if (alive && paths.length > 1) await openRestInWindows(paths.slice(1))
+      } catch (err) {
+        if (alive)
+          showToast(
+            `${t.openErrorTitle}: ${err instanceof Error ? err.message : String(err)}`,
+            'error',
+          )
+      }
+    })()
     return () => {
       alive = false
     }
-  }, [openFile])
+  }, [openFile, openRestInWindows, showToast, t])
+
+  // ── десктоп-обёртка: окно доп. книги (novagrid-023) ───────────────────
+  // открыто с ?file=<путь> (книги с диска) или staged=<id>&name=<имя>
+  // (перетащенные — у HTML5 File нет пути); главное окно параметров не имеет
+  useEffect(() => {
+    if (!isDesktop()) return
+    const params = new URLSearchParams(window.location.search)
+    const filePath = params.get('file')
+    const stagedId = Number(params.get('staged'))
+    if (!filePath && !stagedId) return
+    let alive = true
+    void (async () => {
+      try {
+        if (filePath) {
+          const book = await desktopOpenPath(filePath)
+          if (alive) await openFile(book.file, { path: book.path })
+        } else {
+          const bytes = await desktopTakeStagedBook(stagedId)
+          const name = params.get('name')
+          if (alive && bytes && name) await openFile(new File([bytes], name))
+        }
+      } catch (err) {
+        if (alive)
+          showToast(
+            `${t.openErrorTitle}: ${err instanceof Error ? err.message : String(err)}`,
+            'error',
+          )
+      }
+    })()
+    return () => {
+      alive = false
+    }
+  }, [openFile, showToast, t])
 
   // ── десктоп-обёртка: нативное меню «Файл» → те же обработчики ───────
   useEffect(() => {
@@ -402,8 +500,11 @@ export default function App() {
       onDrop={(e) => {
         e.preventDefault()
         setDropping(false)
-        const file = e.dataTransfer.files[0]
-        if (file) void openFile(file)
+        const files = Array.from(e.dataTransfer.files)
+        const first = files[0]
+        if (first) void openFile(first)
+        const rest = files.slice(1)
+        if (rest.length > 0 && isDesktop()) void dropRestToWindows(rest)
       }}
     >
       {/* общий вход открытия: input живёт всегда — и на старте, и в книге */}

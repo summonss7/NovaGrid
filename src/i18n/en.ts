@@ -144,6 +144,11 @@ const en: RuDict = {
   openErrorTitle: 'Could not open the file',
   saveErrorTitle: 'Could not save',
   dropHere: 'Drop to open',
+  /** novagrid-023: books beyond the first open in separate windows */
+  extraWindowsToast: (n: number): string =>
+    n === 1 ? 'One more file — in a new window' : 'The other files — in new NovaGrid windows',
+  dropTooLarge: (name: string): string =>
+    `“${name}” is too large for a new window — open it via “Open”`,
   saveAsTitle: 'Save as',
   saveAsNameLabel: 'File name',
   saveAsFormatLabel: 'Format',

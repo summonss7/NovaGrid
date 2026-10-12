@@ -134,6 +134,11 @@ export const ru = {
   openErrorTitle: 'Не удалось открыть файл',
   saveErrorTitle: 'Не удалось сохранить',
   dropHere: 'Отпустите, чтобы открыть',
+  /** novagrid-023: книги сверх первой открываются в отдельных окнах */
+  extraWindowsToast: (n: number): string =>
+    n === 1 ? 'Ещё один файл — в новом окне' : 'Остальные файлы — в новых окнах NovaGrid',
+  dropTooLarge: (name: string): string =>
+    `«${name}» слишком большой для нового окна — откройте его через «Открыть»`,
   saveAsTitle: 'Сохранить как',
   saveAsNameLabel: 'Имя файла',
   saveAsFormatLabel: 'Формат',

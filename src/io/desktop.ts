@@ -45,21 +45,44 @@ async function readBook(path: string): Promise<DesktopBook> {
   return { file: new File([bytes], baseName(path)), path }
 }
 
-/** Чтение книги по пути: нативный «Открыть» и переоткрытие из «Недавних». */
+/** Чтение книги по пути: переоткрытие из «Недавних» и окна доп. книг. */
 export async function desktopOpenPath(path: string): Promise<DesktopBook> {
   return readBook(path)
 }
 
-/** Нативный «Файл → Открыть» (rfd): книга или null — отмена диалога. */
-export async function desktopOpenBook(): Promise<DesktopBook | null> {
-  const path = await invoke<string | null>('pick_open_book')
-  return path ? readBook(path) : null
+/**
+ * Нативный «Файл → Открыть» (rfd, мультивыбор — novagrid-023): пути книг.
+ * Пусто — отмена диалога.
+ */
+export function desktopPickBookPaths(): Promise<string[]> {
+  return invoke<string[]>('pick_open_books')
 }
 
-/** Книга из аргумента запуска (ассоциации .xlsx/.csv/.xls/.ods), однократно. */
-export async function desktopStartupBook(): Promise<DesktopBook | null> {
-  const path = await invoke<string | null>('startup_book')
-  return path ? readBook(path) : null
+/**
+ * Книги из аргументов запуска (ассоциации .xlsx/.csv/.xls/.ods), однократно:
+ * несколько файлов — Explorer может передать их одной командой. Первый откроет
+ * текущее окно, остальные — новые окна.
+ */
+export async function desktopStartupBooks(): Promise<string[]> {
+  return invoke<string[]>('startup_books')
+}
+
+/**
+ * Новое окно с книгой (novagrid-023): каждая книга — своё нативное окно.
+ * query фронтенд кодирует сам: file=<путь> либо staged=<id>&name=<имя>.
+ */
+export function desktopOpenBookWindow(query: string): Promise<void> {
+  return invoke<void>('open_book_window', { query })
+}
+
+/** Снимок байтов перетащенной книги (без пути на диске) — на новое окно. */
+export function desktopStageBookBytes(bytes: ArrayBuffer): Promise<number> {
+  return invoke<number>('stage_book_bytes', { bytes: Array.from(new Uint8Array(bytes)) })
+}
+
+/** Забрать снимок книги новым окном (бинарный IPC): байты. */
+export function desktopTakeStagedBook(id: number): Promise<ArrayBuffer> {
+  return invoke<ArrayBuffer>('take_staged_book', { id })
 }
 
 /** Нативный «Сохранить как»: путь или null — отмена диалога. */
