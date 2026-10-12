@@ -176,6 +176,60 @@ test.describe('ядро таблицы — демо-лист', () => {
     expect(await api.activeRef()).toBe('B7')
   })
 
+  test('Shift+стрелки растягивают выделение дальше двух ячеек (novagrid-024)', async ({
+    page,
+  }) => {
+    const api = nv(page)
+
+    await clickCell(page, 0, 0)
+    await page.keyboard.press('Shift+ArrowDown')
+    await page.keyboard.press('Shift+ArrowDown')
+    await page.keyboard.press('Shift+ArrowDown')
+    expect(await api.ranges()).toEqual(['A1:A4'])
+    // якорь-активная ячейка на месте, как в Excel
+    expect(await api.activeRef()).toBe('A1')
+
+    // «туда-сюда»: противоход сжимает диапазон, затем растёт в сторону
+    await page.keyboard.press('Shift+ArrowUp')
+    expect(await api.ranges()).toEqual(['A1:A3'])
+    await page.keyboard.press('Shift+ArrowRight')
+    expect(await api.ranges()).toEqual(['A1:B3'])
+
+    // протяжка мышью + Shift-стрелка продолжают от конца диапазона
+    await clickCell(page, 1, 2)
+    await clickCell(page, 2, 2, { modifiers: ['Shift'] })
+    await page.keyboard.press('Shift+ArrowDown')
+    expect(await api.ranges()).toEqual(['C2:C4'])
+    const m = await api.metrics()
+    expect(m.total).toBe(30500)
+  })
+
+  test('Ctrl+C копирует выделенный диапазон в буфер (novagrid-024)', async ({ page }) => {
+    await page.context().grantPermissions(['clipboard-read', 'clipboard-write'])
+
+    // прямоугольник A1:B2 — таб между колонками, перевод строки между строками
+    // (буфер Windows нормализует \n в \r\n — сравниваем без учёта этого)
+    await clickCell(page, 0, 0)
+    await page.keyboard.press('Shift+ArrowDown')
+    await page.keyboard.press('Shift+ArrowRight')
+    await page.keyboard.press('Control+c')
+    await expect
+      .poll(() =>
+        page.evaluate(() => navigator.clipboard.readText().then((t) => t.replace(/\r\n/g, '\n'))),
+      )
+      .toBe('Фамилия\tОтдел\nИванов\tПродажи')
+
+    // несмежные области — общий прямоугольник охвата
+    await clickCell(page, 0, 0)
+    await clickCell(page, 1, 2, { modifiers: ['Control'] })
+    await page.keyboard.press('Control+c')
+    await expect
+      .poll(() =>
+        page.evaluate(() => navigator.clipboard.readText().then((t) => t.replace(/\r\n/g, '\n'))),
+      )
+      .toBe('Фамилия\tОтдел\tСумма\nИванов\tПродажи\t10000')
+  })
+
   test('Alt+перетаскивание: живая сумма у курсора оранжевым лассо (Ф4, механика КТ-2)', async ({
     page,
   }) => {

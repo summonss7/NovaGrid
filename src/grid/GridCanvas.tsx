@@ -23,6 +23,8 @@ import { normalize, inSelection } from '../core/selection'
 import { gridStore, rangeMetrics } from '../core/store'
 import type { SheetModel } from '../core/sheet'
 import { useSettings, useT } from '../i18n'
+import { selectionText } from '../core/copy'
+import { copyText } from '../ui/clipboard'
 import { AssistPopup } from '../ui/AssistPopup'
 import { useFormulaAssist } from '../ui/useFormulaAssist'
 import { ContextMenu } from '../ui/ContextMenu'
@@ -285,17 +287,18 @@ export function GridCanvas() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resolvedTheme])
 
-  const ensureActiveVisible = () => {
+  /** Прокрутить ячейку в поле зрения: навигация — активную, Shift-растяжение — движущийся конец. */
+  const ensureCellVisible = (row: number, col: number) => {
     const el = scrollRef.current
     const main = mainRef.current
     if (!el || !main) return
     const st = gridStore.getState()
     const lay = layoutFor(st.sheet, st.filters)
-    const i = lay.indexOf(st.selection.active.row)
-    if (i < 0) return // активная ячейка скрыта фильтром
+    const i = lay.indexOf(row)
+    if (i < 0) return // ячейка скрыта фильтром
     const target = scrollIntoView(
       i,
-      st.selection.active.col,
+      col,
       el.scrollLeft,
       el.scrollTop,
       main.clientWidth,
@@ -305,6 +308,11 @@ export function GridCanvas() {
     )
     if (target.scrollX !== el.scrollLeft) el.scrollLeft = target.scrollX
     if (target.scrollY !== el.scrollTop) el.scrollTop = target.scrollY
+  }
+
+  const ensureActiveVisible = () => {
+    const { active } = gridStore.getState().selection
+    ensureCellVisible(active.row, active.col)
   }
 
   const positionEditor = () => {
@@ -790,6 +798,13 @@ export function GridCanvas() {
     if (e.key in arrows) {
       const [dr, dc] = arrows[e.key]
       st.moveActive(dr, dc, { extend: e.shiftKey, jump: mod })
+      // при растяжении якорь-активная ячейка неподвижна и подписка на неё
+      // не прокрутит кадр — держим в поле зрения движущийся конец диапазона
+      if (e.shiftKey) {
+        const cur = gridStore.getState().selection
+        const last = cur.ranges[cur.ranges.length - 1]
+        ensureCellVisible(last.tr, last.tc)
+      }
       e.preventDefault()
       return
     }
@@ -893,6 +908,13 @@ export function GridCanvas() {
     }
     if (mod && e.code === 'KeyA') {
       st.selectAll()
+      e.preventDefault()
+      return
+    }
+    // Ctrl+C — копировать выделение (novagrid-024): значения вычисленные,
+    // колонки через таб, строки через перевод — вставляется в Excel/Таблицы
+    if (mod && e.code === 'KeyC') {
+      void copyText(selectionText(st.sheet, st.selection))
       e.preventDefault()
       return
     }

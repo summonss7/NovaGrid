@@ -22,8 +22,12 @@ $zip = Join-Path 'backups' ("NovaGrid-backup-" + $stamp + ".zip")
 $temp = Join-Path $env:TEMP ("novagrid_backup_" + $stamp)
 New-Item -ItemType Directory -Path $temp | Out-Null
 
-# Копируем всё, кроме служебных папок
-robocopy $PSScriptRoot $temp /E /XD '.git' 'backups' 'node_modules' 'dist' '.zcode' `
+# Копируем всё, кроме служебных папок. desktop/target — кэш cargo (гигабайты,
+# регенерируется сборкой обёртки) и в git не входит (novagrid-024: архивы
+# с ним переполнили диск D:).
+$excludeDirs = @('.git', 'backups', 'node_modules', 'dist', '.zcode',
+    (Join-Path $PSScriptRoot 'desktop\target'))
+robocopy $PSScriptRoot $temp /E /XD $excludeDirs `
     /XF '*.log' '.visible-*' /NFL /NDL /NJH /NJS /NC /NS /NP | Out-Null
 if ($LASTEXITCODE -ge 8) { Write-Host "FAILED: robocopy exit $LASTEXITCODE"; exit 1 }
 

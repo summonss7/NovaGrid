@@ -107,6 +107,30 @@ describe('store: выделение (1.4)', () => {
     expect(m.filled).toBe(2)
   })
 
+  it('Shift-стрелки растягивают диапазон дальше двух ячеек (novagrid-024)', () => {
+    s().clickCell(0, 0)
+    s().moveActive(1, 0, { extend: true })
+    s().moveActive(1, 0, { extend: true })
+    s().moveActive(1, 0, { extend: true })
+    expect(s().selection.ranges).toEqual([{ fr: 0, fc: 0, tr: 3, tc: 0 }])
+    // якорь остаётся активной ячейкой — как в Excel
+    expect(s().selection.active).toEqual({ row: 0, col: 0 })
+    // «туда-сюда»: противоход сжимает диапазон от того же конца
+    s().moveActive(-1, 0, { extend: true })
+    expect(s().selection.ranges).toEqual([{ fr: 0, fc: 0, tr: 2, tc: 0 }])
+    s().moveActive(0, 1, { extend: true })
+    expect(s().selection.ranges).toEqual([{ fr: 0, fc: 0, tr: 2, tc: 1 }])
+  })
+
+  it('Shift-стрелки после протяжки мышью идут от конца диапазона (novagrid-024)', () => {
+    s().clickCell(1, 2)
+    s().dragTo(3, 2)
+    s().moveActive(1, 0, { extend: true })
+    expect(s().selection.ranges).toEqual([{ fr: 1, fc: 2, tr: 4, tc: 2 }])
+    const m = selectionMetrics(s().sheet, s().selection)
+    expect(m.total).toBe(10000 + 12500 + 8000 + 15300)
+  })
+
   it('клик во время правки фиксирует её, а не отбрасывает', () => {
     s().clickCell(1, 2)
     s().beginEdit()

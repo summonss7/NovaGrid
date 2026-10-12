@@ -1018,7 +1018,11 @@ export const gridStore = createStore<GridState>((set, get) => {
     moveActive: (dr, dc, opts) => {
       const state = get()
       const { sheet, selection } = state
-      const from = selection.active
+      // Shift-растяжение идёт от движущегося конца последней области, а не от
+      // активной ячейки-якоря: иначе каждый Shift-стрелка пересчитывает конец
+      // от того же якоря и диапазон не растёт дальше двух ячеек (novagrid-024)
+      const last = selection.ranges[selection.ranges.length - 1]
+      const from = opts?.extend ? { row: last.tr, col: last.tc } : selection.active
       const target = opts?.jump
         ? jumpTarget(sheet, from.row, from.col, dr, dc)
         : clampRef({ row: from.row + dr, col: from.col + dc }, sheet.rows, sheet.cols)
@@ -1027,7 +1031,7 @@ export const gridStore = createStore<GridState>((set, get) => {
       const row = visible ? nearestVisibleRow(visible, target.row, dr !== 0 ? dr : 1) : target.row
       if (opts?.extend) {
         const ranges = [...selection.ranges]
-        ranges[ranges.length - 1] = { ...ranges[ranges.length - 1], tr: row, tc: target.col }
+        ranges[ranges.length - 1] = { ...last, tr: row, tc: target.col }
         set({ selection: { ...selection, ranges } })
       } else {
         set({ selection: selectionOf(row, target.col) })
