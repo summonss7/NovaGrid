@@ -1213,3 +1213,7 @@ Deploy to GitHub Pages ран 38018213931 success (шаги деплоя кор�
 - Бэкап до изменений: backups/NovaGrid-backup-2026-10-12_225459.zip.
 - Коммит: 450b640 feat(novagrid-025) — код/тесты/документация;
   отчётный docs-коммит следует за этим.
+  - Дополнено (23:13): CI на GitHub зелёный на push 3723fef (ран 38302202882:
+    lint · typecheck · test · e2e · build — success), Deploy to GitHub Pages —
+    success (ран 38302202858): веб-версия v1.10.0 опубликована. Релизное
+    уведомление отправлено в Aila «Хаб ИИ» (id ai_novagrid_025_release_20261012).
