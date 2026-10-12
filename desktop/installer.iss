@@ -2,7 +2,7 @@
 ;
 ; Per-user install: %LOCALAPPDATA%\Programs\NovaGrid, no UAC.
 ; Файловые ассоциации — вежливые: NovaGrid добавляется в «Открыть с помощью»
-; для .xlsx/.xls/.ods/.csv (OpenWithProgids), владелец по умолчанию
+; для .xlsx/.xls/.ods/.csv/.nvgridx (OpenWithProgids), владелец по умолчанию
 ; (Excel/LibreOffice) не перехватывается — пользователь назначает сам.
 ;
 ; Версия/тип передаются из scripts/desktop-build.sh:
@@ -48,7 +48,7 @@ Name: "ru"; MessagesFile: "compiler:Languages\Russian.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
-Name: "fileassoc"; Description: "Добавить NovaGrid в «Открыть с помощью» для .xlsx, .xls, .ods и .csv"; GroupDescription: "Файловые ассоциации:"
+Name: "fileassoc"; Description: "Добавить NovaGrid в «Открыть с помощью» для .xlsx, .xls, .ods, .csv и .nvgridx"; GroupDescription: "Файловые ассоциации:"
 
 [Files]
 Source: "target\release\novagrid.exe"; DestDir: "{app}"; DestName: "NovaGrid.exe"; Flags: ignoreversion
@@ -71,6 +71,9 @@ Root: HKCU; Subkey: "Software\Classes\.xlsx\OpenWithProgids"; ValueType: string;
 Root: HKCU; Subkey: "Software\Classes\.xls\OpenWithProgids"; ValueType: string; ValueName: "NovaGrid.Book"; ValueData: ""; Flags: uninsdeletevalue; Tasks: fileassoc
 Root: HKCU; Subkey: "Software\Classes\.ods\OpenWithProgids"; ValueType: string; ValueName: "NovaGrid.Book"; ValueData: ""; Flags: uninsdeletevalue; Tasks: fileassoc
 Root: HKCU; Subkey: "Software\Classes\.csv\OpenWithProgids"; ValueType: string; ValueName: "NovaGrid.Book"; ValueData: ""; Flags: uninsdeletevalue; Tasks: fileassoc
+; .nvgridx — зашифрованный снапшот книги (Этап 7.6): двойной клик в облачной
+; папке открывает капсулу, фразу спросит приложение
+Root: HKCU; Subkey: "Software\Classes\.nvgridx\OpenWithProgids"; ValueType: string; ValueName: "NovaGrid.Book"; ValueData: ""; Flags: uninsdeletevalue; Tasks: fileassoc
 
 [Run]
 Filename: "{app}\NovaGrid.exe"; WorkingDir: "{app}"; Description: "{cm:LaunchProgram,NovaGrid}"; Flags: nowait postinstall skipifsilent

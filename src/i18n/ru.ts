@@ -160,6 +160,23 @@ export const ru = {
   xlsSaveNote: 'Файл .xls сохранится как .xlsx (современный формат)',
   odsSaveNote: 'Файл .ods сохранится как .xlsx — прямой записи .ods в NovaGrid нет',
 
+  // снапшот .nvgridx (Этап 7.6, novagrid-019): капсула для облачной папки
+  saveAsFormatNvgridx: '.nvgridx (снапшот, зашифрованный)',
+  snapshotPassLabel: 'Парольная фраза',
+  snapshotPassRepeatLabel: 'Повторите фразу',
+  snapshotPassShowLabel: 'Показать фразы',
+  snapshotPassMismatch: 'Фразы не совпадают',
+  snapshotPassShort: 'Фраза должна быть не короче 4 символов',
+  snapshotNote:
+    'Зашифрованная копия всей книги (AES-GCM) для облачной папки: провайдер видит только шифротекст. Забытая фраза — данные не восстановить.',
+  snapshotSavedToast: (name: string) => `Снапшот сохранён: ${name}`,
+  snapshotImportTitle: 'Снапшот NovaGrid',
+  snapshotImportFileLabel: 'Файл',
+  snapshotImportAction: 'Открыть',
+  snapshotImportNote:
+    'Введите фразу, которой снапшот был зашифрован, — книга заменит текущую.',
+  snapshotImportWrongPass: 'Неверная парольная фраза или файл повреждён',
+
   // печать (Этап 7.4)
   printOpenAction: 'Печать',
   printTitle: 'Печать',

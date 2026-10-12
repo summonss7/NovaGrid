@@ -44,11 +44,13 @@ struct StartupBooks(Mutex<Vec<PathBuf>>);
 struct StagedBooks(Mutex<HashMap<u64, Vec<u8>>>);
 
 /// Нативный диалог «Открыть книгу» с мультивыбором: пути (пусто — отмена).
+/// .nvgridx — зашифрованная капсула-снапшот (Этап 7.6): открывается тем же
+/// конвейером, фразу спросит веб-диалог.
 #[tauri::command]
 fn pick_open_books() -> Vec<String> {
     rfd::FileDialog::new()
         .set_title("Открыть книги")
-        .add_filter("Таблицы", &["xlsx", "xlsm", "xls", "ods", "csv", "tsv"])
+        .add_filter("Таблицы", &["xlsx", "xlsm", "xls", "ods", "csv", "tsv", "nvgridx"])
         .pick_files()
         .map(|paths| paths.into_iter().map(path_string).collect())
         .unwrap_or_default()
@@ -57,10 +59,10 @@ fn pick_open_books() -> Vec<String> {
 /// Нативный диалог «Сохранить книгу»: путь к файлу (null — отмена).
 #[tauri::command]
 fn pick_save_book(default_name: String, format: String) -> Option<String> {
-    let (label, ext) = if format == "csv" {
-        ("CSV", "csv")
-    } else {
-        ("Excel", "xlsx")
+    let (label, ext) = match format.as_str() {
+        "csv" => ("CSV", "csv"),
+        "nvgridx" => ("Снапшот NovaGrid", "nvgridx"),
+        _ => ("Excel", "xlsx"),
     };
     rfd::FileDialog::new()
         .set_title("Сохранить книгу")

@@ -170,6 +170,22 @@ const en: RuDict = {
   xlsSaveNote: '.xls files are saved as .xlsx (the modern format)',
   odsSaveNote: '.ods files are saved as .xlsx — NovaGrid cannot write .ods directly',
 
+  // snapshot .nvgridx (Stage 7.6, novagrid-019): capsule for a cloud folder
+  saveAsFormatNvgridx: '.nvgridx (encrypted snapshot)',
+  snapshotPassLabel: 'Passphrase',
+  snapshotPassRepeatLabel: 'Repeat passphrase',
+  snapshotPassShowLabel: 'Show passphrases',
+  snapshotPassMismatch: 'Passphrases do not match',
+  snapshotPassShort: 'Passphrase must be at least 4 characters',
+  snapshotNote:
+    'Encrypted copy of the whole book (AES-GCM) for a cloud folder: the provider sees ciphertext only. Lose the passphrase — the data is gone.',
+  snapshotSavedToast: (name: string) => `Snapshot saved: ${name}`,
+  snapshotImportTitle: 'NovaGrid snapshot',
+  snapshotImportFileLabel: 'File',
+  snapshotImportAction: 'Open',
+  snapshotImportNote: 'Enter the passphrase this snapshot was encrypted with — the book replaces the current one.',
+  snapshotImportWrongPass: 'Wrong passphrase or damaged file',
+
   printOpenAction: 'Print',
   printTitle: 'Print',
   printWhatLabel: 'What to print',

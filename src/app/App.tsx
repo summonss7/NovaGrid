@@ -10,6 +10,7 @@ import { onPwaUpdate, registerServiceWorker } from '../pwa/registerSW'
 import { zoomStore } from '../grid/zoom'
 import {
   buildBookBuffer,
+  buildSnapshotBuffer,
   csvMime,
   downloadBuffer,
   ensureReadPermission,
@@ -21,6 +22,11 @@ import {
   writeToHandle,
   xlsxMime,
 } from '../io/fileActions'
+import {
+  decryptSnapshot,
+  isSnapshotName,
+  snapshotToBook,
+} from '../io/snapshot'
 import {
   desktopOpenBookWindow,
   desktopOpenPath,
@@ -42,6 +48,7 @@ import { PrintView } from '../ui/PrintView'
 import { ReplaceHost } from '../ui/ReplaceDialog'
 import { SaveAsDialog, type SaveAsChoice, type SaveAsFormat } from '../ui/SaveAsDialog'
 import { SheetsBar } from '../ui/SheetsBar'
+import { SnapshotDialog } from '../ui/SnapshotDialog'
 import { StartScreen } from '../ui/StartScreen'
 import { StatusBar } from '../ui/StatusBar'
 import { Toolbar } from '../ui/Toolbar'
@@ -52,6 +59,13 @@ type Mode = 'boot' | 'start' | 'book'
 interface Toast {
   text: string
   kind: 'ok' | 'error'
+}
+
+/** Прочитанная капсула .nvgridx — ждёт парольную фразу в диалоге (7.6). */
+interface SnapshotPending {
+  file: File
+  buffer: ArrayBuffer
+  meta?: { path?: string; handle?: FileSystemFileHandle; key?: string }
 }
 
 /**
@@ -67,6 +81,7 @@ export default function App() {
   const [busy, setBusy] = useState<string | null>(null)
   const [toast, setToast] = useState<Toast | null>(null)
   const [saveAsOpen, setSaveAsOpen] = useState(false)
+  const [snapshotPending, setSnapshotPending] = useState<SnapshotPending | null>(null)
   const [dropping, setDropping] = useState(false)
   const [swReload, setSwReload] = useState<(() => void) | null>(null)
   const printOpen = useStore(printStore, (s) => s.dialogOpen)
@@ -83,6 +98,12 @@ export default function App() {
   /** Файл → конвейер → книга на экране. Общий путь для input, drop, FSA, фикстур. */
   const openFile = useCallback(
     async (file: File, meta?: { path?: string; handle?: FileSystemFileHandle; key?: string }) => {
+      // капсула .nvgridx (7.6): расшифровка требует фразу — отдельный диалог,
+      // книга ставится на экран после него (openSnapshot)
+      if (isSnapshotName(file.name)) {
+        setSnapshotPending({ file, buffer: await file.arrayBuffer(), meta })
+        return
+      }
       setBusy(t.openingFile)
       try {
         await readBookFile(file)
@@ -150,6 +171,30 @@ export default function App() {
       }
     },
     [openFile, showToast, t],
+  )
+
+  /**
+   * Капсула .nvgridx → книга (Этап 7.6, схема А): расшифровка по фразе из
+   * диалога. Броски decryptSnapshot остаются наверху — SnapshotDialog покажет
+   * инлайн-ошибку и даст повторить. Хэндл/путь НЕ восстанавливаем: Ctrl+S
+   * не должен затирать капсулу xlsx-байтами (побочный файл, не источник книги).
+   */
+  const openSnapshot = useCallback(
+    async (passphrase: string) => {
+      const pending = snapshotPending
+      if (!pending) return
+      const payload = await decryptSnapshot(pending.buffer, passphrase)
+      const name = payload.book.fileName ?? pending.file.name.replace(/\.nvgridx$/i, '')
+      gridStore.getState().loadBook(snapshotToBook(payload), {
+        fileName: name,
+        fileFormat: extToFormat(name),
+        csvDelimiter: payload.book.csvDelimiter,
+      })
+      void recordOpening(pending.file, pending.meta).catch(() => undefined)
+      setSnapshotPending(null)
+      setMode('book')
+    },
+    [snapshotPending],
   )
 
   const onOpenClicked = useCallback(async () => {
@@ -241,6 +286,32 @@ export default function App() {
   const saveAsChosen = useCallback(
     async (choice: SaveAsChoice) => {
       setSaveAsOpen(false)
+      // капсула .nvgridx (7.6): вся книга → AES-GCM; текущую книгу не трогаем —
+      // снапшот побочный файл для облака, имя/dirty/хэндл остаются как были
+      if (choice.format === 'nvgridx') {
+        setBusy(t.savingFile)
+        try {
+          const buffer = await buildSnapshotBuffer(choice.passphrase!)
+          if (isDesktop()) {
+            const path = await desktopPickSavePath(choice.fileName, 'nvgridx')
+            if (path === null) return
+            await desktopWriteFile(path, buffer)
+            const name = path.replace(/\\/g, '/').split('/').pop() ?? choice.fileName
+            showToast(t.snapshotSavedToast(name), 'ok')
+          } else {
+            downloadBuffer(choice.fileName, buffer, 'application/octet-stream')
+            showToast(t.snapshotSavedToast(choice.fileName), 'ok')
+          }
+        } catch (err) {
+          showToast(
+            `${t.saveErrorTitle}: ${err instanceof Error ? err.message : String(err)}`,
+            'error',
+          )
+        } finally {
+          setBusy(null)
+        }
+        return
+      }
       setBusy(t.savingFile)
       try {
         const buffer = await buildBookBuffer(choice.format, choice.delimiter)
@@ -513,7 +584,7 @@ export default function App() {
         id="nv-file-input"
         type="file"
         hidden
-        accept=".xlsx,.xlsm,.xls,.ods,.csv,.tsv"
+        accept=".xlsx,.xlsm,.xls,.ods,.csv,.tsv,.nvgridx"
         aria-label={t.fileInputLabel}
         onChange={(e) => {
           const file = e.target.files?.[0]
@@ -608,6 +679,14 @@ export default function App() {
           }
           onConfirm={(choice) => void saveAsChosen(choice)}
           onCancel={() => setSaveAsOpen(false)}
+        />
+      )}
+
+      {snapshotPending && (
+        <SnapshotDialog
+          fileName={snapshotPending.file.name}
+          onOpen={openSnapshot}
+          onCancel={() => setSnapshotPending(null)}
         />
       )}
 

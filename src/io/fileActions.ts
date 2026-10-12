@@ -7,6 +7,7 @@
 import { gridStore, type FileFormat } from '../core/store'
 import { readFileBuffer, writeCsv, writeXlsx } from './client'
 import type { SheetWire } from './excel'
+import { bookToSnapshot, encryptSnapshot } from './snapshot'
 
 export type { SheetWire }
 
@@ -53,6 +54,15 @@ export async function buildBookBuffer(
   const st = gridStore.getState()
   if (format === 'csv') return writeCsv(st.sheet, delimiter)
   return writeXlsx(st.tabs.map((t) => ({ name: t.name, sheet: t.sheet })))
+}
+
+/** Капсула .nvgridx всей книги (Этап 7.6): снапшот → AES-GCM по фразе. */
+export async function buildSnapshotBuffer(passphrase: string): Promise<ArrayBuffer> {
+  const st = gridStore.getState()
+  return encryptSnapshot(
+    bookToSnapshot(st.tabs, { fileName: st.fileName, csvDelimiter: st.csvDelimiter }),
+    passphrase,
+  )
 }
 
 /** Прямая запись в открытый файл (Chromium-десктоп, CONCEPT Ф1). */
@@ -109,6 +119,7 @@ export async function pickOpenFile(): Promise<PickedFile | null> {
             'application/vnd.ms-excel': ['.xls'],
             'application/vnd.oasis.opendocument.spreadsheet': ['.ods'],
             'text/csv': ['.csv', '.tsv'],
+            'application/octet-stream': ['.nvgridx'],
           },
         },
       ],
