@@ -10,7 +10,8 @@ production-сборку (`dist/`), что и PWA; в браузере/PWA всё
 | Путь | Роль |
 |---|---|
 | `desktop/` | Rust-каркас Tauri: `src/main.rs` (окно, меню, IPC-команды), `tauri.conf.json` (окно 1280×800, мин. 960×600, иконки, CSP), `Cargo.toml`, `installer.iss` (Inno Setup), `icons/` (знак приложения), `lib/WebView2Loader.dll` |
-| `scripts/desktop-build.sh` | Сборка: фронтенд → exe (frontend внутри) → портабельная папка+zip в `builds/` → установщик Inno Setup в `builds/` (release) |
+| `scripts/desktop-build.sh` | Сборка: фронтенд → exe (frontend внутри) → портабельная папка+zip в `builds/` → установщик Inno Setup в `builds/` (release) → автообновление развёрнутой копии `C:\NovaGrid` (release) |
+| `scripts/deploy-portable.sh` | Обновление развёрнутой портативной копии в `C:\NovaGrid` (novagrid-021): копирует exe+DLL из портабельной сборки и сверяет md5; вызывается релизной desktop-build.sh и годится для ручного запуска |
 | `scripts/desktop-dev.sh` | Dev-режим: vite devserver :5173 + `cargo run` без встраивания (окно грузит dev-сервер, HMR живой) |
 | `scripts/make-desktop-icons.mjs` | Иконки из `public/favicon.svg` (растеризация playwright-chromium, многослойный .ico); перегенерация лишь при смене знака — иконки закоммичены |
 | `src/io/desktop.ts` | Мост фронтенда: всё за `isDesktop()` (признак `window.__TAURI__`), браузерная сборка ни одного вызова не выполняет; npm-пакеты `@tauri-apps` сознательно не подключаются |
@@ -45,8 +46,9 @@ service worker в обёртке не регистрируется (контен
 ```bash
 npm run desktop:icons   # перегенерация иконок (только при смене знака)
 npm run desktop:dev     # окно + vite devserver (HMR)
-npm run desktop:build           # release: dist/ → exe → builds/novagrid-<ver>-portable-release(.zip) → setup.exe
+npm run desktop:build           # release: dist/ → exe → builds/novagrid-<ver>-portable-release(.zip) → setup.exe → обновить C:\NovaGrid
 npm run desktop:build debug     # debug: только портабельная папка+zip
+scripts/deploy-portable.sh      # вручную обновить C:\NovaGrid (по умолчанию — свежая release-папка текущей версии)
 ```
 
 Версия берётся из `package.json` (единый источник с веб-приложением), тип —
@@ -59,6 +61,23 @@ npm run desktop:build debug     # debug: только портабельная �
   запускается без установки.
 
 `builds/` и `desktop/target/` в `.gitignore` — артефакты в git не попадают.
+
+## Развёрнутая копия C:\NovaGrid
+
+На машине владельца развёрнута портативная копия приложения: `C:\NovaGrid\NovaGrid.exe`
++ `WebView2Loader.dll` — папка на диске C:, вне репозитория. Правило проекта
+(карточка novagrid-021, 12.10.2026): **при выпуске каждой новой версии эта копия
+обновляется автоматически** — без отдельной просьбы владельца.
+
+- Механизм: `desktop-build.sh` (release) в конце сборки вызывает
+  `scripts/deploy-portable.sh` — exe и DLL копируются из свежей
+  `builds/novagrid-<версия>-portable-release/`, совпадение exe проверяется md5.
+- Вручную (догнать пропущенный релиз): `scripts/deploy-portable.sh` — без
+  аргументов возьмёт папку текущей версии из `package.json`; можно передать
+  путь к конкретной портабельной папке.
+- Края: папки `C:\NovaGrid` нет — скрипт сообщит и завершится без ошибки
+  (машина без развёрнутой копии); exe запущен — копирование упадёт «file in
+  use»: закрыть окно NovaGrid и повторить.
 
 ## Файловые ассоциации
 

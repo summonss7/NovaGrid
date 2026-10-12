@@ -6,6 +6,8 @@
 #   3. copies it to builds/novagrid-<version>-portable-<type>.exe
 #   4. compiles the Inno Setup installer to
 #      builds/novagrid-<version>-setup-<type>.exe (release only)
+#   5. updates the deployed portable copy in C:\NovaGrid (release only,
+#      novagrid-021: scripts/deploy-portable.sh)
 # Version comes from package.json (single source with the web app).
 # Usage: scripts/desktop-build.sh [debug|release]   (default release)
 set -euo pipefail
@@ -55,4 +57,9 @@ if [ "$TYPE" = "release" ]; then
     echo "==> Skipping the setup: Inno Setup not found (portable exe is ready)."
     echo "    Per-user install (no admin): winget install --id JRSoftware.InnoSetup --scope user"
   fi
+fi
+
+# 5) deployed copy C:\NovaGrid follows every release automatically (novagrid-021)
+if [ "$TYPE" = "release" ]; then
+  "$ROOT/scripts/deploy-portable.sh" "$PORTDIR"
 fi
