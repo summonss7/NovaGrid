@@ -1,7 +1,9 @@
 import { Clock, FileSpreadsheet, FilePlus2, FlaskConical, FolderOpen, X } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { useT } from '../i18n'
-import { deleteSession, listRecents, type SessionRow } from '../storage/db'
+import { deleteOpening, deleteSession, listOpenings, listRecents } from '../storage/db'
+import { mergeRecents, type OpeningRow, type RecentItem } from '../storage/recents'
+import type { SessionRow } from '../storage/db'
 import { Logo } from './Logo'
 
 interface StartScreenProps {
@@ -9,6 +11,8 @@ interface StartScreenProps {
   onNewBook: () => void
   onOpenFixture: (url: string, name: string) => void
   onRestore: (row: SessionRow) => void
+  /** переоткрытие файла из «Недавних» (novagrid-022) */
+  onOpenRecent: (row: OpeningRow) => void
   /** занятость открытия — блокирует повторные клики */
   busy: string | null
 }
@@ -16,13 +20,13 @@ interface StartScreenProps {
 /** Стартовый экран (Этап 2.4): Открыть · Новая · Недавние · демо-фикстуры. */
 export function StartScreen(props: StartScreenProps) {
   const t = useT()
-  const [recents, setRecents] = useState<SessionRow[] | null>(null)
+  const [recents, setRecents] = useState<RecentItem[] | null>(null)
 
   useEffect(() => {
     let alive = true
-    void listRecents()
-      .then((rows) => {
-        if (alive) setRecents(rows)
+    void Promise.all([listOpenings(), listRecents()])
+      .then(([openings, sessions]) => {
+        if (alive) setRecents(mergeRecents(openings, sessions))
       })
       .catch(() => setRecents([]))
     return () => {
@@ -30,9 +34,20 @@ export function StartScreen(props: StartScreenProps) {
     }
   }, [])
 
-  const forget = useCallback(async (id: number) => {
-    await deleteSession(id)
-    setRecents((rows) => (rows ? rows.filter((r) => r.id !== id) : rows))
+  const forget = useCallback(async (item: RecentItem) => {
+    const id = item.kind === 'open' ? item.opening.id : item.session.id
+    if (id != null) {
+      if (item.kind === 'open') await deleteOpening(id)
+      else await deleteSession(id)
+    }
+    setRecents((rows) =>
+      rows
+        ? rows.filter((r) => {
+            const rid = r.kind === 'open' ? r.opening.id : r.session.id
+            return !(r.kind === item.kind && rid === id)
+          })
+        : rows,
+    )
   }, [])
 
   return (
@@ -75,31 +90,42 @@ export function StartScreen(props: StartScreenProps) {
           )}
           {recents !== null && recents.length > 0 && (
             <ul className="start-recent-list">
-              {recents.map((row) => (
-                <li key={row.id} className="start-recent-item">
-                  <button
-                    type="button"
-                    className="start-recent-open"
-                    onClick={() => props.onRestore(row)}
-                    disabled={props.busy !== null}
-                  >
-                    <FileSpreadsheet size={16} strokeWidth={1.5} aria-hidden />
-                    <span className="start-recent-name">{row.fileName ?? t.unsavedBook}</span>
-                    <span className="start-recent-meta">
-                      {t.recentSavedAt(new Date(row.savedAt))} · {t.recentCells(row.cells)}
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-ghost btn-icon start-recent-forget"
-                    aria-label={t.recentForgetTime}
-                    title={t.recentForgetTime}
-                    onClick={() => void forget(row.id!)}
-                  >
-                    <X size={14} strokeWidth={1.7} aria-hidden />
-                  </button>
-                </li>
-              ))}
+              {recents.map((item) => {
+                const name =
+                  item.kind === 'open' ? item.opening.fileName : (item.session.fileName ?? null)
+                return (
+                  <li key={item.kind === 'open' ? `o${item.opening.id}` : `s${item.session.id}`} className="start-recent-item">
+                    <button
+                      type="button"
+                      className="start-recent-open"
+                      title={item.kind === 'open' ? item.opening.path : undefined}
+                      onClick={() =>
+                        item.kind === 'open'
+                          ? props.onOpenRecent(item.opening)
+                          : props.onRestore(item.session)
+                      }
+                      disabled={props.busy !== null}
+                    >
+                      <FileSpreadsheet size={16} strokeWidth={1.5} aria-hidden />
+                      <span className="start-recent-name">{name ?? t.unsavedBook}</span>
+                      <span className="start-recent-meta">
+                        {item.kind === 'open'
+                          ? t.recentOpenedAt(new Date(item.opening.openedAt))
+                          : `${t.recentSavedAt(new Date(item.session.savedAt))} · ${t.recentCells(item.session.cells)}`}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-icon start-recent-forget"
+                      aria-label={t.recentForgetTime}
+                      title={t.recentForgetTime}
+                      onClick={() => void forget(item)}
+                    >
+                      <X size={14} strokeWidth={1.7} aria-hidden />
+                    </button>
+                  </li>
+                )
+              })}
             </ul>
           )}
         </section>

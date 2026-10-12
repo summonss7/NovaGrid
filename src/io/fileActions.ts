@@ -90,8 +90,14 @@ export function isFsaAvailable(): boolean {
   return typeof window !== 'undefined' && typeof window.showSaveFilePicker === 'function'
 }
 
-/** Открытие через пикер FSA: возвращает хэндл для будущих Ctrl+S. */
-export async function pickOpenFile(): Promise<File | null> {
+/** Результат пикера FSA: файл + хэндл для будущих Ctrl+S и «Недавних». */
+export interface PickedFile {
+  file: File
+  handle: FileSystemFileHandle
+}
+
+/** Открытие через пикер FSA: файл и хэндл (хэндл в стор ставит App после загрузки). */
+export async function pickOpenFile(): Promise<PickedFile | null> {
   if (typeof window !== 'undefined' && typeof window.showOpenFilePicker !== 'function') return null
   try {
     const [handle] = await window.showOpenFilePicker!({
@@ -107,11 +113,24 @@ export async function pickOpenFile(): Promise<File | null> {
         },
       ],
     })
-    const file = await handle.getFile()
-    gridStore.getState().setFileHandle(handle)
-    return file
+    return { file: await handle.getFile(), handle }
   } catch (err) {
     if (err instanceof DOMException && err.name === 'AbortError') return null // отмена пикера
     throw err
+  }
+}
+
+/** Права на повторное чтение FSA-хэндла: query → request (клик в «Недавних» — жест). */
+export async function ensureReadPermission(handle: FileSystemFileHandle): Promise<boolean> {
+  const h = handle as FileSystemFileHandle & {
+    queryPermission?: (d: { mode: 'read' }) => Promise<PermissionState>
+    requestPermission?: (d: { mode: 'read' }) => Promise<PermissionState>
+  }
+  try {
+    if (h.queryPermission && (await h.queryPermission({ mode: 'read' })) === 'granted') return true
+    if (h.requestPermission) return (await h.requestPermission({ mode: 'read' })) === 'granted'
+    return true // API прав нет — просто пробуем getFile
+  } catch {
+    return false
   }
 }

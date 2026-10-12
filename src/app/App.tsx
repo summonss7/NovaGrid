@@ -4,13 +4,15 @@ import { gridStore } from '../core/store'
 import { printStore } from '../core/print'
 import { TABLE_SIZE_SCALE, useDocumentLang, useSettings, useT } from '../i18n'
 import { installAutosave } from '../storage/autosave'
-import type { SessionRow } from '../storage/db'
+import { recordOpening, type SessionRow } from '../storage/db'
+import type { OpeningRow } from '../storage/recents'
 import { onPwaUpdate, registerServiceWorker } from '../pwa/registerSW'
 import { zoomStore } from '../grid/zoom'
 import {
   buildBookBuffer,
   csvMime,
   downloadBuffer,
+  ensureReadPermission,
   extToFormat,
   isFsaAvailable,
   openFixture,
@@ -21,6 +23,7 @@ import {
 } from '../io/fileActions'
 import {
   desktopOpenBook,
+  desktopOpenPath,
   desktopPickSavePath,
   desktopStartupBook,
   desktopWriteFile,
@@ -76,10 +79,16 @@ export default function App() {
 
   /** Файл → конвейер → книга на экране. Общий путь для input, drop, FSA, фикстур. */
   const openFile = useCallback(
-    async (file: File) => {
+    async (file: File, meta?: { path?: string; handle?: FileSystemFileHandle; key?: string }) => {
       setBusy(t.openingFile)
       try {
         await readBookFile(file)
+        // loadBook сбрасывает fileHandle/desktopPath — восстанавливаем после него
+        if (meta?.handle) gridStore.getState().setFileHandle(meta.handle)
+        if (meta?.path) gridStore.getState().setDesktopPath(meta.path)
+        // «Недавние» (novagrid-022): открытые файлы попадают в список сразу,
+        // не дожидаясь автосохранения сессии (которое большие книги пропускает)
+        void recordOpening(file, meta).catch(() => undefined)
         setMode('book')
       } catch (err) {
         showToast(
@@ -93,15 +102,44 @@ export default function App() {
 [showToast, t],
   )
 
+  /** Переоткрытие файла из «Недавних» (novagrid-022): путь / FSA-хэндл / снимок. */
+  const openRecent = useCallback(
+    async (row: OpeningRow) => {
+      setBusy(t.openingFile)
+      try {
+        if (row.path && isDesktop()) {
+          const book = await desktopOpenPath(row.path)
+          await openFile(book.file, { path: row.path, key: row.key })
+        } else if (row.handle) {
+          if (!(await ensureReadPermission(row.handle))) {
+            showToast(t.recentNoAccess, 'error')
+            return
+          }
+          const file = await row.handle.getFile()
+          await openFile(file, { handle: row.handle, key: row.key })
+        } else if (row.bytes) {
+          await openFile(new File([row.bytes], row.fileName), { key: row.key })
+        } else {
+          showToast(t.recentUnavailable, 'error')
+        }
+      } catch (err) {
+        showToast(
+          `${t.openErrorTitle}: ${err instanceof Error ? err.message : String(err)}`,
+          'error',
+        )
+      } finally {
+        setBusy(null)
+      }
+    },
+    [openFile, showToast, t],
+  )
+
   const onOpenClicked = useCallback(async () => {
     // десктоп-обёртка (Этап 7.5): нативный диалог rfd вместо FSA/инпута
     if (isDesktop()) {
       try {
         const book = await desktopOpenBook()
-        if (book) {
-          await openFile(book.file)
-          gridStore.getState().setDesktopPath(book.path)
-        }
+        if (book) await openFile(book.file, { path: book.path })
       } catch (err) {
         showToast(
           `${t.openErrorTitle}: ${err instanceof Error ? err.message : String(err)}`,
@@ -112,8 +150,8 @@ export default function App() {
     }
     if (isFsaAvailable()) {
       try {
-        const file = await pickOpenFile()
-        if (file) await openFile(file)
+        const picked = await pickOpenFile()
+        if (picked) await openFile(picked.file, { handle: picked.handle })
       } catch (err) {
         // пикер недоступен/отменён — штатный input
         if (!(err instanceof DOMException && err.name === 'AbortError'))
@@ -287,9 +325,7 @@ export default function App() {
     if (!isDesktop()) return
     let alive = true
     void desktopStartupBook().then((book) => {
-      if (alive && book) {
-        void openFile(book.file).then(() => gridStore.getState().setDesktopPath(book.path))
-      }
+      if (alive && book) void openFile(book.file, { path: book.path })
     })
     return () => {
       alive = false
@@ -394,6 +430,7 @@ export default function App() {
           }}
           onOpenFixture={(url, name) => void openFixtureCard(url, name)}
           onRestore={restoreSession}
+          onOpenRecent={(row) => void openRecent(row)}
           busy={busy}
         />
       )}

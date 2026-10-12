@@ -45,6 +45,11 @@ async function readBook(path: string): Promise<DesktopBook> {
   return { file: new File([bytes], baseName(path)), path }
 }
 
+/** Чтение книги по пути: нативный «Открыть» и переоткрытие из «Недавних». */
+export async function desktopOpenPath(path: string): Promise<DesktopBook> {
+  return readBook(path)
+}
+
 /** Нативный «Файл → Открыть» (rfd): книга или null — отмена диалога. */
 export async function desktopOpenBook(): Promise<DesktopBook | null> {
   const path = await invoke<string | null>('pick_open_book')

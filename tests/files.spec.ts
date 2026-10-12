@@ -314,4 +314,47 @@ test.describe('автосохранение сессии и «Недавние»
     expect(book.dirty).toBe(true)
     expect(book.tabs).toEqual(['Сотрудники', 'Справочник'])
   })
+
+  test('открытые файлы попадают в «Недавние» сверху и переоткрываются оттуда (novagrid-022)', async ({
+    page,
+  }) => {
+    // сначала обычная книга — её сессия должна уйти под свежее открытие
+    await page.goto('/?testui=1')
+    await openFixtureFile(page, 'public/fixtures/demo-book.xlsx')
+    await expect
+      .poll(() => page.evaluate(() => window.__nv?.cell(1, 0) ?? ''), { timeout: 3000 })
+      .toBe('Иванов')
+    await page.waitForTimeout(2200) // дебаунс автосохранения сессии demo-book
+
+    // большая книга (>150k ячеек): сессию автосохранение пропускает — в
+    // «Недавних» останется только запись об открытии файла
+    const lines = ['№;знач']
+    for (let i = 1; i <= 80_000; i++) lines.push(`${i};${i * 2}`)
+    const buffer = Buffer.from(`\uFEFF${lines.join('\r\n')}`, 'utf8')
+    await page.setInputFiles('#nv-file-input', {
+      name: 'big-recent.csv',
+      mimeType: 'text/csv',
+      buffer,
+    })
+    await expect
+      .poll(() => page.evaluate(() => window.__nv?.cell(1, 0) ?? ''), { timeout: 30_000 })
+      .toBe('1')
+
+    await page.reload()
+    const items = page.locator('.start-recent-item')
+    await expect(items).toHaveCount(2, { timeout: 10_000 })
+    // свежее открытие — первым, с подписью «открыт …» (не «сохранено …»)
+    await expect(items.nth(0)).toContainText('big-recent.csv')
+    await expect(items.nth(0)).toContainText('открыт')
+    await expect(items.nth(1)).toContainText('demo-book.xlsx')
+
+    // клик переоткрывает сам файл (снимок байтов), а не сессию: dirty чист
+    await items.nth(0).getByRole('button', { name: 'big-recent.csv' }).click()
+    await expect
+      .poll(() => page.evaluate(() => window.__nv?.cell(2, 0) ?? ''), { timeout: 30_000 })
+      .toBe('2')
+    const book = await nv(page).book()
+    expect(book.fileName).toBe('big-recent.csv')
+    expect(book.dirty).toBe(false)
+  })
 })
