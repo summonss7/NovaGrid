@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { visibleRowsOf } from './filter'
 import { createSheet, getCell, withCell } from './sheet'
+import { cellNumber } from '../formula/engine'
 import { gridStore, selectionMetrics } from './store'
 
 const s = () => gridStore.getState()
@@ -341,5 +342,92 @@ describe('store: поиск (Этап 3, Ф2)', () => {
     expect(s().search.hits.length).toBe(1)
     s().setSearchQuery('Ивановский')
     expect(s().search.hits.length).toBe(0)
+  })
+})
+
+describe('store: ширины колонок (novagrid-020)', () => {
+  it('setColWidth переопределяет ширину, стандартная — сбрасывает', () => {
+    expect(s().colWidths).toBeNull()
+    s().setColWidth(0, 150)
+    expect(s().colWidths?.get(0)).toBe(150)
+    s().setColWidth(0, 96) // стандартная ширина = сброс
+    expect(s().colWidths).toBeNull()
+  })
+
+  it('ширины клампятся и хранятся по вкладкам', () => {
+    s().setColWidth(1, 10)
+    expect(s().colWidths?.get(1)).toBe(32) // минимум
+    s().setColWidth(1, 1000)
+    expect(s().colWidths?.get(1)).toBe(400) // максимум
+    s().addTab()
+    expect(s().colWidths).toBeNull() // новый лист — стандартные
+    s().activateTab(0)
+    expect(s().colWidths?.get(1)).toBe(400) // прежний лист помнит
+  })
+})
+
+describe('store: указание ссылок формулы (novagrid-020)', () => {
+  it('клик по ячейке вставляет адрес на место каретки, протяжка — диапазон', () => {
+    s().clickCell(3, 3)
+    s().beginEdit('=')
+    s().setEditCaret(1)
+    s().pointCell(1, 0, false) // A2
+    expect(s().edit?.value).toBe('=A2')
+    s().setEditValue('=A2+') // ручной ввод сбросил жест
+    s().setEditCaret(4)
+    s().pointCell(2, 1, false) // B3
+    expect(s().edit?.value).toBe('=A2+B3')
+    s().pointCell(4, 2, true) // протянуть до C5 → B3:C5
+    expect(s().edit?.value).toBe('=A2+B3:C5')
+    s().commitEdit('none')
+    expect(getCell(s().sheet, 3, 3)).toBe('=A2+B3:C5')
+  })
+
+  it('указание не двигает активную ячейку и сворачивается по Esc', () => {
+    s().clickCell(3, 3)
+    s().beginEdit('=')
+    s().pointCell(1, 0, false)
+    expect(s().selection.active).toEqual({ row: 3, col: 3 })
+    expect(s().selection.ranges).toEqual([{ fr: 1, fc: 0, tr: 1, tc: 0 }])
+    s().cancelEdit()
+    expect(s().selection.ranges).toEqual([{ fr: 3, fc: 3, tr: 3, tc: 3 }])
+  })
+})
+
+describe('store: автосумма Σ (novagrid-020)', () => {
+  it('Σ: следующий выбор диапазона пишет =SUM в ячейку-приёмник', () => {
+    s().clickCell(6, 2) // стоим на свободной ячейке C7
+    s().startSumPick()
+    expect(s().sumPick).toEqual({ row: 6, col: 2 })
+    s().clickCell(1, 2)
+    s().dragTo(3, 2) // C2:C4
+    s().applySumPick()
+    expect(getCell(s().sheet, 6, 2)).toBe('=SUM(C2:C4)')
+    expect(s().sumPick).toBeNull()
+    expect(s().selection.active).toEqual({ row: 6, col: 2 })
+    // сумма посчитана движком: 10000 + 12500 + 8000
+    expect(cellNumber(s().sheet, 6, 2)).toBe(30500)
+  })
+
+  it('несмежные области собираются через «;», undo откатывает вставку', () => {
+    s().clickCell(9, 0)
+    s().startSumPick()
+    s().clickCell(1, 2) // первый клик заменил выделение на C2
+    s().clickCell(3, 2, { ctrl: true }) // + C4 (несмежная область)
+    s().applySumPick()
+    expect(getCell(s().sheet, 9, 0)).toBe('=SUM(C2;C4)')
+    expect(cellNumber(s().sheet, 9, 0)).toBe(18000)
+    s().undo()
+    expect(getCell(s().sheet, 9, 0)).toBe('')
+  })
+
+  it('Esc снимает режим Σ без записи', () => {
+    s().clickCell(9, 2)
+    s().startSumPick()
+    s().escape()
+    expect(s().sumPick).toBeNull()
+    s().clickCell(1, 2)
+    s().applySumPick() // уже выключен — ничего не пишет
+    expect(getCell(s().sheet, 9, 2)).toBe('')
   })
 })

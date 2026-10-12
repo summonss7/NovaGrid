@@ -13,7 +13,7 @@ import { getCell } from '../core/sheet'
 import { cellText, formulaStateAt } from '../formula/engine'
 import { gridStore, selectionMetrics, type EditState } from '../core/store'
 import { useSettings, type ResolvedTheme, type ThemePref } from '../i18n'
-import { cellRefName, cellRect, METRICS, zoomOf, type RowLayout } from './geometry'
+import { cellRefName, cellRect, colLayoutOf, METRICS, zoomOf, type ColLayout, type RowLayout } from './geometry'
 import { drawStats, type VisibleRegion } from './renderer'
 
 export interface NvBookInfo {
@@ -80,6 +80,8 @@ export interface NvTestApi {
   /** зум таблицы и текущие размеры ячеек (Этап 5.3, пинч/кнопки) */
   zoom: () => number
   cellMetrics: () => { rowH: number; colW: number; headerH: number; rowHeaderW: number }
+  /** фактическая ширина колонки с учётом переопределений и зума (novagrid-020) */
+  colWidth: (col: number) => number
   /** тема интерфейса (Этап 7.2): настройка и вычисленная тема */
   theme: () => { pref: ThemePref; resolved: ResolvedTheme }
 }
@@ -96,6 +98,8 @@ export interface TestHookRefs {
   region: () => VisibleRegion | null
   /** раскладка строк активного листа (с учётом фильтров) */
   layout: () => RowLayout
+  /** раскладка колонок активного листа (переменные ширины, novagrid-020) */
+  cols: () => ColLayout
 }
 
 export function installTestHook(refs: TestHookRefs): void {
@@ -156,12 +160,13 @@ export function installTestHook(refs: TestHookRefs): void {
       const el = refs.scroll()
       if (!main || !el) return { x: 0, y: 0 }
       const layout = refs.layout()
+      const colLay = refs.cols()
       // row = -1 — центр заголовка колонки (как до Этапа 3); скрытая строка —
       // грубая позиция модельной строки (тесты по скрытым не кликают)
       const i = layout.indexOf(row)
       const vi = i >= 0 ? i : row
       const mainRect = main.getBoundingClientRect()
-      const r = cellRect(vi, col, el.scrollLeft, el.scrollTop)
+      const r = cellRect(vi, col, el.scrollLeft, el.scrollTop, undefined, colLay)
       return { x: mainRect.left + r.x + r.w / 2, y: mainRect.top + r.y + r.h / 2 }
     },
     editor: () => gridStore.getState().edit,
@@ -199,6 +204,10 @@ export function installTestHook(refs: TestHookRefs): void {
     },
     zoom: () => zoomOf(),
     cellMetrics: () => ({ ...METRICS }),
+    colWidth: (col) => {
+      const st = gridStore.getState()
+      return colLayoutOf(st.sheet.cols, st.colWidths).width(col)
+    },
     theme: () => {
       const { theme, resolvedTheme } = useSettings.getState()
       return { pref: theme, resolved: resolvedTheme }

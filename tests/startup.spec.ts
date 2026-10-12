@@ -43,6 +43,8 @@ test.describe('главный экран — каркас книги', () => {
     await expect(page.getByRole('button', { name: 'Сохранить как…' })).toBeVisible()
     await expect(page.getByPlaceholder('Поиск…')).toBeVisible()
     await expect(page.getByRole('button', { name: 'Справка (?)' })).toBeVisible()
+    // Σ — автосумма (novagrid-020), рядом шеврон метрик выделения
+    await expect(page.getByRole('button', { name: 'Автосумма' })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Сумма выделенного' })).toBeVisible()
     await expect(page.getByLabel('Строка формул')).toBeVisible()
     await expect(page.getByRole('tab', { name: 'Лист 1' })).toBeVisible()
@@ -66,8 +68,8 @@ test.describe('главный экран — каркас книги', () => {
     // панели (тулбар, листы, статус-бар) — surface #EDEDEB
     await expect(page.locator('.toolbar')).toHaveCSS('background-color', 'rgb(237, 237, 235)')
     await expect(page.locator('.status-bar')).toHaveCSS('background-color', 'rgb(237, 237, 235)')
-    // главная кнопка Σ — оранжевый акцент #F26B21
-    await expect(page.getByRole('button', { name: 'Сумма выделенного' })).toHaveCSS(
+    // главная кнопка Σ (автосумма) — оранжевый акцент #F26B21
+    await expect(page.getByRole('button', { name: 'Автосумма' })).toHaveCSS(
       'background-color',
       'rgb(242, 107, 33)',
     )

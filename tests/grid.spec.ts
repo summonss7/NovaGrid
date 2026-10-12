@@ -252,3 +252,61 @@ test.describe('стресс 100k×30 — виртуализация (1.2)', () =
     expect(await api.cell(99999, 0)).toBe('100000')
   })
 })
+
+test.describe('ширины колонок мышью (novagrid-020)', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/?test=1')
+    await nv(page).ready()
+  })
+
+  /** Координаты границы между колонками col-1 и col (в шапке, зум 100 %). */
+  async function borderPoint(page: Page, col: number) {
+    const box = await page.locator('.grid-area').boundingBox()
+    const m = await page.evaluate(() => window.__nv!.cellMetrics())
+    return { x: box!.x + m.rowHeaderW + col * m.colW, y: box!.y + m.headerH / 2 }
+  }
+
+  test('перетаскивание границы A|B расширяет A, соседние ячейки сдвигаются', async ({ page }) => {
+    const api = nv(page)
+    expect(await api.cell(1, 1)).toBe('Продажи') // B2 демо-листа
+
+    const p = await borderPoint(page, 1)
+    await page.mouse.move(p.x, p.y)
+    await page.mouse.down()
+    await page.mouse.move(p.x + 64, p.y, { steps: 6 })
+    await page.mouse.up()
+
+    // A стала 96 + 64 = 160, спейсер вырос на те же 64
+    expect(await page.evaluate(() => window.__nv!.colWidth(0))).toBe(160)
+    const spacerW = await page.evaluate(
+      () => document.querySelector<HTMLElement>('.grid-spacer')?.style.width ?? '',
+    )
+    expect(spacerW).toBe(`${44 + 26 * 96 + 64}px`)
+
+    // координаты хука учитывают новую ширину: клик по центру B2 попадает в B
+    const b2 = await page.evaluate(({ row, col }) => window.__nv!.cellCenter(row, col), {
+      row: 1,
+      col: 1,
+    })
+    await page.mouse.click(b2.x, b2.y)
+    expect(await api.activeRef()).toBe('B2')
+  })
+
+  test('сужение и минимум: B сжимается до 32 px, дальше не тянется', async ({ page }) => {
+    const p = await borderPoint(page, 2) // граница B|C меняет ширину B
+    await page.mouse.move(p.x, p.y)
+    await page.mouse.down()
+    await page.mouse.move(p.x - 300, p.y, { steps: 6 })
+    await page.mouse.up()
+    expect(await page.evaluate(() => window.__nv!.colWidth(1))).toBe(32)
+  })
+
+  test('клик по шапке у границы не открывает меню и не меняет выделение', async ({ page }) => {
+    // край шапки — зона границы, а не кнопки ▾: без движения ничего не меняется
+    const p = await borderPoint(page, 1)
+    await page.mouse.click(p.x, p.y)
+    await expect(page.locator('.col-menu')).toHaveCount(0)
+    // выделение осталось исходным (A1), колонка не выделась
+    expect(await nv(page).ranges()).toEqual(['A1:A1'])
+  })
+})

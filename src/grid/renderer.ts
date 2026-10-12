@@ -13,7 +13,7 @@ import { normalize, type Range, type Selection } from '../core/selection'
 import { cellKey, type SheetModel } from '../core/sheet'
 import type { EditState } from '../core/store'
 import { cellError, cellIsFrozen, cellNumber, cellText } from '../formula/engine'
-import { colName, METRICS, type RowLayout, visibleCols, visibleRows } from './geometry'
+import { colName, type ColLayout, METRICS, type RowLayout, visibleRows } from './geometry'
 
 export interface GridTheme {
   ink: string
@@ -85,6 +85,8 @@ export interface DrawInput {
   scrollY: number
   sheet: SheetModel
   layout: RowLayout
+  /** раскладка ширин колонок — переменные ширины после перетаскивания (novagrid-020) */
+  cols: ColLayout
   selection: Selection
   edit: EditState | null
   altRange: Range | null
@@ -111,6 +113,7 @@ export function drawGrid(input: DrawInput): VisibleRegion {
     scrollY,
     sheet,
     layout,
+    cols,
     selection,
     edit,
     altRange,
@@ -121,9 +124,9 @@ export function drawGrid(input: DrawInput): VisibleRegion {
   const m = METRICS
 
   const rows = visibleRows(scrollY, height - m.headerH)
-  const cols = visibleCols(scrollX, width - m.rowHeaderW)
+  const colRange = cols.visible(width - m.rowHeaderW, scrollX)
   const lastRow = Math.min(rows.last, layout.count - 1)
-  const lastCol = Math.min(cols.last, sheet.cols - 1)
+  const lastCol = Math.min(colRange.last, sheet.cols - 1)
 
   ctx.save()
   ctx.clearRect(0, 0, width, height)
@@ -140,13 +143,14 @@ export function drawGrid(input: DrawInput): VisibleRegion {
     const r = layout.rowAt(i)
     const y = m.headerH + i * m.rowH - scrollY
     if (y + m.rowH <= m.headerH || y >= height) continue
-    for (let c = cols.first; c <= lastCol; c++) {
+    for (let c = colRange.first; c <= lastCol; c++) {
       const bg = sheet.styles.get(cellKey(r, c))?.bg
       if (!bg) continue
-      const x = m.rowHeaderW + c * m.colW - scrollX
-      if (x + m.colW <= m.rowHeaderW || x >= width) continue
+      const x = m.rowHeaderW + cols.x0(c) - scrollX
+      const w = cols.width(c)
+      if (x + w <= m.rowHeaderW || x >= width) continue
       ctx.fillStyle = `#${bg}`
-      ctx.fillRect(x, y, m.colW, m.rowH)
+      ctx.fillRect(x, y, w, m.rowH)
     }
   }
 
@@ -159,8 +163,8 @@ export function drawGrid(input: DrawInput): VisibleRegion {
     ctx.moveTo(m.rowHeaderW, y)
     ctx.lineTo(width, y)
   }
-  for (let c = cols.first; c <= lastCol + 1; c++) {
-    const x = m.rowHeaderW + c * m.colW - scrollX + 0.5
+  for (let c = colRange.first; c <= lastCol + 1; c++) {
+    const x = m.rowHeaderW + cols.x0(c) - scrollX + 0.5
     ctx.moveTo(x, m.headerH)
     ctx.lineTo(x, height)
   }
@@ -173,11 +177,12 @@ export function drawGrid(input: DrawInput): VisibleRegion {
       const r = layout.rowAt(i)
       const y = m.headerH + i * m.rowH - scrollY
       if (y + m.rowH <= m.headerH || y >= height) continue
-      for (let c = cols.first; c <= lastCol; c++) {
+      for (let c = colRange.first; c <= lastCol; c++) {
         if (!search.hitSet.has(`${r}:${c}`)) continue
-        const x = m.rowHeaderW + c * m.colW - scrollX
-        if (x + m.colW <= m.rowHeaderW || x >= width) continue
-        ctx.fillRect(x + 1, y + 1, m.colW - 2, m.rowH - 2)
+        const x = m.rowHeaderW + cols.x0(c) - scrollX
+        const w = cols.width(c)
+        if (x + w <= m.rowHeaderW || x >= width) continue
+        ctx.fillRect(x + 1, y + 1, w - 2, m.rowH - 2)
       }
     }
   }
@@ -190,12 +195,13 @@ export function drawGrid(input: DrawInput): VisibleRegion {
   for (let i = rows.first; i <= lastRow; i++) {
     const r = layout.rowAt(i)
     const cy = m.headerH + i * m.rowH - scrollY + m.rowH / 2
-    for (let c = cols.first; c <= lastCol; c++) {
+    for (let c = colRange.first; c <= lastCol; c++) {
       const raw = sheet.cells.get(cellKey(r, c))
       if (raw === undefined) continue
       // правка ячейки рисуется редактором; правка из строки формул — нет
       if (edit && edit.row === r && edit.col === c && edit.source !== 'bar') continue
-      const x = m.rowHeaderW + c * m.colW - scrollX
+      const x = m.rowHeaderW + cols.x0(c) - scrollX
+      const w = cols.width(c)
       const style = sheet.styles.get(cellKey(r, c))
       const isFormula = raw.startsWith('=') && raw.trim().length > 1
       const text = isFormula ? cellText(sheet, r, c) : raw
@@ -205,15 +211,15 @@ export function drawGrid(input: DrawInput): VisibleRegion {
       const frozen = isFormula ? cellIsFrozen(sheet, r, c) : false
       ctx.font = style?.bold ? theme.fontCellBold : theme.fontCell
       ctx.fillStyle = style?.fg ? `#${style.fg}` : err ? theme.errInk : theme.ink
-      const shown = ellipsize(ctx, text, m.colW - pad * 2)
+      const shown = ellipsize(ctx, text, w - pad * 2)
       const align = style?.align ?? (numeric ? 'right' : 'left')
       if (align === 'right') {
         ctx.textAlign = 'right'
-        ctx.fillText(shown, x + m.colW - pad, cy)
+        ctx.fillText(shown, x + w - pad, cy)
         ctx.textAlign = 'left'
       } else if (align === 'center') {
         ctx.textAlign = 'center'
-        ctx.fillText(shown, x + m.colW / 2, cy)
+        ctx.fillText(shown, x + w / 2, cy)
         ctx.textAlign = 'left'
       } else {
         ctx.fillText(shown, x + pad, cy)
@@ -222,7 +228,7 @@ export function drawGrid(input: DrawInput): VisibleRegion {
       if (frozen) {
         ctx.font = '10px ' + FALLBACK_FONT.slice(FALLBACK_FONT.indexOf('"'))
         ctx.fillStyle = theme.inkSoft
-        ctx.fillText('∛', x + m.colW - 10, m.headerH + i * m.rowH - scrollY + 9)
+        ctx.fillText('∛', x + w - 10, m.headerH + i * m.rowH - scrollY + 9)
         ctx.font = theme.fontCell
       }
     }
@@ -239,6 +245,7 @@ export function drawGrid(input: DrawInput): VisibleRegion {
       n.r2,
       n.c2,
       layout,
+      cols,
       scrollX,
       scrollY,
       theme.limeFill,
@@ -251,12 +258,13 @@ export function drawGrid(input: DrawInput): VisibleRegion {
   {
     const { row, col } = selection.active
     const i = layout.indexOf(row)
-    const x = m.rowHeaderW + col * m.colW - scrollX
+    const x = m.rowHeaderW + cols.x0(col) - scrollX
+    const w = cols.width(col)
     const y = m.headerH + i * m.rowH - scrollY
-    if (i >= 0 && x + m.colW > m.rowHeaderW && y + m.rowH > m.headerH && x < width && y < height) {
+    if (i >= 0 && x + w > m.rowHeaderW && y + m.rowH > m.headerH && x < width && y < height) {
       ctx.strokeStyle = theme.greenBorder
       ctx.lineWidth = 2
-      ctx.strokeRect(x + 1, y + 1, m.colW - 2, m.rowH - 2)
+      ctx.strokeRect(x + 1, y + 1, w - 2, m.rowH - 2)
     }
   }
   // Alt-лассо — оранжевая рамка быстрой суммы (Ф4)
@@ -269,6 +277,7 @@ export function drawGrid(input: DrawInput): VisibleRegion {
       n.r2,
       n.c2,
       layout,
+      cols,
       scrollX,
       scrollY,
       theme.altFill,
@@ -283,12 +292,13 @@ export function drawGrid(input: DrawInput): VisibleRegion {
     const hitRow = Number(search.currentKey.slice(0, csep))
     const hitCol = Number(search.currentKey.slice(csep + 1))
     const i = layout.indexOf(hitRow)
-    const x = m.rowHeaderW + hitCol * m.colW - scrollX
+    const x = m.rowHeaderW + cols.x0(hitCol) - scrollX
+    const w = cols.width(hitCol)
     const y = m.headerH + i * m.rowH - scrollY
-    if (i >= 0 && x + m.colW > m.rowHeaderW && y + m.rowH > m.headerH && x < width && y < height) {
+    if (i >= 0 && x + w > m.rowHeaderW && y + m.rowH > m.headerH && x < width && y < height) {
       ctx.strokeStyle = theme.altBorder
       ctx.lineWidth = 2
-      ctx.strokeRect(x + 1, y + 1, m.colW - 2, m.rowH - 2)
+      ctx.strokeRect(x + 1, y + 1, w - 2, m.rowH - 2)
     }
   }
   ctx.restore()
@@ -300,11 +310,12 @@ export function drawGrid(input: DrawInput): VisibleRegion {
     height,
     scrollX,
     scrollY,
-    cols.first,
+    colRange.first,
     lastCol,
     rows.first,
     lastRow,
     layout,
+    cols,
     selection,
     filteredCols,
     theme,
@@ -314,7 +325,7 @@ export function drawGrid(input: DrawInput): VisibleRegion {
   drawStats.frames++
   drawStats.totalMs += ms
   drawStats.lastMs = ms
-  return { firstRow: rows.first, lastRow, firstCol: cols.first, lastCol }
+  return { firstRow: rows.first, lastRow, firstCol: colRange.first, lastCol }
 }
 
 function paintRange(
@@ -324,6 +335,7 @@ function paintRange(
   r2: number,
   c2: number,
   layout: RowLayout,
+  cols: ColLayout,
   scrollX: number,
   scrollY: number,
   fill: string,
@@ -340,8 +352,8 @@ function paintRange(
   if (i1 < 0 && i2 < 0) return
   const from = i1 >= 0 ? i1 : Math.max(0, firstVisibleFrom(layout, r1, r2))
   const to = i2 >= 0 ? i2 : lastVisibleTill(layout, r1, r2)
-  const x = m.rowHeaderW + c1 * m.colW - scrollX
-  const w = (c2 - c1 + 1) * m.colW
+  const x = m.rowHeaderW + cols.x0(c1) - scrollX
+  const w = cols.x0(c2) + cols.width(c2) - cols.x0(c1)
   const y = m.headerH + from * m.rowH - scrollY
   const h = (to - from + 1) * m.rowH
   if (x + w <= m.rowHeaderW || y + h <= m.headerH || x >= width || y >= height) return
@@ -397,6 +409,7 @@ function drawHeaders(
   firstRow: number,
   lastRow: number,
   layout: RowLayout,
+  cols: ColLayout,
   selection: Selection,
   filteredCols: ReadonlySet<number>,
   theme: GridTheme,
@@ -423,20 +436,21 @@ function drawHeaders(
 
   // буквы колонок + кнопка меню (▾ / воронка при фильтре)
   for (let c = firstCol; c <= lastCol; c++) {
-    const x = m.rowHeaderW + c * m.colW - scrollX
-    if (x + m.colW <= m.rowHeaderW || x >= width) continue
+    const x = m.rowHeaderW + cols.x0(c) - scrollX
+    const w = cols.width(c)
+    if (x + w <= m.rowHeaderW || x >= width) continue
     const isSel = selected.some((n) => c >= n.c1 && c <= n.c2)
     if (isSel) {
       ctx.fillStyle = theme.bg
-      ctx.fillRect(x, 0, m.colW, m.headerH)
+      ctx.fillRect(x, 0, w, m.headerH)
     }
     ctx.fillStyle = isSel ? theme.greenBorder : theme.inkSoft
     ctx.textAlign = 'center'
-    ctx.fillText(colName(c), x + m.colW / 2, m.headerH / 2)
+    ctx.fillText(colName(c), x + w / 2, m.headerH / 2)
     if (filteredCols.has(c)) {
-      drawFunnel(ctx, x + m.colW - 15, 9, theme.greenBorder)
+      drawFunnel(ctx, x + w - 15, 9, theme.greenBorder)
     } else {
-      drawChevron(ctx, x + m.colW - 15, m.headerH / 2, theme.inkSoft)
+      drawChevron(ctx, x + w - 15, m.headerH / 2, theme.inkSoft)
     }
   }
 

@@ -24,6 +24,7 @@ export function StatusBar() {
   const selection = useStore(gridStore, (s) => s.selection)
   const filters = useStore(gridStore, (s) => s.filters)
   const zoom = useStore(zoomStore, (s) => s.zoom)
+  const sumPick = useStore(gridStore, (s) => s.sumPick)
 
   const metrics = useMemo(
     () => selectionMetrics(sheet, selection, visibleRowsOf(sheet, filters)),
@@ -34,7 +35,14 @@ export function StatusBar() {
 
   return (
     <footer className="status-bar">
-      <span className="status-phase">{t.statusPhase}</span>
+      {sumPick ? (
+        // Σ ждёт выбора ячеек (novagrid-020): живая подсказка вместо метки фазы
+        <span className="status-phase status-sum-pick" role="status">
+          {t.sumPickHint(cellRefName(sumPick.row, sumPick.col))}
+        </span>
+      ) : (
+        <span className="status-phase">{t.statusPhase}</span>
+      )}
       <span className="sr-only" aria-live="polite">
         {activeText !== '' ? `${activeRef} · ${activeText}` : activeRef}
       </span>

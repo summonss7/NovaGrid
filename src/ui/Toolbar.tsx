@@ -1,4 +1,5 @@
 import {
+  ChevronDown,
   FileDown,
   FolderOpen,
   HelpCircle,
@@ -211,13 +212,17 @@ export function Toolbar(props: { onOpen: () => void; onSave: () => void; onSaveA
             <span className="sum-live-value">Σ {t.num(altSum)}</span>
           </span>
         )}
+        {/* Σ — автосумма (novagrid-020): ячейка-приёмник уже выбрана, после
+            нажатия пользователь выделяет ячейки — в неё вставится =СУММ */}
         <button
           type="button"
           className="sum-btn toolbar-sum"
-          aria-label={t.sumTitle}
-          aria-expanded={sumOpen}
-          title={t.sumTitle}
-          onClick={() => setSumOpen((v) => !v)}
+          aria-label={t.sumAutosum}
+          title={t.sumAutosumTitle}
+          onClick={() => {
+            gridStore.getState().startSumPick()
+            document.querySelector<HTMLElement>('.grid-area')?.focus({ preventScroll: true })
+          }}
         >
           <span className="sum-symbol" aria-hidden>
             Σ
@@ -225,6 +230,17 @@ export function Toolbar(props: { onOpen: () => void; onSave: () => void; onSaveA
           <span className="sum-caption" aria-hidden>
             {t.sumLabel}
           </span>
+        </button>
+        {/* шеврон у Σ — карточка метрик выделения (Ф4, как раньше по клику Σ) */}
+        <button
+          type="button"
+          className="btn btn-ghost btn-icon toolbar-sum-metrics"
+          aria-label={t.sumTitle}
+          title={t.sumTitle}
+          aria-expanded={sumOpen}
+          onClick={() => setSumOpen((v) => !v)}
+        >
+          <ChevronDown size={14} strokeWidth={1.5} aria-hidden />
         </button>
         {sumOpen && <SumCard onClose={() => setSumOpen(false)} />}
       </span>

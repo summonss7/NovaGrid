@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ChevronUp } from 'lucide-react'
 import { useStore } from 'zustand'
 import { gridStore } from '../core/store'
@@ -51,6 +51,16 @@ export function FormulaBar() {
   }
   const assist = useFormulaAssist(editingThis && edit?.source === 'bar' ? value : '', apply)
 
+  // после вставки ссылки кликом по ячейке (novagrid-020) каретка встаёт
+  // за вставленным адресом — продолжение ввода дописывает формулу
+  useEffect(() => {
+    const input = inputRef.current
+    const st = gridStore.getState()
+    if (!input || !st.edit || st.edit.source !== 'bar') return
+    if (st.edit.pointSpan && st.edit.caret !== undefined)
+      input.setSelectionRange(st.edit.caret, st.edit.caret)
+  }, [edit?.pointSpan?.start, edit?.pointSpan?.end, edit?.value])
+
   const focusGrid = () => {
     document.querySelector<HTMLElement>('.grid-area')?.focus({ preventScroll: true })
   }
@@ -90,10 +100,19 @@ export function FormulaBar() {
             onChange={(e) => {
               if (!gridStore.getState().edit) gridStore.getState().beginBarEdit()
               gridStore.getState().setEditValue(e.target.value)
+              gridStore.getState().setEditCaret(e.target.selectionStart ?? 0)
               assist.sync(e.target.selectionStart ?? 0)
             }}
-            onKeyUp={(e) => assist.sync(e.currentTarget.selectionStart ?? 0)}
-            onClick={(e) => assist.sync(e.currentTarget.selectionStart ?? 0)}
+            onKeyUp={(e) => {
+              // Esc закрывает попап в keydown; keyup не должен открывать снова
+              if (e.key === 'Escape') return
+              gridStore.getState().setEditCaret(e.currentTarget.selectionStart ?? 0)
+              assist.sync(e.currentTarget.selectionStart ?? 0)
+            }}
+            onClick={(e) => {
+              gridStore.getState().setEditCaret(e.currentTarget.selectionStart ?? 0)
+              assist.sync(e.currentTarget.selectionStart ?? 0)
+            }}
             onKeyDown={(e) => {
               if (assist.handleKeys(e.key)) {
                 e.preventDefault()

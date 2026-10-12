@@ -41,6 +41,7 @@ import {
   withCell,
 } from './sheet'
 import { applyFormulaChanges, cellNumber, recalcSheet } from '../formula/engine'
+import { BASE_COL_W, COL_W_MAX, COL_W_MIN, cellRefName } from '../grid/geometry'
 // метрики выделения (6.1) агрегируются потоком; sum/average из ./stats
 // остаются для движка формул и юнит-тестов
 import { type SearchHit, type SearchOptions, searchBook, searchSheet } from './search'
@@ -83,6 +84,21 @@ export interface EditState {
   mode: 'replace' | 'append'
   /** 'bar' — правка из строки формул: редактор ячейки не показывается (4.3) */
   source?: 'cell' | 'bar'
+  /** позиция каретки в value (для вставки ссылок кликом); null — считать конец */
+  caret?: number
+  /** диапазон текста последней вставленной кликом ссылки (для протягивания в A1:B3) */
+  pointSpan?: { start: number; end: number }
+  /** якорь жеста указания: первая ячейка выбранного диапазона */
+  pointAnchor?: { row: number; col: number }
+}
+
+/**
+ * Автосумма (novagrid-020): Σ запоминает ячейку, где стояли, следующее
+ * выделение (клик/протяжка) превращается в =SUM(…) в этой ячейке.
+ */
+export interface SumPickState {
+  row: number
+  col: number
 }
 
 export interface SelectionMetrics {
@@ -155,6 +171,15 @@ export interface GridState {
   /** состояние «Найти и заменить» (Этап 7) */
   replace: ReplaceState
 
+  /**
+   * Переопределённые ширины колонок активной вкладки (novagrid-020) —
+   * перетаскивание границ в шапке; ключ — индекс колонки, значение — ширина
+   * в базовых единицах (зум 100 %). null — все колонки стандартные.
+   */
+  colWidths: ReadonlyMap<number, number> | null
+  /** автосумма: ячейка-приёмник =SUM, ожидает выбор диапазона; null — выключена */
+  sumPick: SumPickState | null
+
   /** имя файла на диске (null — новая несохранённая книга) */
   fileName: string | null
   /** формат открытого файла; xlsx — формат сохранения по умолчанию */
@@ -211,11 +236,27 @@ export interface GridState {
   /** правка активной ячейки из строки формул (4.3) */
   beginBarEdit: () => void
   setEditValue: (value: string) => void
+  /** позиция каретки редактора — для вставки ссылок кликом (novagrid-020) */
+  setEditCaret: (caret: number) => void
+  /**
+   * Режим указания формулы: клик/протяжка по ячейке вставляет её адрес
+   * (=A1, при протяжке =A1:B3) в редактируемую формулу на месте каретки.
+   */
+  pointCell: (row: number, col: number, extend: boolean) => void
   commitEdit: (move: EditMove) => void
   cancelEdit: () => void
   undo: () => void
   redo: () => void
   setAltRange: (r: Range | null) => void
+
+  // ── ширины колонок / автосумма (novagrid-020) ─────────────────────────
+  /** ширина колонки в базовых единицах; стандартная — сброс переопределения */
+  setColWidth: (col: number, width: number) => void
+  /** Σ: запомнить активную ячейку-приёмник и ждать выбора диапазона */
+  startSumPick: () => void
+  /** Σ: собрать =SUM из текущего выделения и записать в ячейку-приёмник */
+  applySumPick: () => void
+  cancelSumPick: () => void
 
   // ── фильтры (Ф3) ──────────────────────────────────────────────────────
   /** установить/заменить фильтр колонки; include, покрывающий все значения, снимается */
@@ -443,6 +484,9 @@ const histories = new Map<string, History>()
 /** Фильтры — тоже по вкладкам (id), но живут в state для активной (как sheet). */
 const tabFilters = new Map<string, ColumnFilter[]>()
 
+/** Ширины колонок — по вкладкам (id), как фильтры (novagrid-020). */
+const tabColWidths = new Map<string, ReadonlyMap<number, number>>()
+
 function historyOf(tabId: string): History {
   let h = histories.get(tabId)
   if (!h) {
@@ -455,6 +499,7 @@ function historyOf(tabId: string): History {
 function clearHistories(): void {
   histories.clear()
   tabFilters.clear()
+  tabColWidths.clear()
 }
 
 const initialTab = createTab(DEFAULT_SHEET_NAME)
@@ -503,10 +548,11 @@ export const gridStore = createStore<GridState>((set, get) => {
     patchSheet(next)
   }
 
-  /** Сохранить фильтры активной вкладки в её ячейку хранилища (перед сменой). */
+  /** Сохранить фильтры и ширины колонок активной вкладки (перед сменой). */
   const saveFilters = () => {
-    const { tabs, activeTab, filters } = get()
+    const { tabs, activeTab, filters, colWidths } = get()
     tabFilters.set(tabs[activeTab].id, filters)
+    tabColWidths.set(tabs[activeTab].id, colWidths ?? new Map())
   }
 
   /**
@@ -702,6 +748,8 @@ export const gridStore = createStore<GridState>((set, get) => {
     edit: null,
     altRange: null,
     filters: [],
+    colWidths: null,
+    sumPick: null,
     search: EMPTY_SEARCH,
     replace: EMPTY_REPLACE,
     fileName: null,
@@ -724,6 +772,8 @@ export const gridStore = createStore<GridState>((set, get) => {
         edit: null,
         altRange: null,
         filters: [],
+        colWidths: null,
+        sumPick: null,
         search: EMPTY_SEARCH,
         replace: EMPTY_REPLACE,
         fileName: meta?.fileName ?? null,
@@ -757,6 +807,7 @@ export const gridStore = createStore<GridState>((set, get) => {
       const i = Math.min(Math.max(index, 0), tabs.length - 1)
       if (get().edit) get().commitEdit('none')
       saveFilters()
+      const savedWidths = tabColWidths.get(tabs[i].id)
       set({
         activeTab: i,
         sheet: tabs[i].sheet,
@@ -764,6 +815,8 @@ export const gridStore = createStore<GridState>((set, get) => {
         edit: null,
         altRange: null,
         filters: tabFilters.get(tabs[i].id) ?? [],
+        colWidths: savedWidths && savedWidths.size > 0 ? savedWidths : null,
+        sumPick: null,
       })
       refreshSearch()
     },
@@ -785,6 +838,8 @@ export const gridStore = createStore<GridState>((set, get) => {
         edit: null,
         altRange: null,
         filters: [],
+        colWidths: null,
+        sumPick: null,
         dirty: true,
       })
       refreshSearch()
@@ -806,8 +861,10 @@ export const gridStore = createStore<GridState>((set, get) => {
       const next = tabs.filter((_, i) => i !== index)
       histories.delete(removed.id)
       tabFilters.delete(removed.id)
+      tabColWidths.delete(removed.id)
       const nextActive = index < activeTab ? activeTab - 1 : Math.min(activeTab, next.length - 1)
       if (get().edit) get().cancelEdit()
+      const savedWidths = tabColWidths.get(next[nextActive].id)
       set({
         tabs: next,
         activeTab: nextActive,
@@ -816,6 +873,8 @@ export const gridStore = createStore<GridState>((set, get) => {
         edit: null,
         altRange: null,
         filters: tabFilters.get(next[nextActive].id) ?? [],
+        colWidths: savedWidths && savedWidths.size > 0 ? savedWidths : null,
+        sumPick: null,
         dirty: true,
       })
       refreshSearch()
@@ -846,6 +905,8 @@ export const gridStore = createStore<GridState>((set, get) => {
       recalcSheet(copy.sheet)
       if (get().edit) get().commitEdit('none')
       saveFilters()
+      const copyWidths = new Map(tabColWidths.get(src.id) ?? [])
+      tabColWidths.set(copy.id, copyWidths)
       set({
         tabs: [...tabs.slice(0, index + 1), copy, ...tabs.slice(index + 1)],
         activeTab: index + 1,
@@ -854,6 +915,8 @@ export const gridStore = createStore<GridState>((set, get) => {
         edit: null,
         altRange: null,
         filters: [],
+        colWidths: copyWidths.size > 0 ? copyWidths : null,
+        sumPick: null,
         dirty: true,
       })
       refreshSearch()
@@ -999,7 +1062,11 @@ export const gridStore = createStore<GridState>((set, get) => {
 
     escape: () => {
       const { selection } = get()
-      set({ selection: selectionOf(selection.active.row, selection.active.col), altRange: null })
+      set({
+        selection: selectionOf(selection.active.row, selection.active.col),
+        altRange: null,
+        sumPick: null,
+      })
     },
 
     deleteSelection: () => {
@@ -1053,7 +1120,54 @@ export const gridStore = createStore<GridState>((set, get) => {
 
     setEditValue: (value) => {
       const { edit } = get()
-      if (edit) set({ edit: { ...edit, value } })
+      // ручной ввод сбрасывает жест указания — протяжка больше не заменит текст
+      if (edit) set({ edit: { ...edit, value, pointSpan: undefined, pointAnchor: undefined } })
+    },
+
+    setEditCaret: (caret) => {
+      const { edit } = get()
+      if (edit && edit.caret !== caret) set({ edit: { ...edit, caret } })
+    },
+
+    pointCell: (row, col, extend) => {
+      const { edit, selection } = get()
+      if (!edit) return
+      const name = cellRefName(row, col)
+      if (!extend) {
+        const caret = edit.caret ?? edit.value.length
+        const value = edit.value.slice(0, caret) + name + edit.value.slice(caret)
+        set({
+          edit: {
+            ...edit,
+            value,
+            caret: caret + name.length,
+            pointSpan: { start: caret, end: caret + name.length },
+            pointAnchor: { row, col },
+          },
+          selection: { active: selection.active, ranges: [{ fr: row, fc: col, tr: row, tc: col }] },
+        })
+        return
+      }
+      const span = edit.pointSpan
+      const anchor = edit.pointAnchor
+      if (!span || !anchor) return
+      const text =
+        anchor.row === row && anchor.col === col
+          ? name
+          : `${cellRefName(anchor.row, anchor.col)}:${name}`
+      const value = edit.value.slice(0, span.start) + text + edit.value.slice(span.end)
+      set({
+        edit: {
+          ...edit,
+          value,
+          caret: span.start + text.length,
+          pointSpan: { start: span.start, end: span.start + text.length },
+        },
+        selection: {
+          active: selection.active,
+          ranges: [{ fr: anchor.row, fc: anchor.col, tr: row, tc: col }],
+        },
+      })
     },
 
     commitEdit: (move) => {
@@ -1075,7 +1189,14 @@ export const gridStore = createStore<GridState>((set, get) => {
       refreshSearch()
     },
 
-    cancelEdit: () => set({ edit: null }),
+    cancelEdit: () => {
+      const { edit, selection } = get()
+      // после указания ссылок выделение-подсказка сворачивается к активной
+      set({
+        edit: null,
+        ...(edit ? { selection: selectionOf(selection.active.row, selection.active.col) } : {}),
+      })
+    },
 
     undo: () => {
       const state = get()
@@ -1124,6 +1245,52 @@ export const gridStore = createStore<GridState>((set, get) => {
     },
 
     setAltRange: (r) => set({ altRange: r }),
+
+    // ── ширины колонок / автосумма (novagrid-020) ────────────────────────
+    setColWidth: (col, width) => {
+      if (col < 0) return
+      const next = new Map(get().colWidths ?? [])
+      const clamped = Math.min(COL_W_MAX, Math.max(COL_W_MIN, Math.round(width)))
+      if (clamped === BASE_COL_W) next.delete(col)
+      else next.set(col, clamped)
+      set({ colWidths: next.size > 0 ? next : null })
+    },
+
+    startSumPick: () => {
+      if (get().edit) get().commitEdit('none')
+      const { selection } = get()
+      set({ sumPick: { row: selection.active.row, col: selection.active.col } })
+    },
+
+    applySumPick: () => {
+      const st = get()
+      if (!st.sumPick) return
+      const target = st.sumPick
+      const parts = st.selection.ranges
+        .map((rg) => normalize(rg))
+        // одиночную область «сам на себя» пропускаем — не даём =SUM(D1) в D1
+        .filter((n) => !(n.r1 === target.row && n.c1 === target.col && n.r2 === n.r1 && n.c2 === n.c1))
+        .map((n) =>
+          n.r1 === n.r2 && n.c1 === n.c2
+            ? cellRefName(n.r1, n.c1)
+            : `${cellRefName(n.r1, n.c1)}:${cellRefName(n.r2, n.c2)}`,
+        )
+      if (parts.length === 0) return // клик по самой ячейке-приёмнику — режим ждёт дальше
+      const formula = `=SUM(${parts.join(';')})`
+      const before = getCell(st.sheet, target.row, target.col)
+      if (before !== formula) {
+        const changes: CellChange[] = [{ row: target.row, col: target.col, before, after: formula }]
+        historyOf(st.tabs[st.activeTab].id).push({ label: 'autosum', changes })
+        commitSheet(st.sheet, applyChanges(st.sheet, changes, 'after'), changes)
+        set({ dirty: true })
+      }
+      set({ sumPick: null, selection: selectionOf(target.row, target.col) })
+      refreshSearch()
+    },
+
+    cancelSumPick: () => {
+      if (get().sumPick) set({ sumPick: null })
+    },
 
     // ── фильтры (Ф3) ────────────────────────────────────────────────────
     setColumnFilter: (filter) => {

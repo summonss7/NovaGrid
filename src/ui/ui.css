@@ -1031,6 +1031,17 @@
 .sum-zone {
   position: relative; /* якорь для карточки метрик и живой суммы */
   display: inline-flex;
+  align-items: center;
+}
+
+/* шеврон рядом с Σ: карточка метрик выделения (novagrid-020) */
+.toolbar-sum-metrics {
+  margin-left: 2px;
+}
+
+/* Σ ждёт выбора ячеек — акцентная подсказка в статус-баре (novagrid-020) */
+.status-sum-pick {
+  color: var(--nv-accent-deep, #c95510);
 }
 
 .sum-live {

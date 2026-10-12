@@ -182,6 +182,145 @@ test.describe('строка формул (4.3): показ и живое ред�
   })
 })
 
+test.describe('режим указания: «=» + клики по ячейкам (novagrid-020)', () => {
+  test.beforeEach(async ({ page }) => {
+    await openDemoBook(page)
+  })
+
+  test('= → клик C2 → «-» → клик C3 → Enter: формула собралась кликами и считает', async ({
+    page,
+  }) => {
+    const api = nv(page)
+    const target = await api.cellCenter(0, 3)
+    await page.mouse.click(target.x, target.y)
+    await page.keyboard.type('=')
+    const editor = page.locator('.grid-editor')
+    await expect(editor).toBeVisible()
+
+    const c2 = await api.cellCenter(1, 2)
+    const c3 = await api.cellCenter(2, 2)
+    await page.mouse.click(c2.x, c2.y) // =C2
+    await expect(editor).toHaveValue('=C2')
+    await page.keyboard.type('-') // фокус остался в редакторе
+    await page.mouse.click(c3.x, c3.y) // =C2-C3
+    await expect(editor).toHaveValue('=C2-C3')
+    await page.keyboard.press('Enter')
+
+    const info = await api.formulaInfo(0, 3)
+    expect(info?.source).toBe('=C2-C3')
+    expect(info?.display).toBe(String(Number(await api.cell(1, 2)) - Number(await api.cell(2, 2))))
+    expect(info?.error).toBeNull()
+  })
+
+  test('протяжка от ячейки вставляет диапазон =SUM(C2:C4)', async ({ page }) => {
+    const api = nv(page)
+    const target = await api.cellCenter(1, 3)
+    await page.mouse.click(target.x, target.y)
+    // скобки сразу, каретка между ними — протяжка вставит диапазон внутрь
+    await page.keyboard.type('=SUM()')
+    await page.keyboard.press('ArrowLeft')
+    const editor = page.locator('.grid-editor')
+    await expect(editor).toBeVisible()
+
+    const c2 = await api.cellCenter(1, 2)
+    const c4 = await api.cellCenter(3, 2)
+    await page.mouse.move(c2.x, c2.y)
+    await page.mouse.down()
+    await page.mouse.move(c4.x, c4.y, { steps: 5 })
+    await page.mouse.up()
+    await expect(editor).toHaveValue('=SUM(C2:C4)')
+    await page.keyboard.press('Enter')
+    const expected = (await Promise.all([api.cell(1, 2), api.cell(2, 2), api.cell(3, 2)]))
+      .map(Number)
+      .reduce((a, b) => a + b, 0)
+    expect((await api.formulaInfo(1, 3))?.display).toBe(String(expected))
+  })
+
+  test('указание из строки формул: клик по ячейке вставляет адрес и в неё', async ({ page }) => {
+    const api = nv(page)
+    const target = await api.cellCenter(0, 4)
+    await page.mouse.click(target.x, target.y)
+    const bar = page.locator('.formula-input')
+    await bar.click()
+    await bar.fill('=')
+    await page.keyboard.press('Escape') // попап подсказок не должен ловить клик
+    const c2 = await api.cellCenter(1, 2)
+    await page.mouse.click(c2.x, c2.y)
+    await expect(bar).toHaveValue('=C2')
+    await bar.press('Enter')
+    expect((await api.formulaInfo(0, 4))?.display).toBe(await api.cell(1, 2))
+  })
+
+  test('Esc отменяет указание, клик мимо формулы работает как раньше', async ({ page }) => {
+    const api = nv(page)
+    const target = await api.cellCenter(0, 9) // свободная J1 демо-книги
+    await page.mouse.click(target.x, target.y)
+    await page.keyboard.type('=C2+') // незавершённая формула
+    await page.keyboard.press('Escape') // отмена правки
+    const b2 = await api.cellCenter(1, 1)
+    await page.mouse.click(b2.x, b2.y)
+    expect(await api.activeRef()).toBe('B2')
+    expect(await api.cell(0, 9)).toBe('')
+  })
+})
+
+test.describe('автосумма Σ: стоя на ячейке → выбрать ячейки → =СУММ (novagrid-020)', () => {
+  test.beforeEach(async ({ page }) => {
+    await openDemoBook(page)
+  })
+
+  test('Σ → протяжка C2:C4 → в ячейку-приёмник вставляется =SUM и считает', async ({ page }) => {
+    const api = nv(page)
+    const target = await api.cellCenter(0, 3) // стоим на D1
+    await page.mouse.click(target.x, target.y)
+    await page.getByRole('button', { name: 'Автосумма' }).click()
+    await expect(page.locator('.status-sum-pick')).toContainText('D1')
+
+    const c2 = await api.cellCenter(1, 2)
+    const c4 = await api.cellCenter(3, 2)
+    await page.mouse.move(c2.x, c2.y)
+    await page.mouse.down()
+    await page.mouse.move(c4.x, c4.y, { steps: 5 })
+    await page.mouse.up()
+
+    const info = await api.formulaInfo(0, 3)
+    expect(info?.source).toBe('=SUM(C2:C4)')
+    const expected = (await Promise.all([api.cell(1, 2), api.cell(2, 2), api.cell(3, 2)]))
+      .map(Number)
+      .reduce((a, b) => a + b, 0)
+    expect(info?.display).toBe(String(expected))
+    expect(await api.activeRef()).toBe('D1') // остались на ячейке-приёмнике
+  })
+
+  test('Σ + клавиатура: стрелки и Shift+стрелки, Enter применяет; Esc отменяет', async ({
+    page,
+  }) => {
+    const api = nv(page)
+    const target = await api.cellCenter(0, 3)
+    await page.mouse.click(target.x, target.y)
+    await page.getByRole('button', { name: 'Автосумма' }).click()
+
+    // без мыши: перейти на C1, расширить до C1:C2, Enter (С1 — текст шапки,
+    // SUM его игнорирует, считается только C2)
+    await page.keyboard.press('ArrowLeft')
+    await page.keyboard.press('Shift+ArrowDown')
+    await page.keyboard.press('Enter')
+    const info = await api.formulaInfo(0, 3)
+    expect(info?.source).toBe('=SUM(C1:C2)')
+    expect(info?.display).toBe(await api.cell(1, 2))
+
+    // Esc до выбора — режим снимается, клики просто выделяют
+    const other = await api.cellCenter(1, 4)
+    await page.mouse.click(other.x, other.y)
+    await page.getByRole('button', { name: 'Автосумма' }).click()
+    await page.keyboard.press('Escape')
+    await expect(page.locator('.status-sum-pick')).toBeHidden()
+    const c3 = await api.cellCenter(2, 2)
+    await page.mouse.click(c3.x, c3.y)
+    expect(await api.cell(1, 4)).toBe('')
+  })
+})
+
 test.describe('автодополнение (4.4)', () => {
   test.beforeEach(async ({ page }) => {
     await openDemoBook(page)

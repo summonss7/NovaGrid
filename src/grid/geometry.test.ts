@@ -3,6 +3,7 @@ import {
   cellAtPoint,
   cellRect,
   cellRefName,
+  colLayoutOf,
   colName,
   scrollIntoView,
   totalSize,
@@ -90,5 +91,60 @@ describe('geometry: координаты', () => {
     // уже видима — не трогаем прокрутку
     const stay = scrollIntoView(1, 1, 0, 0, 800, 600)
     expect(stay).toEqual({ scrollX: 0, scrollY: 0 })
+  })
+})
+
+describe('geometry: переменные ширины колонок (novagrid-020)', () => {
+  const widths = new Map([
+    [0, 200], // A вдвое шире стандарта
+    [2, 48], // C вдвое уже
+  ])
+
+  it('равномерная раскладка без переопределений считает как раньше', () => {
+    const lay = colLayoutOf(26, null)
+    expect(lay.x0(3)).toBe(3 * 96)
+    expect(lay.width(5)).toBe(96)
+    expect(lay.totalW).toBe(26 * 96)
+    expect(lay.colAt(250)).toBe(2)
+  })
+
+  it('переопределения меняют x0/width/totalW, соседние — по дефолту', () => {
+    const lay = colLayoutOf(26, widths)
+    expect(lay.width(0)).toBe(200)
+    expect(lay.x0(1)).toBe(200)
+    expect(lay.width(1)).toBe(96)
+    expect(lay.width(2)).toBe(48)
+    expect(lay.x0(3)).toBe(200 + 96 + 48)
+    expect(lay.width(3)).toBe(96)
+    expect(lay.totalW).toBe(26 * 96 + (200 - 96) + (48 - 96))
+  })
+
+  it('colAt находит колонку по точке внутри переопределённых границ', () => {
+    const lay = colLayoutOf(26, widths)
+    expect(lay.colAt(199)).toBe(0)
+    expect(lay.colAt(200)).toBe(1)
+    expect(lay.colAt(343.9)).toBe(2) // 296..344 — узкая C
+    expect(lay.colAt(344)).toBe(3) // граница принадлежит правой колонке
+    expect(lay.colAt(-1)).toBe(-1)
+  })
+
+  it('cellRect/cellAtPoint/totalSize учитывают ширины', () => {
+    const lay = colLayoutOf(26, widths)
+    const r = cellRect(0, 3, 0, 0, undefined, lay)
+    expect(r.x).toBe(44 + 200 + 96 + 48)
+    expect(r.w).toBe(96)
+    // точка внутри узкой колонки C попадает в неё же и обратно
+    const hit = cellAtPoint(44 + 300, 40, 0, 0, undefined, lay)
+    expect(hit?.col).toBe(2)
+    expect(cellAtPoint(r.x + r.w / 2, r.y + r.h / 2, 0, 0, undefined, lay)?.col).toBe(3)
+    expect(totalSize(100, 26, undefined, lay).w).toBe(44 + lay.totalW)
+  })
+
+  it('visible находит колонки вьюпорта с переменными границами', () => {
+    const lay = colLayoutOf(26, widths)
+    // вьюпорт от 200 (начало B) шириной 192 → B и C, D начинается на 344
+    const v = lay.visible(192, 200)
+    expect(v.first).toBe(1)
+    expect(v.last).toBe(3)
   })
 })

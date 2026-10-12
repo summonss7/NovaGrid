@@ -30,18 +30,29 @@ import { ColumnMenu } from '../ui/ColumnMenu'
 import {
   cellAtPoint,
   cellRect,
+  colLayoutOf,
   METRICS,
   rowLayoutOf,
   scrollIntoView,
   totalSize,
   zoomOf,
+  type ColLayout,
   type RowLayout,
 } from './geometry'
 import { zoomStore } from './zoom'
 import { drawGrid, themeFromCSS, type GridTheme, type VisibleRegion } from './renderer'
 import { installTestHook } from './testHook'
 
-type DragMode = 'select' | 'alt' | null
+type DragMode = 'select' | 'alt' | 'point' | 'colresize' | null
+
+/** Захват границы колонки для перетаскивания ширины (novagrid-020). */
+interface ColResizeState {
+  col: number
+  startX: number
+  startW: number
+}
+
+const RESIZE_GRIP = 5 // половина зоны захвата границы колонки (CSS px)
 
 interface AltLabel {
   x: number
@@ -76,6 +87,9 @@ export function GridCanvas() {
   const themeRef = useRef<GridTheme | null>(null)
   const dragModeRef = useRef<DragMode>(null)
   const altAnchorRef = useRef<{ row: number; col: number } | null>(null)
+  const colResizeRef = useRef<ColResizeState | null>(null)
+  /** Σ ждёт выбора диапазона — клик/протяжка по ячейке применит =SUM (novagrid-020) */
+  const sumPickArmedRef = useRef(false)
   const lastActiveRef = useRef('')
   const regionRef = useRef<VisibleRegion | null>(null)
   const rafRef = useRef(0)
@@ -106,6 +120,7 @@ export function GridCanvas() {
   const filters = useStore(gridStore, (s) => s.filters)
   const rows = useStore(gridStore, (s) => s.sheet.rows)
   const cols = useStore(gridStore, (s) => s.sheet.cols)
+  const colWidths = useStore(gridStore, (s) => s.colWidths)
 
   // ── раскладка строк (фильтры) ─────────────────────────────────────────
   // sheet и filters иммутабельны по ссылке — кэш пересчитывается только
@@ -123,6 +138,26 @@ export function GridCanvas() {
     return layout
   }
   const layout = layoutFor(sheet, filters)
+
+  // ── раскладка колонок (переменные ширины, novagrid-020) ───────────────
+  // cache key включает METRICS.colW — он меняется вместе с зумом
+  const colsRef = useRef<{
+    count: number
+    widths: ReadonlyMap<number, number> | null
+    metricW: number
+    layout: ColLayout
+  } | null>(null)
+  const colsLayoutFor = (
+    count: number,
+    widths: ReadonlyMap<number, number> | null,
+  ): ColLayout => {
+    const cur = colsRef.current
+    if (cur && cur.count === count && cur.widths === widths && cur.metricW === METRICS.colW)
+      return cur.layout
+    const colLayout = colLayoutOf(count, widths)
+    colsRef.current = { count, widths, metricW: METRICS.colW, layout: colLayout }
+    return colLayout
+  }
 
   // ── рендер ────────────────────────────────────────────────────────────
   const draw = () => {
@@ -145,6 +180,7 @@ export function GridCanvas() {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     const state = gridStore.getState()
     const lay = layoutFor(state.sheet, state.filters)
+    const colLay = colsLayoutFor(state.sheet.cols, state.colWidths)
     const hit = state.search.hits[state.search.index]
     regionRef.current = drawGrid({
       ctx,
@@ -154,6 +190,7 @@ export function GridCanvas() {
       scrollY: scrollEl.scrollTop,
       sheet: state.sheet,
       layout: lay,
+      cols: colLay,
       selection: state.selection,
       edit: state.edit,
       altRange: state.altRange,
@@ -178,33 +215,44 @@ export function GridCanvas() {
     const spacer = spacerRef.current
     if (!spacer) return
     const st = gridStore.getState()
-    const size = totalSize(layoutFor(st.sheet, st.filters).count, st.sheet.cols)
+    const size = totalSize(
+      layoutFor(st.sheet, st.filters).count,
+      st.sheet.cols,
+      undefined,
+      colsLayoutFor(st.sheet.cols, st.colWidths),
+    )
     spacer.style.width = `${size.w}px`
     spacer.style.height = `${size.h}px`
   }
 
   /**
    * Зум с якорем: точка таблицы под якорем (координаты вьюпорта грида)
-   * остаётся под ним и после смены масштаба. Математика по СТАРОМУ масштабу
-   * идёт до setZoom, установка прокрутки — после (и после resize спейсера,
-   * иначе браузер ограничит scroll старым максимумом).
+   * остаётся под ним и после смены масштаба. Все ширины (и дефолтная, и
+   * переопределённые) масштабируются линейно с зумом, поэтому точка
+   * контента просто умножается на отношение уровней. Прокрутка ставится
+   * после setZoom и resize спейсера — иначе браузер ограничит scroll
+   * старым максимумом.
    */
   const applyZoomAnchored = (next: number, anchor?: { x: number; y: number }) => {
     const el = scrollRef.current
     if (!el) return
-    let mx: number | null = null
-    let my: number | null = null
+    const before = zoomOf()
+    let contentX: number | null = null
+    let contentY: number | null = null
     if (anchor) {
-      const cx = anchor.x - METRICS.rowHeaderW + el.scrollLeft
-      const cy = anchor.y - METRICS.headerH + el.scrollTop
-      if (cx > 0) mx = cx / METRICS.colW
-      if (cy > 0) my = cy / METRICS.rowH
+      const ax = anchor.x - METRICS.rowHeaderW
+      const ay = anchor.y - METRICS.headerH
+      if (ax > 0) contentX = ax + el.scrollLeft
+      if (ay > 0) contentY = ay + el.scrollTop
     }
     zoomStore.getState().setZoom(next)
     resizeSpacer()
-    if (anchor) {
-      if (mx !== null) el.scrollLeft = Math.max(0, mx * METRICS.colW - (anchor.x - METRICS.rowHeaderW))
-      if (my !== null) el.scrollTop = Math.max(0, my * METRICS.rowH - (anchor.y - METRICS.headerH))
+    if (anchor && (contentX !== null || contentY !== null)) {
+      const ratio = zoomOf() / before
+      if (contentX !== null)
+        el.scrollLeft = Math.max(0, contentX * ratio - (anchor.x - METRICS.rowHeaderW))
+      if (contentY !== null)
+        el.scrollTop = Math.max(0, contentY * ratio - (anchor.y - METRICS.headerH))
     }
   }
   // нативные слушатели (wheel) живут в mount-эффекте — им нужен актуальный
@@ -252,6 +300,8 @@ export function GridCanvas() {
       el.scrollTop,
       main.clientWidth,
       main.clientHeight,
+      undefined,
+      colsLayoutFor(st.sheet.cols, st.colWidths),
     )
     if (target.scrollX !== el.scrollLeft) el.scrollLeft = target.scrollX
     if (target.scrollY !== el.scrollTop) el.scrollTop = target.scrollY
@@ -265,7 +315,14 @@ export function GridCanvas() {
     const st = gridStore.getState()
     const lay = layoutFor(st.sheet, st.filters)
     const i = Math.max(0, lay.indexOf(editState.row))
-    const r = cellRect(i, editState.col, el.scrollLeft, el.scrollTop)
+    const r = cellRect(
+      i,
+      editState.col,
+      el.scrollLeft,
+      el.scrollTop,
+      undefined,
+      colsLayoutFor(st.sheet.cols, st.colWidths),
+    )
     input.style.left = `${r.x - 1}px`
     input.style.top = `${r.y - 1}px`
   }
@@ -281,6 +338,10 @@ export function GridCanvas() {
       layout: () => {
         const st = gridStore.getState()
         return layoutFor(st.sheet, st.filters)
+      },
+      cols: () => {
+        const st = gridStore.getState()
+        return colsLayoutFor(st.sheet.cols, st.colWidths)
       },
     })
 
@@ -336,7 +397,8 @@ export function GridCanvas() {
   }, [])
 
   // фокус и каретка при старте правки: каретка в конец — продолжение ввода
-  // дописывает (как в Excel: первый символ замены уже вошёл в значение)
+  // дописывает (как в Excel: первый символ замены уже вошёл в значение);
+  // после вставки ссылки кликом каретка встаёт за ней (novagrid-020)
   useEffect(() => {
     const input = editorRef.current
     const editState = gridStore.getState().edit
@@ -344,6 +406,14 @@ export function GridCanvas() {
     input.focus({ preventScroll: true })
     input.setSelectionRange(input.value.length, input.value.length)
   }, [edit?.row, edit?.col, edit?.mode])
+
+  useEffect(() => {
+    const input = editorRef.current
+    const editState = gridStore.getState().edit
+    if (!input || !editState) return
+    if (editState.pointSpan && editState.caret !== undefined)
+      input.setSelectionRange(editState.caret, editState.caret)
+  }, [cellEdit?.pointSpan?.start, cellEdit?.pointSpan?.end, cellEdit?.value])
 
   // ── мышь и тач ────────────────────────────────────────────────────────
   const localPoint = (clientX: number, clientY: number) => {
@@ -357,7 +427,14 @@ export function GridCanvas() {
     const st = gridStore.getState()
     const lay = layoutFor(st.sheet, st.filters)
     if (lay.count === 0) return null
-    const hit = cellAtPoint(x, y, el.scrollLeft, el.scrollTop)
+    const hit = cellAtPoint(
+      x,
+      y,
+      el.scrollLeft,
+      el.scrollTop,
+      undefined,
+      colsLayoutFor(st.sheet.cols, st.colWidths),
+    )
     if (!hit) return null
     const visualRow = Math.min(hit.row, lay.count - 1)
     return {
@@ -366,6 +443,27 @@ export function GridCanvas() {
       visualRow,
       row: hit.kind === 'cell' || hit.kind === 'rowHeader' ? lay.rowAt(visualRow) : visualRow,
     }
+  }
+
+  /**
+   * Граница колонки под точкой вьюпорта (для перетаскивания ширины):
+   * возвращается колонка, ЧЬЯ ширина меняется — та, что левее границы.
+   * null — точка не у границы.
+   */
+  const colBorderAt = (x: number): { col: number; width: number } | null => {
+    const el = scrollRef.current
+    if (!el) return null
+    const st = gridStore.getState()
+    const colLay = colsLayoutFor(st.sheet.cols, st.colWidths)
+    const contentX = x - METRICS.rowHeaderW + el.scrollLeft
+    const c = colLay.colAt(contentX)
+    if (c < 0) return null
+    const left = colLay.x0(c)
+    if (contentX - left <= RESIZE_GRIP && c > 0)
+      return { col: c - 1, width: colLay.width(c - 1) }
+    if (left + colLay.width(c) - contentX <= RESIZE_GRIP && c < st.sheet.cols - 1)
+      return { col: c, width: colLay.width(c) }
+    return null
   }
 
   const updateAltLabel = (clientX: number, clientY: number) => {
@@ -441,34 +539,67 @@ export function GridCanvas() {
     // pointerdown из всплывающих меню/панелей не должен попадать в грид:
     // иначе setPointerCapture уведёт у кнопки меню её click
     if (
-      (e.target as HTMLElement).closest('.ctx-menu, .col-menu, .search-panel, .sum-card, .tab-menu')
+      (e.target as HTMLElement).closest(
+        '.ctx-menu, .col-menu, .search-panel, .sum-card, .tab-menu, .assist-popup',
+      )
     )
       return
     const { x, y } = localPoint(e.clientX, e.clientY)
     const hit = cellFromPoint(x, y)
     if (!hit || hit.kind === 'corner') return
     const isTouch = e.pointerType === 'touch'
+    const st = gridStore.getState()
+    const sumArmed = () => {
+      if (st.sumPick) sumPickArmedRef.current = true
+    }
 
     if (hit.kind === 'colHeader') {
       mainRef.current?.focus({ preventScroll: true })
+      // перетаскивание границы колонок — изменение ширины (novagrid-020);
+      // зона захвата у края важнее кнопки ▾, как в Excel
+      const border = isTouch ? null : colBorderAt(x)
+      if (border) {
+        e.preventDefault()
+        mainRef.current?.setPointerCapture(e.pointerId)
+        dragModeRef.current = 'colresize'
+        colResizeRef.current = { col: border.col, startX: e.clientX, startW: border.width }
+        if (mainRef.current) mainRef.current.style.cursor = 'col-resize'
+        return
+      }
       // зона кнопки меню в правой части заголовка (▾ / воронка) — Ф3.7
       const scrollEl = scrollRef.current
       const scrollX = scrollEl?.scrollLeft ?? 0
-      const headerRight = METRICS.rowHeaderW + (hit.col + 1) * METRICS.colW - scrollX
+      const colLay = colsLayoutFor(st.sheet.cols, st.colWidths)
+      const headerRight = METRICS.rowHeaderW + colLay.x0(hit.col) + colLay.width(hit.col) - scrollX
       if (x > headerRight - 26) {
         setColMenu({ col: hit.col, x: e.clientX, y: e.clientY })
         return
       }
       gridStore.getState().selectCol(hit.col)
+      sumArmed()
       if (isTouch) startLongPress(e.clientX, e.clientY, 'colHeader', hit.col)
       return
     }
     if (hit.kind === 'rowHeader') {
       mainRef.current?.focus({ preventScroll: true })
       gridStore.getState().selectRow(hit.row)
+      sumArmed()
       return
     }
+
+    // формульное указание (novagrid-020): клик по ячейке во время правки
+    // «=…» вставляет её адрес в формулу на месте каретки; preventDefault
+    // удерживает фокус в редакторе — правка не фиксируется (как в Excel)
+    if (!isTouch && st.edit && st.edit.value.trimStart().startsWith('=')) {
+      e.preventDefault()
+      mainRef.current?.setPointerCapture(e.pointerId)
+      dragModeRef.current = 'point'
+      st.pointCell(hit.row, hit.col, false)
+      return
+    }
+
     mainRef.current?.focus({ preventScroll: true })
+    sumArmed()
 
     if (isTouch) {
       // касание-выделение (5.3); перетаскивание от уже активной ячейки
@@ -548,18 +679,44 @@ export function GridCanvas() {
     if (lo && Math.hypot(e.clientX - lo.x, e.clientY - lo.y) > LONG_PRESS_SLOP) clearLongPress()
 
     const mode = dragModeRef.current
+
+    // перетаскивание ширины колонки (novagrid-020): ширина хранится в
+    // базовых единицах (зум 100 %) — текущая делится на уровень зума
+    if (mode === 'colresize') {
+      const r = colResizeRef.current
+      if (r) {
+        const dx = e.clientX - r.startX
+        gridStore.getState().setColWidth(r.col, (r.startW + dx) / zoomOf())
+        resizeSpacer()
+        positionEditor()
+        scheduleDraw()
+      }
+      return
+    }
+
+    // курсор-подсказка у границы колонки в шапке
+    if (!mode && e.pointerType !== 'touch') {
+      const el = mainRef.current
+      if (el) {
+        const { x, y } = localPoint(e.clientX, e.clientY)
+        const want = y >= 0 && y < METRICS.headerH && colBorderAt(x) !== null ? 'col-resize' : ''
+        if (el.style.cursor !== want) el.style.cursor = want
+      }
+    }
     if (!mode) return
+
     const { x, y } = localPoint(e.clientX, e.clientY)
     const hit = cellFromPoint(x, y)
     if (hit && hit.kind === 'cell') {
       if (mode === 'select') gridStore.getState().dragTo(hit.row, hit.col)
+      else if (mode === 'point') gridStore.getState().pointCell(hit.row, hit.col, true)
       else {
         const a = altAnchorRef.current
         if (a) gridStore.getState().setAltRange({ fr: a.row, fc: a.col, tr: hit.row, tc: hit.col })
         updateAltLabel(e.clientX, e.clientY)
       }
     }
-    if (mode === 'select') autoScrollDuringDrag(x, y)
+    if (mode === 'select' || mode === 'point') autoScrollDuringDrag(x, y)
   }
 
   const endTouchPointer = (pointerId: number) => {
@@ -575,11 +732,27 @@ export function GridCanvas() {
       gridStore.getState().setAltRange(null)
       setAltLabel(null)
     }
+    if (dragModeRef.current === 'colresize') {
+      colResizeRef.current = null
+      if (mainRef.current) mainRef.current.style.cursor = ''
+    }
     dragModeRef.current = null
+    // Σ ждала выбора ячеек — отпускание после клика/протяжки применяет
+    // =SUM в ячейку-приёмник (novagrid-020)
+    if (sumPickArmedRef.current) {
+      sumPickArmedRef.current = false
+      const st = gridStore.getState()
+      if (st.sumPick) st.applySumPick()
+    }
   }
 
   const onPointerCancel = (e: React.PointerEvent<HTMLElement>) => {
     if (e.pointerType === 'touch') endTouchPointer(e.pointerId)
+    if (dragModeRef.current === 'colresize') {
+      colResizeRef.current = null
+      if (mainRef.current) mainRef.current.style.cursor = ''
+    }
+    sumPickArmedRef.current = false
     dragModeRef.current = null
   }
 
@@ -626,6 +799,12 @@ export function GridCanvas() {
         e.preventDefault()
         return
       case 'Enter':
+        // Σ ждёт диапазон с клавиатуры (Shift+стрелки) — Enter применяет
+        if (st.sumPick) {
+          st.applySumPick()
+          e.preventDefault()
+          return
+        }
         st.moveActive(e.shiftKey ? -1 : 1, 0)
         e.preventDefault()
         return
@@ -647,7 +826,14 @@ export function GridCanvas() {
             const lay = layoutFor(st.sheet, st.filters)
             const i = lay.indexOf(active.row)
             if (i >= 0) {
-              const r = cellRect(i, active.col, el.scrollLeft, el.scrollTop)
+              const r = cellRect(
+                i,
+                active.col,
+                el.scrollLeft,
+                el.scrollTop,
+                undefined,
+                colsLayoutFor(st.sheet.cols, st.colWidths),
+              )
               const rect = main.getBoundingClientRect()
               setCtxMenu({
                 row: active.row,
@@ -771,11 +957,18 @@ export function GridCanvas() {
     const el = scrollRef.current
     if (!edit || !el) return undefined
     const i = Math.max(0, layout.indexOf(edit.row))
-    const r = cellRect(i, edit.col, el.scrollLeft, el.scrollTop)
+    const r = cellRect(
+      i,
+      edit.col,
+      el.scrollLeft,
+      el.scrollTop,
+      undefined,
+      colsLayoutFor(cols, colWidths),
+    )
     return { left: r.x - 1, top: r.y - 1, width: r.w + 1, height: r.h + 1 }
   })()
 
-  const size = totalSize(layout.count, cols)
+  const size = totalSize(layout.count, cols, undefined, colsLayoutFor(cols, colWidths))
 
   return (
     <main
@@ -806,9 +999,13 @@ export function GridCanvas() {
           value={cellEdit.value}
           onChange={(e) => {
             gridStore.getState().setEditValue(e.target.value)
+            gridStore.getState().setEditCaret(e.target.selectionStart ?? 0)
             assist.sync(e.target.selectionStart ?? 0)
           }}
-          onSelect={(e) => assist.sync(e.currentTarget.selectionStart ?? 0)}
+          onSelect={(e) => {
+            gridStore.getState().setEditCaret(e.currentTarget.selectionStart ?? 0)
+            assist.sync(e.currentTarget.selectionStart ?? 0)
+          }}
           onKeyDown={onEditorKeyDown}
           onBlur={onEditorBlur}
           aria-label={t.cellEditorLabel}

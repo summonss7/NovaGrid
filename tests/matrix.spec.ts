@@ -94,12 +94,45 @@ test.describe('@mobile Android-эмуляция Pixel 7 (6.4)', () => {
       .poll(() => page.evaluate(() => window.__nv!.visibleRows()?.length ?? -1))
       .toBe(180) // один фильтр: все «Иванов»
 
-    // нижняя панель: Σ открывает карточку метрик (5.2); числовая точность
-    // Σ проверена десктоп-сценарием КТ-3 — здесь важен сам тач-путь
+    // нижняя панель: Σ — автосумма касанием (novagrid-020): стоим на B2
+    // (первая видимая строка — шапка скрыта фильтром), жмём Σ, касаемся C2 —
+    // в B2 вставляется =SUM(C2) с подсказкой в статус-баре
+    const tapAt = (p: { x: number; y: number }) =>
+      page.evaluate(({ x, y }) => {
+        const el = document.elementFromPoint(x, y)!
+        el.dispatchEvent(
+          new PointerEvent('pointerdown', {
+            pointerType: 'touch',
+            button: 0,
+            clientX: x,
+            clientY: y,
+            bubbles: true,
+            isPrimary: true,
+          }),
+        )
+        el.dispatchEvent(
+          new PointerEvent('pointerup', {
+            pointerType: 'touch',
+            button: 0,
+            clientX: x,
+            clientY: y,
+            bubbles: true,
+            isPrimary: true,
+          }),
+        )
+      }, p)
+    const b2 = await cellCenter(page, 1, 1)
+    await tapAt(b2)
     await page.locator('.mobile-bar-sum').tap()
-    const card = page.locator('.sum-card')
-    await expect(card).toBeVisible()
-    await expect(card).toContainText('Сумма')
+    await expect(page.locator('.status-sum-pick')).toContainText('B2')
+    const c2 = await cellCenter(page, 1, 2)
+    await tapAt(c2)
+    await expect
+      .poll(() => page.evaluate(() => window.__nv!.cell(1, 1)))
+      .toBe('=SUM(C2)')
+    await expect
+      .poll(() => page.evaluate(() => window.__nv!.cellText(1, 1)))
+      .toBe(await page.evaluate(() => window.__nv!.cell(1, 2)))
 
     expect(Date.now() - t0).toBeLessThan(60_000) // КТ-5: Android < 1 минуты
   })
