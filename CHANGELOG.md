@@ -1089,3 +1089,7 @@ Deploy to GitHub Pages ран 38018213931 success (шаги деплоя кор�
   и кодом (rfd-фильтры), GUI-автоматизации rfd не делалось.
 - Бэкап до изменений: backups/NovaGrid-backup-2026-10-12_173034.zip.
 - Коммит: см. ниже (feat(novagrid-019) + отчётный).
+  - Дополнено (18:16): CI на GitHub зелёный на push 2bdf60f (ран 38267139646),
+    Deploy to GitHub Pages — success (ран 38267139530): веб-версия v1.8.0
+    опубликована. Релизное уведомление отправлено в Aila «Хаб ИИ»
+    (id ai_novagrid_019_release_20261012).
