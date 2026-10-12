@@ -41,6 +41,7 @@ import {
   withCell,
 } from './sheet'
 import { applyFormulaChanges, cellNumber, recalcSheet } from '../formula/engine'
+import { parseClipboardTsv } from './copy'
 import { BASE_COL_W, COL_W_MAX, COL_W_MIN, cellRefName } from '../grid/geometry'
 // метрики выделения (6.1) агрегируются потоком; sum/average из ./stats
 // остаются для движка формул и юнит-тестов
@@ -232,6 +233,12 @@ export interface GridState {
   selectRow: (row: number) => void
   /** Delete/Backspace — очистить ячейки выделения (одна транзакция истории) */
   deleteSelection: () => void
+  /**
+   * Вставка TSV из системного буфера (novagrid-025): блок пишется от активной
+   * ячейки, границы листа растут, одна транзакция истории; выделение
+   * накрывает вставленный блок.
+   */
+  pasteText: (text: string) => void
   beginEdit: (initial?: string) => void
   /** правка активной ячейки из строки формул (4.3) */
   beginBarEdit: () => void
@@ -1086,6 +1093,35 @@ export const gridStore = createStore<GridState>((set, get) => {
       historyOf(tabs[activeTab].id).push({ label: 'clear', changes })
       commitSheet(sheet, applyChanges(sheet, changes, 'after'), changes)
       set({ dirty: true })
+      refreshSearch()
+    },
+
+    pasteText: (text) => {
+      const grid = parseClipboardTsv(text)
+      if (grid.length === 0) return
+      const state = get()
+      const { sheet, selection, activeTab, tabs } = state
+      const { row, col } = selection.active
+      const changes: CellChange[] = []
+      grid.forEach((cells, dr) =>
+        cells.forEach((v, dc) => {
+          const r = row + dr
+          const c = col + dc
+          const before = getCell(sheet, r, c)
+          if (before !== v) changes.push({ row: r, col: c, before, after: v })
+        }),
+      )
+      if (changes.length > 0) {
+        historyOf(tabs[activeTab].id).push({ label: 'paste', changes })
+        commitSheet(sheet, applyChanges(sheet, changes, 'after'), changes)
+        set({ dirty: true })
+      }
+      // выделение накрывает вставленный блок — видно, что и куда легло (как Excel)
+      const lastRow = row + grid.length - 1
+      const lastCol = col + Math.max(...grid.map((cells) => cells.length)) - 1
+      set({
+        selection: { active: { row, col }, ranges: [{ fr: row, fc: col, tr: lastRow, tc: lastCol }] },
+      })
       refreshSearch()
     },
 

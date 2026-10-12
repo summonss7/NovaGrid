@@ -144,6 +144,28 @@ export default function App() {
   /** Переоткрытие файла из «Недавних» (novagrid-022): путь / FSA-хэндл / снимок. */
   const openRecent = useCallback(
     async (row: OpeningRow) => {
+      // книга уже на экране (десктоп) — не заменяем её, файл в новое окно
+      // (novagrid-025): «Недавние» подчиняются тому же правилу, что Ctrl+O
+      if (isDesktop() && mode === 'book') {
+        try {
+          if (row.path) {
+            await desktopOpenBookWindow(`file=${encodeURIComponent(row.path)}`)
+          } else if (row.bytes) {
+            const id = await desktopStageBookBytes(row.bytes)
+            await desktopOpenBookWindow(`staged=${id}&name=${encodeURIComponent(row.fileName)}`)
+          } else {
+            showToast(t.recentUnavailable, 'error')
+            return
+          }
+          showToast(t.extraWindowsToast(1), 'ok')
+        } catch (err) {
+          showToast(
+            `${t.openErrorTitle}: ${err instanceof Error ? err.message : String(err)}`,
+            'error',
+          )
+        }
+        return
+      }
       setBusy(t.openingFile)
       try {
         if (row.path && isDesktop()) {
@@ -170,7 +192,7 @@ export default function App() {
         setBusy(null)
       }
     },
-    [openFile, showToast, t],
+    [mode, openFile, showToast, t],
   )
 
   /**
@@ -199,11 +221,17 @@ export default function App() {
 
   const onOpenClicked = useCallback(async () => {
     // десктоп-обёртка (Этап 7.5): нативный диалог rfd с мультивыбором —
-    // первая книга в текущее окно, остальные в новые (novagrid-023)
+    // первая книга в текущее окно, остальные в новые (novagrid-023).
+    // При уже открытой книге текущее окно не занимается (novagrid-025):
+    // все выбранные файлы — в новые окна, предыдущая книга остаётся доступной
     if (isDesktop()) {
       try {
         const paths = await desktopPickBookPaths()
         if (paths.length === 0) return
+        if (mode === 'book') {
+          await openRestInWindows(paths)
+          return
+        }
         const first = await desktopOpenPath(paths[0])
         await openFile(first.file, { path: first.path })
         if (paths.length > 1) await openRestInWindows(paths.slice(1))
@@ -227,7 +255,7 @@ export default function App() {
       return
     }
     fileInputRef.current?.click()
-  }, [openFile, openRestInWindows, showToast, t])
+  }, [mode, openFile, openRestInWindows, showToast, t])
 
   /** Ctrl+S: прямая запись в открытый файл, иначе — «Сохранить как…». */
   const save = useCallback(async () => {
@@ -572,6 +600,13 @@ export default function App() {
         e.preventDefault()
         setDropping(false)
         const files = Array.from(e.dataTransfer.files)
+        if (files.length === 0) return
+        // при открытой книге (десктоп) текущую не заменяем — все файлы
+        // в новые окна (novagrid-025), как и Ctrl+O
+        if (isDesktop() && mode === 'book') {
+          void dropRestToWindows(files)
+          return
+        }
         const first = files[0]
         if (first) void openFile(first)
         const rest = files.slice(1)

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { selectionText } from './copy'
+import { parseClipboardTsv, selectionText } from './copy'
 import { createSheet, withCell, type SheetModel } from './sheet'
 import { selectionOf } from './selection'
 
@@ -57,5 +57,44 @@ describe('copy: текст выделения для буфера (novagrid-024)
     ])
     const sel = { active: { row: 0, col: 0 }, ranges: [{ fr: 0, fc: 0, tr: 1, tc: 2 }] }
     expect(selectionText(sheet, sel)).toBe('a\t\tc\n\t\t')
+  })
+})
+
+describe('paste: разбор TSV из буфера (novagrid-025)', () => {
+  it('одна ячейка — одна строка одной колонки', () => {
+    expect(parseClipboardTsv('10000')).toEqual([['10000']])
+  })
+
+  it('блок: строки по переводу, колонки по табу (CRLF, LF и CR)', () => {
+    const expected = [
+      ['Фамилия', 'Отдел', 'Сумма'],
+      ['Иванов', 'Продажи', '10000'],
+    ]
+    expect(parseClipboardTsv('Фамилия\tОтдел\tСумма\r\nИванов\tПродажи\t10000')).toEqual(expected)
+    expect(parseClipboardTsv('Фамилия\tОтдел\tСумма\nИванов\tПродажи\t10000')).toEqual(expected)
+    expect(parseClipboardTsv('Фамилия\tОтдел\tСумма\rИванов\tПродажи\t10000')).toEqual(expected)
+  })
+
+  it('хвостовой перевод строки (Excel добавляет) не создаёт пустую строку', () => {
+    expect(parseClipboardTsv('a\tb\n')).toEqual([['a', 'b']])
+  })
+
+  it('пустые ячейки между разделителями сохраняются', () => {
+    expect(parseClipboardTsv('a\t\tc\n\t\t')).toEqual([
+      ['a', '', 'c'],
+      ['', '', ''],
+    ])
+  })
+
+  it('Excel оборачивает кавычки/табы внутри ячейки — кавычки снимаются', () => {
+    expect(parseClipboardTsv('"он сказал ""да"""\t2')).toEqual([['он сказал "да"', '2']])
+  })
+
+  it('кавычка в середине ячейки остаётся как есть', () => {
+    expect(parseClipboardTsv('a"b')).toEqual([['a"b']])
+  })
+
+  it('пустой текст — пустой разбор', () => {
+    expect(parseClipboardTsv('')).toEqual([])
   })
 })

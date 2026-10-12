@@ -275,6 +275,78 @@ test.describe('ядро таблицы — демо-лист', () => {
   })
 })
 
+test.describe('вставка Ctrl+V (novagrid-025)', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/?test=1')
+    await nv(page).ready()
+  })
+
+  test('Ctrl+C → Ctrl+V: блок ложится от активной ячейки, Ctrl+Z откатывает целиком', async ({
+    page,
+  }) => {
+    await page.context().grantPermissions(['clipboard-read', 'clipboard-write'])
+    const api = nv(page)
+
+    // копируем A1:B2
+    await clickCell(page, 0, 0)
+    await page.keyboard.press('Shift+ArrowDown')
+    await page.keyboard.press('Shift+ArrowRight')
+    await page.keyboard.press('Control+c')
+    await expect
+      .poll(() =>
+        page.evaluate(() => navigator.clipboard.readText().then((t) => t.replace(/\r\n/g, '\n'))),
+      )
+      .toBe('Фамилия\tОтдел\nИванов\tПродажи')
+
+    // вставляем в E5 — пустая зона демо-листа
+    await clickCell(page, 4, 4)
+    await page.keyboard.press('Control+v')
+    await expect.poll(() => api.cell(4, 4)).toBe('Фамилия')
+    expect(await api.cell(4, 5)).toBe('Отдел')
+    expect(await api.cell(5, 4)).toBe('Иванов')
+    expect(await api.cell(5, 5)).toBe('Продажи')
+    // выделение накрыло вставленный блок, активная — его левый верх
+    expect(await api.ranges()).toEqual(['E5:F6'])
+    expect(await api.activeRef()).toBe('E5')
+
+    // Ctrl+Z откатывает блок одной транзакцией
+    await page.keyboard.press('Control+z')
+    await expect.poll(() => api.cell(4, 4)).toBe('')
+    expect(await api.cell(5, 5)).toBe('')
+  })
+
+  test('копирование между двумя открытыми книгами: Ctrl+C в одной → Ctrl+V в другой', async ({
+    page,
+  }) => {
+    await page.context().grantPermissions(['clipboard-read', 'clipboard-write'])
+    // вторая книга — вторая страница контекста: системный буфер у них общий,
+    // как у двух окон десктоп-обёртки (карточка novagrid-025)
+    const second = await page.context().newPage()
+    await second.goto('/?test=1')
+    await nv(second).ready()
+
+    // книга 1: копируем C2:C4 — суммы демо-таблицы
+    await clickCell(page, 1, 2)
+    await page.keyboard.press('Shift+ArrowDown')
+    await page.keyboard.press('Shift+ArrowDown')
+    await page.keyboard.press('Control+c')
+    await expect
+      .poll(() =>
+        page.evaluate(() => navigator.clipboard.readText().then((t) => t.replace(/\r\n/g, '\n'))),
+      )
+      .toBe('10000\n12500\n8000')
+
+    // книга 2: вставляем ниже демо-данных в колонку A
+    await clickCell(second, 10, 0)
+    await second.keyboard.press('Control+v')
+    await expect.poll(() => nv(second).cell(10, 0)).toBe('10000')
+    expect(await nv(second).cell(11, 0)).toBe('12500')
+    expect(await nv(second).cell(12, 0)).toBe('8000')
+
+    await second.close()
+  })
+})
+
 test.describe('стресс 100k×30 — виртуализация (1.2)', () => {
   test('прокрутка в глубину рисует правильное окно, кадр укладывается в бюджет 60 fps', async ({
     page,

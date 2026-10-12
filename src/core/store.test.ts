@@ -72,6 +72,54 @@ describe('store: undo/redo (1.5)', () => {
   })
 })
 
+describe('store: вставка из буфера (novagrid-025)', () => {
+  it('блок TSV пишется от активной ячейки, выделение накрывает вставленное', () => {
+    s().clickCell(4, 0) // пустая зона демо-листа
+    s().pasteText('x\ty\n1\t2')
+    expect(getCell(s().sheet, 4, 0)).toBe('x')
+    expect(getCell(s().sheet, 4, 1)).toBe('y')
+    expect(getCell(s().sheet, 5, 0)).toBe('1')
+    expect(getCell(s().sheet, 5, 1)).toBe('2')
+    expect(s().selection).toEqual({
+      active: { row: 4, col: 0 },
+      ranges: [{ fr: 4, fc: 0, tr: 5, tc: 1 }],
+    })
+    expect(s().dirty).toBe(true)
+  })
+
+  it('вставка — одна транзакция истории: undo откатывает блок целиком', () => {
+    s().clickCell(10, 0)
+    s().pasteText('a\tb\nc\td')
+    s().undo()
+    expect(getCell(s().sheet, 10, 0)).toBe('')
+    expect(getCell(s().sheet, 11, 1)).toBe('')
+    // undo не «сохраняет» книгу: правки были — dirty честно остаётся
+    expect(s().dirty).toBe(true)
+  })
+
+  it('пустая строка в TSV очищает ячейку, вставка за краем растит лист', () => {
+    s().clickCell(0, 0)
+    s().pasteText('\tZ')
+    expect(getCell(s().sheet, 0, 0)).toBe('') // «Фамилия» стёрта
+    expect(getCell(s().sheet, 0, 1)).toBe('Z')
+  })
+
+  it('хвостовой перевод строки не создаёт пустую строку-затирание', () => {
+    s().clickCell(10, 0)
+    s().pasteText('q\n')
+    expect(getCell(s().sheet, 10, 0)).toBe('q')
+    expect(getCell(s().sheet, 11, 0)).toBe('') // строка ниже не тронута
+  })
+
+  it('вставка формулы посчиталась, круг Ctrl+C → Ctrl+V без потерь', () => {
+    s().clickCell(4, 0)
+    s().pasteText('=1+2\t=SUM(C2:C3)')
+    expect(getCell(s().sheet, 4, 0)).toBe('=1+2')
+    expect(cellNumber(s().sheet, 4, 0)).toBe(3)
+    expect(cellNumber(s().sheet, 4, 1)).toBe(22500) // 10000 + 12500 демо-листа
+  })
+})
+
 describe('store: выделение (1.4)', () => {
   it('Ctrl-клик собирает несмежные области, повторный снимает одиночную', () => {
     s().clickCell(1, 2) // Иванов 10000

@@ -975,6 +975,18 @@ export function GridCanvas() {
     mainRef.current?.focus({ preventScroll: true })
   }
 
+  // Ctrl+V (novagrid-025): браузер сам кладёт системный буфер в событие —
+  // без разрешений чтения, работает и в WebView2-обёртке. Открытый редактор
+  // ячейки вставляет нативно в input (событие всплывает — пропускаем).
+  const onPasteEvent = (e: React.ClipboardEvent<HTMLElement>) => {
+    const st = gridStore.getState()
+    if (st.edit) return
+    const text = e.clipboardData.getData('text/plain')
+    if (text === '') return
+    e.preventDefault()
+    st.pasteText(text)
+  }
+
   const editorStyle = (() => {
     const el = scrollRef.current
     if (!edit || !el) return undefined
@@ -1002,6 +1014,7 @@ export function GridCanvas() {
       aria-colcount={cols}
       tabIndex={0}
       onKeyDown={onKeyDown}
+      onPaste={onPasteEvent}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
