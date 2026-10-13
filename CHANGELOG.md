@@ -1328,4 +1328,4 @@ Deploy to GitHub Pages ран 38018213931 success (шаги деплоя кор�
     lint · typecheck · test · e2e · build — success), Deploy to GitHub Pages —
     success (ран 38354045361): веб-версия v1.11.0 опубликована. Релизное
     уведомление отправлено в Aila «Хаб ИИ» (id ai_novagrid_027_release_20261013).
-    Отчётный docs-коммит: 41fdff3 → см. следующий коммит.
+    Отчётный docs-коммит: b65390b.
