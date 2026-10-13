@@ -70,6 +70,16 @@ export async function deleteSession(id: number): Promise<void> {
   await db.sessions.delete(id)
 }
 
+/**
+ * Стереть сессии несохранённых книг (fileName = null, novagrid-026):
+ * автосейв их больше не создаёт, а в «Недавних» они не показываются —
+ * старые записи со времён до фикса вычищаем со стартового экрана, чтобы
+ * не висели в базе и не вытесняли полезные сессии (хранится только 8).
+ */
+export async function deleteUnnamedSessions(): Promise<void> {
+  await db.sessions.filter((row) => row.fileName === null).delete()
+}
+
 /** Порог снимка байтов для переоткрытия без FSA: гигантские файлы не дублируем. */
 export const OPENING_BYTES_LIMIT = 16 * 1024 * 1024
 

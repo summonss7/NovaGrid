@@ -2,8 +2,10 @@
  * «Недавние» стартового экрана (novagrid-022): объединение двух историй —
  * открытых файлов (openings) и автосохранённых сессий. Открытые файлы
  * должны стоять верхними: список сортируется по времени взаимодействия,
- * а при совпадении имени остаётся более свежая запись. Модуль чистый
- * (без Dexie) — слияние покрыто юнит-тестами напрямую.
+ * а при совпадении имени остаётся более свежая запись. novagrid-026:
+ * в списке только реально открытые файлы — сессии без имени файла
+ * («Несохранённая книга») отфильтровываются. Модуль чистый (без Dexie) —
+ * слияние покрыто юнит-тестами напрямую.
  */
 
 import type { SessionRow } from './db'
@@ -31,7 +33,10 @@ export type RecentItem =
 /**
  * Слить открытия и сессии в один список: сортировка по времени убыванием,
  * дедуп по имени файла (без учёта регистра — как Windows) — выживает более
- * свежая запись. Сессии без имени («Несохранённая книга») не схлопываются.
+ * свежая запись. Сессии без имени («Несохранённая книга», novagrid-026:
+ * автосейв их больше не создаёт) в список не проходят — «Недавние» показывают
+ * только файлы, которые реально открывали; фильтр чистит и старый мусор
+ * из базы до фикса.
  */
 export function mergeRecents(
   openings: readonly OpeningRow[],
@@ -40,7 +45,9 @@ export function mergeRecents(
 ): RecentItem[] {
   const items: RecentItem[] = [
     ...openings.map((opening) => ({ kind: 'open' as const, at: opening.openedAt, opening })),
-    ...sessions.map((session) => ({ kind: 'session' as const, at: session.savedAt, session })),
+    ...sessions
+      .filter((session) => session.fileName !== null)
+      .map((session) => ({ kind: 'session' as const, at: session.savedAt, session })),
   ].sort((a, b) => b.at - a.at)
   const seen = new Set<string>()
   const merged: RecentItem[] = []

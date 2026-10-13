@@ -315,6 +315,27 @@ test.describe('автосохранение сессии и «Недавние»
     expect(book.tabs).toEqual(['Сотрудники', 'Справочник'])
   })
 
+  test('несохранённая книга не попадает в «Недавние» (novagrid-026)', async ({ page }) => {
+    await page.goto('/?testui=1')
+    await page.getByRole('button', { name: 'Новая таблица' }).click()
+
+    // в новой книге без файла что-то напечатано, дебаунс автосейва прожил —
+    // но сессии у книг без файла больше нет: закрытие/крах не должен
+    // оставлять в «Недавних» записи «Несохранённая книга»
+    const api = nv(page)
+    const center = await api.cellCenter(0, 0)
+    await page.mouse.click(center.x, center.y)
+    await page.keyboard.press('9')
+    await page.keyboard.press('Enter')
+    await expect.poll(() => api.cell(0, 0)).toBe('9')
+    await page.waitForTimeout(2200)
+
+    await page.reload()
+    await expect(page.locator('.start-recent-list')).toHaveCount(0)
+    await expect(page.getByText('Несохранённая книга')).toHaveCount(0)
+    await expect(page.locator('.start-empty')).toBeVisible()
+  })
+
   test('открытые файлы попадают в «Недавние» сверху и переоткрываются оттуда (novagrid-022)', async ({
     page,
   }) => {

@@ -5,6 +5,8 @@ import { mergeRecents, type OpeningRow } from './recents'
 /*
  * Слияние «Недавних» (novagrid-022): открытые файлы и автосохранённые
  * сессии — один список, свежие сверху, дедуп по имени файла.
+ * novagrid-026: сессии без имени («Несохранённая книга») в список
+ * не попадают — только файлы, которые реально открывали.
  */
 
 function opening(id: number, fileName: string, openedAt: number, extra: Partial<OpeningRow> = {}) {
@@ -51,12 +53,13 @@ describe('mergeRecents', () => {
     expect(merged[0].kind).toBe('open')
   })
 
-  it('несохранённые книги (без имени) не схлопываются ни с чем', () => {
+  it('несохранённые книги (без имени) не попадают в «Недавние» (novagrid-026)', () => {
     const merged = mergeRecents(
       [opening(1, 'книга.xlsx', 100)],
       [session(2, null, 50), session(3, null, 10)],
     )
-    expect(merged).toHaveLength(3)
+    expect(merged).toHaveLength(1)
+    expect(merged[0]).toMatchObject({ kind: 'open', opening: { id: 1 } })
   })
 
   it('лимит: максимум N записей после дедупа', () => {

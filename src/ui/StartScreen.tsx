@@ -1,7 +1,7 @@
 import { Clock, FileSpreadsheet, FilePlus2, FlaskConical, FolderOpen, X } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { useT } from '../i18n'
-import { deleteOpening, deleteSession, listOpenings, listRecents } from '../storage/db'
+import { deleteOpening, deleteSession, deleteUnnamedSessions, listOpenings, listRecents } from '../storage/db'
 import { mergeRecents, type OpeningRow, type RecentItem } from '../storage/recents'
 import type { SessionRow } from '../storage/db'
 import { Logo } from './Logo'
@@ -24,6 +24,9 @@ export function StartScreen(props: StartScreenProps) {
 
   useEffect(() => {
     let alive = true
+    // novagrid-026: вычищаем осиротевшие сессии несохранённых книг —
+    // в списке их больше не показываем, базе они тоже не нужны
+    void deleteUnnamedSessions().catch(() => undefined)
     void Promise.all([listOpenings(), listRecents()])
       .then(([openings, sessions]) => {
         if (alive) setRecents(mergeRecents(openings, sessions))
