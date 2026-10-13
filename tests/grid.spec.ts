@@ -379,6 +379,38 @@ test.describe('стресс 100k×30 — виртуализация (1.2)', () =
   })
 })
 
+test.describe('прокрутка таблицы (novagrid-027)', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/?test=1&stress=1000')
+    await nv(page).ready()
+  })
+
+  test('колесо мыши прокручивает таблицу по вертикали и горизонтали', async ({ page }) => {
+    const el = page.locator('.grid-scroll')
+    await page.mouse.move(600, 400)
+    await page.mouse.wheel(0, 480)
+    await expect.poll(() => el.evaluate((n) => n.scrollTop)).toBeGreaterThan(400)
+    await page.mouse.wheel(480, 0)
+    await expect.poll(() => el.evaluate((n) => n.scrollLeft)).toBeGreaterThan(400)
+  })
+
+  test('Ctrl+End — последняя ячейка листа, Ctrl+Home — A1; кадр едет сам', async ({ page }) => {
+    const api = nv(page)
+    await page.click('.grid-area')
+    await page.keyboard.press('Control+End')
+    await expect.poll(() => api.activeRef()).toBe('AD1000') // 30-я колонка
+    // прокрутка доехала до конца листа (глубина минус экран)
+    await expect
+      .poll(() => page.locator('.grid-scroll').evaluate((n) => n.scrollTop))
+      .toBeGreaterThan(30 * 1000 - 30 * 40)
+    await page.keyboard.press('Control+Home')
+    await expect.poll(() => api.activeRef()).toBe('A1')
+    await expect
+      .poll(() => page.locator('.grid-scroll').evaluate((n) => n.scrollTop))
+      .toBe(0)
+  })
+})
+
 test.describe('ширины колонок мышью (novagrid-020)', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/?test=1')

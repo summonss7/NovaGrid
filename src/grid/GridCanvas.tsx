@@ -287,11 +287,12 @@ export function GridCanvas() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resolvedTheme])
 
-  /** Прокрутить ячейку в поле зрения: навигация — активную, Shift-растяжение — движущийся конец. */
+  /** Прокрутить ячейку в поле зрения: навигация — активную, Shift-растяжение — движущийся конец.
+   *  Вьюпорт — клиентская область скролл-контейнера: классические скроллбары
+   *  (novagrid-027) занимают место, и упущенные 12px прятали ячейку под полосой. */
   const ensureCellVisible = (row: number, col: number) => {
     const el = scrollRef.current
-    const main = mainRef.current
-    if (!el || !main) return
+    if (!el) return
     const st = gridStore.getState()
     const lay = layoutFor(st.sheet, st.filters)
     const i = lay.indexOf(row)
@@ -301,8 +302,8 @@ export function GridCanvas() {
       col,
       el.scrollLeft,
       el.scrollTop,
-      main.clientWidth,
-      main.clientHeight,
+      el.clientWidth,
+      el.clientHeight,
       undefined,
       colsLayoutFor(st.sheet.cols, st.colWidths),
     )
@@ -776,9 +777,11 @@ export function GridCanvas() {
   }
 
   // ── клавиатура ────────────────────────────────────────────────────────
+  // страница = клиентская область скролла: полосы (novagrid-027) съедают
+  // нижние 12px — считать по main значит перепрыгивать строку
   const visibleRowCount = () => {
-    const main = mainRef.current
-    return main ? Math.max(1, Math.floor((main.clientHeight - METRICS.headerH) / METRICS.rowH)) : 10
+    const el = scrollRef.current
+    return el ? Math.max(1, Math.floor((el.clientHeight - METRICS.headerH) / METRICS.rowH)) : 10
   }
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLElement>) => {
@@ -871,14 +874,24 @@ export function GridCanvas() {
         st.deleteSelection()
         e.preventDefault()
         return
-      case 'Home':
-        st.goTo(st.selection.active.row, 0, { extend: e.shiftKey })
+      case 'Home': {
+        // Ctrl+Home — начало таблицы (A1), Home — первая колонка строки
+        const row = mod ? 0 : st.selection.active.row
+        st.goTo(row, 0, { extend: e.shiftKey })
+        if (e.shiftKey) ensureCellVisible(row, 0)
         e.preventDefault()
         return
-      case 'End':
-        st.goTo(st.selection.active.row, st.sheet.cols - 1, { extend: e.shiftKey })
+      }
+      case 'End': {
+        // Ctrl+End — последняя ячейка таблицы (novagrid-027: «дойти до конца»),
+        // End — последняя колонка строки
+        const row = mod ? Math.max(0, st.sheet.rows - 1) : st.selection.active.row
+        const col = mod ? Math.max(0, st.sheet.cols - 1) : st.sheet.cols - 1
+        st.goTo(row, col, { extend: e.shiftKey })
+        if (e.shiftKey) ensureCellVisible(row, col)
         e.preventDefault()
         return
+      }
       case 'PageDown':
         st.pageMove(visibleRowCount(), 1, e.shiftKey)
         e.preventDefault()

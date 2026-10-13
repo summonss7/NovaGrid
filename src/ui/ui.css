@@ -344,11 +344,52 @@
 }
 
 /* ── Канвас-грид (Этап 1) ─────────────────────────────────────────────── */
+/* novagrid-027: скроллбары таблицы всегда видимые и классические. Нативные
+   полосы Windows 11 оверлейные и автоскрываются — таблица выглядела
+   непрокручиваемой. Кастомный ::-webkit-scrollbar в Chromium/WebView2
+   отключает оверлей-режим и занимает место у краёв; z-index поднимает
+   полосы над канвасом (иначе закрашивает их фоном кадра). */
 .grid-scroll {
   position: absolute;
   inset: 0;
   overflow: auto;
-  scrollbar-width: thin;
+  z-index: 1;
+}
+
+/* Тонкие всегда видимые полосы в теме приложения: тач-раскладка (coarse)
+   оставляет нативный оверлей — пальцу афорданс полос не нужен. */
+@media (pointer: fine) {
+  .grid-scroll::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+  }
+
+  .grid-scroll::-webkit-scrollbar-track {
+    background: var(--nv-surface);
+  }
+
+  .grid-scroll::-webkit-scrollbar-thumb {
+    background: var(--nv-ink-soft);
+    border: 3px solid var(--nv-surface);
+    border-radius: 6px;
+  }
+
+  .grid-scroll::-webkit-scrollbar-thumb:hover {
+    background: var(--nv-ink);
+  }
+
+  .grid-scroll::-webkit-scrollbar-corner {
+    background: var(--nv-surface);
+  }
+}
+
+/* Firefox (нет ::-webkit-scrollbar): тонкая полоса в цветах темы —
+   классические полосы Windows и так всегда на экране */
+@supports not selector(::-webkit-scrollbar) {
+  .grid-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: var(--nv-ink-soft) var(--nv-surface);
+  }
 }
 
 .grid-spacer {
