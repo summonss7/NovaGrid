@@ -179,6 +179,14 @@ const en: RuDict = {
   xlsSaveNote: '.xls files are saved as .xlsx (the modern format)',
   odsSaveNote: '.ods files are saved as .xlsx — NovaGrid cannot write .ods directly',
 
+  // closing with unsaved changes (novagrid-033): desktop shows the dialog
+  // «Save / Don’t save / Cancel», browser/PWA — the system beforeunload prompt
+  closeAskTitle: 'Save before closing?',
+  closeAskMessage: (name: string) =>
+    `The book “${name}” has changes. Save them before closing the window?`,
+  closeAskMessageUnnamed: 'The book is not saved to a file. Save it before closing the window?',
+  closeAskDiscard: 'Don’t save',
+
   // snapshot .nvgridx (Stage 7.6, novagrid-019): capsule for a cloud folder
   saveAsFormatNvgridx: '.nvgridx (encrypted snapshot)',
   snapshotPassLabel: 'Passphrase',

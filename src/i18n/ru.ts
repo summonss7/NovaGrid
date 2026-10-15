@@ -169,6 +169,14 @@ export const ru = {
   xlsSaveNote: 'Файл .xls сохранится как .xlsx (современный формат)',
   odsSaveNote: 'Файл .ods сохранится как .xlsx — прямой записи .ods в NovaGrid нет',
 
+  // закрытие с несохранёнными правками (novagrid-033): десктоп — диалог
+  // «Сохранить / Не сохранять / Отмена», браузер/PWA — системный beforeunload
+  closeAskTitle: 'Сохранить перед закрытием?',
+  closeAskMessage: (name: string) =>
+    `Книга «${name}» изменена. Сохранить изменения перед закрытием окна?`,
+  closeAskMessageUnnamed: 'Книга не сохранена в файл. Сохранить её перед закрытием окна?',
+  closeAskDiscard: 'Не сохранять',
+
   // снапшот .nvgridx (Этап 7.6, novagrid-019): капсула для облачной папки
   saveAsFormatNvgridx: '.nvgridx (снапшот, зашифрованный)',
   snapshotPassLabel: 'Парольная фраза',

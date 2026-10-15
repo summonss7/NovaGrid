@@ -28,17 +28,21 @@ import {
   snapshotToBook,
 } from '../io/snapshot'
 import {
+  desktopConfirmClose,
   desktopOpenBookWindow,
   desktopOpenPath,
   desktopPickBookPaths,
   desktopPickSavePath,
+  desktopSetDirty,
   desktopStageBookBytes,
   desktopStartupBooks,
   desktopTakeStagedBook,
   desktopWriteFile,
   isDesktop,
+  onDesktopCloseAsk,
   onDesktopMenu,
 } from '../io/desktop'
+import { CloseAskDialog } from '../ui/CloseAskDialog'
 import { FilterBar } from '../ui/FilterBar'
 import { FormulaBar } from '../ui/FormulaBar'
 import { GridCanvas } from '../grid/GridCanvas'
@@ -61,6 +65,18 @@ interface Toast {
   kind: 'ok' | 'error'
 }
 
+/**
+ * Закрытие окна после «Сохранить как…», запущенного из диалога закрытия
+ * (novagrid-033): флаг живёт в ref (не в состоянии — его видит только этот
+ * сценарий). close=false — пользователь отменил пикер или снял снапшот:
+ * остаёмся в книге, окно не закрываем.
+ */
+function settleCloseAfterSave(ref: { current: boolean }, close: boolean): void {
+  if (!ref.current) return
+  ref.current = false
+  if (close) void desktopConfirmClose()
+}
+
 /** Прочитанная капсула .nvgridx — ждёт парольную фразу в диалоге (7.6). */
 interface SnapshotPending {
   file: File
@@ -81,6 +97,7 @@ export default function App() {
   const [busy, setBusy] = useState<string | null>(null)
   const [toast, setToast] = useState<Toast | null>(null)
   const [saveAsOpen, setSaveAsOpen] = useState(false)
+  const [closeAskOpen, setCloseAskOpen] = useState(false)
   const [snapshotPending, setSnapshotPending] = useState<SnapshotPending | null>(null)
   const [dropping, setDropping] = useState(false)
   const [swReload, setSwReload] = useState<(() => void) | null>(null)
@@ -88,6 +105,8 @@ export default function App() {
   const bootedRef = useRef(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const toastTimer = useRef(0)
+  /** «Сохранить как…» открыт из диалога закрытия — закрыть окно после записи */
+  const closeAfterSaveRef = useRef(false)
 
   const showToast = useCallback((text: string, kind: Toast['kind']) => {
     setToast({ text, kind })
@@ -311,12 +330,50 @@ export default function App() {
     setSaveAsOpen(true)
   }, [showToast, t])
 
+  /**
+   * «Сохранить» в диалоге закрытия (novagrid-033): прямой записью — сохранить
+   * и закрыть сразу; книге без пути (новая/.xls/.ods) — «Сохранить как…»,
+   * окно закроется после успешной записи (closeAfterSaveRef). Ошибка записи
+   * оставляет диалог открытым — решение за пользователем.
+   */
+  const saveAndClose = useCallback(async () => {
+    const st = gridStore.getState()
+    if (st.edit) st.commitEdit('none')
+    const directFormat = st.fileFormat === 'csv' || st.fileFormat === 'xlsx'
+    if (st.desktopPath && st.fileFormat && directFormat) {
+      setBusy(t.savingFile)
+      try {
+        const buffer = await buildBookBuffer(
+          st.fileFormat === 'csv' ? 'csv' : 'xlsx',
+          st.csvDelimiter,
+        )
+        await desktopWriteFile(st.desktopPath, buffer)
+        gridStore.getState().markSaved()
+        setCloseAskOpen(false)
+        void desktopConfirmClose()
+      } catch (err) {
+        showToast(
+          `${t.saveErrorTitle}: ${err instanceof Error ? err.message : String(err)}`,
+          'error',
+        )
+      } finally {
+        setBusy(null)
+      }
+      return
+    }
+    closeAfterSaveRef.current = true
+    setCloseAskOpen(false)
+    setSaveAsOpen(true)
+  }, [showToast, t])
+
   const saveAsChosen = useCallback(
     async (choice: SaveAsChoice) => {
       setSaveAsOpen(false)
       // капсула .nvgridx (7.6): вся книга → AES-GCM; текущую книгу не трогаем —
       // снапшот побочный файл для облака, имя/dirty/хэндл остаются как были
       if (choice.format === 'nvgridx') {
+        // снапшот — не сохранение книги: из диалога закрытия окно не закрываем
+        settleCloseAfterSave(closeAfterSaveRef, false)
         setBusy(t.savingFile)
         try {
           const buffer = await buildSnapshotBuffer(choice.passphrase!)
@@ -346,7 +403,10 @@ export default function App() {
         if (isDesktop()) {
           // нативный «Сохранить как…» обёртки (rfd); отмена — тихо
           const path = await desktopPickSavePath(choice.fileName, choice.format)
-          if (path === null) return
+          if (path === null) {
+            settleCloseAfterSave(closeAfterSaveRef, false)
+            return
+          }
           await desktopWriteFile(path, buffer)
           const name = path.replace(/\\/g, '/').split('/').pop() ?? choice.fileName
           gridStore.getState().setDesktopPath(path)
@@ -375,8 +435,16 @@ export default function App() {
           .getState()
           .markSaved(choice.fileName, { fileFormat: choice.format, csvDelimiter: choice.delimiter })
         showToast(t.savedToast(choice.fileName), 'ok')
+        // сохранение состоялось: окно закрывается, если этого ждал диалог
+        // закрытия (novagrid-033)
+        settleCloseAfterSave(closeAfterSaveRef, true)
       } catch (err) {
-        if (err instanceof DOMException && err.name === 'AbortError') return // отмена пикера
+        if (err instanceof DOMException && err.name === 'AbortError') {
+          // отмена пикера — окно остаётся открытым (пользователь передумал)
+          settleCloseAfterSave(closeAfterSaveRef, false)
+          return
+        }
+        settleCloseAfterSave(closeAfterSaveRef, false)
         showToast(
           `${t.saveErrorTitle}: ${err instanceof Error ? err.message : String(err)}`,
           'error',
@@ -539,6 +607,40 @@ export default function App() {
       else if (action === 'print') printStore.getState().openDialog()
     })
   }, [onOpenClicked, save])
+
+  // ── несохранённые правки не теряются при закрытии (novagrid-033) ─────
+  // десктоп: обёртка знает флаг dirty своего окна и на крестике у «грязной»
+  // книги адресно присылает novagrid:close-ask → наш диалог Сохранить /
+  // Не сохранять / Отмена; чистые окна закрываются без вопросов
+  useEffect(() => {
+    if (!isDesktop()) return
+    void desktopSetDirty(gridStore.getState().dirty).catch(() => undefined)
+    return gridStore.subscribe((s, prev) => {
+      if (s.dirty !== prev.dirty)
+        void desktopSetDirty(s.dirty).catch(() => undefined)
+    })
+  }, [])
+
+  useEffect(() => {
+    if (!isDesktop()) return
+    return onDesktopCloseAsk(() => {
+      if (gridStore.getState().dirty) setCloseAskOpen(true)
+      else void desktopConfirmClose()
+    })
+  }, [])
+
+  // браузер/PWA: системный вопрос «покинуть сайт?» при закрытии вкладки с
+  // правками; в обёртке не нужен — там спрашивает наш диалог
+  useEffect(() => {
+    if (isDesktop()) return
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (!gridStore.getState().dirty) return
+      e.preventDefault()
+      e.returnValue = true // Chromium игнорирует preventDefault без него
+    }
+    window.addEventListener('beforeunload', onBeforeUnload)
+    return () => window.removeEventListener('beforeunload', onBeforeUnload)
+  }, [])
 
   // ── настройки (6.3): размер таблицы из персиста — стартовый зум, ─────
   // document.lang для скринридеров идёт за языком интерфейса;
@@ -718,6 +820,18 @@ export default function App() {
           }
           onConfirm={(choice) => void saveAsChosen(choice)}
           onCancel={() => setSaveAsOpen(false)}
+        />
+      )}
+
+      {closeAskOpen && (
+        <CloseAskDialog
+          fileName={gridStore.getState().fileName}
+          onSave={() => void saveAndClose()}
+          onDiscard={() => {
+            setCloseAskOpen(false)
+            void desktopConfirmClose()
+          }}
+          onCancel={() => setCloseAskOpen(false)}
         />
       )}
 

@@ -9,7 +9,20 @@ import { readFileSync } from 'node:fs'
  * так же, как в Firefox/Safari (CONCEPT Ф1).
  *
  * Тип window.__nv объявлен в grid.spec.ts (общий для проекта тестов).
+ * window.__tauriMock — мок десктоп-моста для тестов novagrid-033 (ниже).
  */
+
+declare global {
+  interface Window {
+    __TAURI__?: unknown
+    __tauriMock?: {
+      /** все invoke-вызовы моста: команды и аргументы */
+      calls: { cmd: string; args?: Record<string, unknown> }[]
+      /** слушатели событий обёртки (novagrid:menu, novagrid:close-ask) */
+      listeners: Record<string, ((e: { payload: unknown }) => void)[]>
+    }
+  }
+}
 
 function nv(page: Page) {
   return {
@@ -450,5 +463,188 @@ test.describe('меню «Открыть» в книге (novagrid-030)', () => 
     await menu.getByRole('menuitem', { name: 'Забыть' }).click()
     await expect(menu.locator('.open-menu-row')).toHaveCount(0)
     await expect(menu.getByText('Недавних файлов пока нет')).toBeVisible()
+  })
+
+  // ── несохранённые правки не теряются при закрытии (novagrid-033) ──────
+  // браузер/PWA: системный вопрос beforeunload; полный диалог «Сохранить /
+  // Не сохранять / Отмена» — только в десктоп-обёртке (проверяется ручным
+  // смоуком сборки, e2e добраться до нативного окна не может)
+
+  test('закрытие вкладки с правками спрашивает подтверждение beforeunload (novagrid-033)', async ({
+    page,
+  }) => {
+    await page.goto('/?testui=1')
+    await openFixtureFile(page, 'public/fixtures/demo-book.xlsx')
+    await expect
+      .poll(() => page.evaluate(() => window.__nv?.cell(1, 0) ?? ''), { timeout: 3000 })
+      .toBe('Иванов')
+
+    // правка без сохранения → ● у имени
+    const api = nv(page)
+    const center = await api.cellCenter(1, 2)
+    await page.mouse.click(center.x, center.y)
+    await page.keyboard.press('9')
+    await page.keyboard.press('Enter')
+    await expect.poll(() => api.cell(1, 2)).toBe('9')
+    await expect.poll(() => api.book().then((b) => b.dirty)).toBe(true)
+
+    // закрытие вкладки — системный вопрос; отказ (dismiss) оставляет вкладку
+    // живой, правки на месте. Диалог ловится waitForEvent'ом: on('dialog')
+    // в этой связке события не доставляет (см. дебаг novagrid-033)
+    const dialogType = page
+      .waitForEvent('dialog', { timeout: 5000 })
+      .then(async (d) => {
+        const type = d.type()
+        await d.dismiss()
+        return type
+      })
+      .catch(() => 'NO-DIALOG')
+    await page.close({ runBeforeUnload: true })
+    expect(await dialogType).toBe('beforeunload')
+    expect(page.isClosed()).toBe(false)
+    await expect.poll(() => api.cell(1, 2)).toBe('9')
+  })
+
+  test('закрытие вкладки без правок проходит без вопросов (novagrid-033)', async ({ page }) => {
+    await page.goto('/?testui=1')
+    await openFixtureFile(page, 'public/fixtures/demo-book.xlsx')
+    await expect
+      .poll(() => page.evaluate(() => window.__nv?.cell(1, 0) ?? ''), { timeout: 3000 })
+      .toBe('Иванов')
+    await expect.poll(() => nv(page).book().then((b) => b.dirty)).toBe(false)
+
+    // чистая книга: диалога нет, закрытие (с runBeforeUnload оно асинхронное)
+    // доходит само
+    const dialogType = page
+      .waitForEvent('dialog', { timeout: 3000 })
+      .then((d) => d.type())
+      .catch(() => 'NO-DIALOG')
+    await page.close({ runBeforeUnload: true })
+    expect(await dialogType).toBe('NO-DIALOG')
+    await expect.poll(() => page.isClosed(), { timeout: 5000 }).toBe(true)
+  })
+
+  // ── десктоп-обёртка: мок __TAURI__ (invoke/event/webview) повторяет мост
+  // src/io/desktop.ts — проверяет веб-логику диалога закрытия без нативного
+  // окна: синк dirty, сам диалог и решения «Отмена / Не сохранять».
+  // Rust-часть (перехват CloseRequested, адресный emit) — cargo + смоук сборки.
+
+  test('десктоп: close-ask у правок — Отмена оставляет, «Не сохранять» подтверждает закрытие (novagrid-033)', async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      const mock: NonNullable<Window['__tauriMock']> = { calls: [], listeners: {} }
+      window.__tauriMock = mock
+      window.__TAURI__ = {
+        core: {
+          invoke: (cmd: string, args?: Record<string, unknown>) => {
+            mock.calls.push({ cmd, args })
+            return Promise.resolve(null)
+          },
+        },
+        event: {
+          listen: (event: string, handler: (e: { payload: unknown }) => void) => {
+            ;(mock.listeners[event] ??= []).push(handler)
+            return Promise.resolve(() => undefined)
+          },
+        },
+        webview: { getCurrentWebviewWindow: () => ({ label: 'main' }) },
+      }
+    })
+    await page.goto('/?testui=1')
+    await page.getByRole('button', { name: 'Новая таблица' }).click()
+    const api = nv(page)
+    const center = await api.cellCenter(0, 0)
+    await page.mouse.click(center.x, center.y)
+    await page.keyboard.press('5')
+    await page.keyboard.press('Enter')
+    await expect.poll(() => api.cell(0, 0)).toBe('5')
+
+    // флаг dirty уехал в обёртку (по нему Rust решает, перехватывать ли крестик)
+    const calls = () => page.evaluate(() => window.__tauriMock!.calls)
+    await expect
+      .poll(() => calls().then((c) => c.some((x) => x.cmd === 'set_window_dirty' && x.args?.dirty === true)))
+      .toBe(true)
+
+    // обёртка прислала close-ask → диалог с тройкой кнопок
+    await page.evaluate(() =>
+      (window.__tauriMock!.listeners['novagrid:close-ask'] ?? [])[0]({ payload: null }),
+    )
+    const dialog = page.getByRole('dialog', { name: 'Сохранить перед закрытием?' })
+    await expect(dialog).toBeVisible()
+    await expect(dialog).toContainText('Книга не сохранена в файл')
+
+    // «Отмена» — без confirm_close, остаёмся
+    await dialog.getByRole('button', { name: 'Отмена' }).click()
+    await expect(dialog).toHaveCount(0)
+    expect(await calls().then((c) => c.some((x) => x.cmd === 'confirm_close'))).toBe(false)
+
+    // повторный ask → «Не сохранять» закрывает окно (confirm_close)
+    await page.evaluate(() =>
+      (window.__tauriMock!.listeners['novagrid:close-ask'] ?? [])[0]({ payload: null }),
+    )
+    await dialog.getByRole('button', { name: 'Не сохранять' }).click()
+    await expect(dialog).toHaveCount(0)
+    await expect
+      .poll(() => calls().then((c) => c.some((x) => x.cmd === 'confirm_close')))
+      .toBe(true)
+    // книга никуда не делась — правка на месте
+    await expect.poll(() => api.cell(0, 0)).toBe('5')
+  })
+
+  test('десктоп: «Сохранить» в close-ask без пути — Сохранить как… → запись → confirm_close (novagrid-033)', async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      const mock: NonNullable<Window['__tauriMock']> = { calls: [], listeners: {} }
+      window.__tauriMock = mock
+      window.__TAURI__ = {
+        core: {
+          invoke: (cmd: string, args?: Record<string, unknown>) => {
+            mock.calls.push({ cmd, args })
+            if (cmd === 'pick_save_book') return Promise.resolve('C:\\Books\\smoke.xlsx')
+            return Promise.resolve(null)
+          },
+        },
+        event: {
+          listen: (event: string, handler: (e: { payload: unknown }) => void) => {
+            ;(mock.listeners[event] ??= []).push(handler)
+            return Promise.resolve(() => undefined)
+          },
+        },
+        webview: { getCurrentWebviewWindow: () => ({ label: 'main' }) },
+      }
+    })
+    await page.goto('/?testui=1')
+    await page.getByRole('button', { name: 'Новая таблица' }).click()
+    const api = nv(page)
+    const center = await api.cellCenter(1, 0)
+    await page.mouse.click(center.x, center.y)
+    await page.keyboard.press('7')
+    await page.keyboard.press('Enter')
+    await expect.poll(() => api.cell(1, 0)).toBe('7')
+
+    // close-ask → «Сохранить» у книги без пути открывает «Сохранить как…»
+    await page.evaluate(() =>
+      (window.__tauriMock!.listeners['novagrid:close-ask'] ?? [])[0]({ payload: null }),
+    )
+    const closeDialog = page.getByRole('dialog', { name: 'Сохранить перед закрытием?' })
+    await expect(closeDialog).toBeVisible()
+    await closeDialog.getByRole('button', { name: 'Сохранить', exact: true }).click()
+    await expect(closeDialog).toHaveCount(0)
+    const saveAs = page.getByRole('dialog', { name: 'Сохранить как' })
+    await expect(saveAs).toBeVisible()
+
+    // сохранение: write_book_file по пути пикера → dirty снят → окно закрывается
+    await saveAs.getByRole('button', { name: 'Сохранить', exact: true }).click()
+    const calls = () => page.evaluate(() => window.__tauriMock!.calls)
+    await expect
+      .poll(() => calls().then((c) => c.some((x) => x.cmd === 'write_book_file')))
+      .toBe(true)
+    await expect
+      .poll(() => calls().then((c) => c.some((x) => x.cmd === 'confirm_close')))
+      .toBe(true)
+    await expect.poll(() => api.book().then((b) => b.dirty)).toBe(false)
+    await expect(saveAs).toHaveCount(0)
   })
 })

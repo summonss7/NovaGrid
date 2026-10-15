@@ -6,8 +6,15 @@
 //
 // novagrid-023: несколько книг одновременно — каждая в своём окне. Все файлы
 // из аргументов запуска читаются целиком (первый — в главное окно, остальные —
-// в дополнительные через ?file=); диалог «Открыть» получил мультивыбор;
+// в дополнительные через ?file=), диалог «Открыть» получил мультивыбор;
 // перетащенные без пути (drag&drop) файлы едут в новые окна через staging.
+//
+// novagrid-033: закрытие окна с несохранённой книгой не молчит — обёртка
+// спрашивает «Сохранить / Не сохранять / Отмена». Фронтенд держит Rust в
+// курсе флага dirty (set_window_dirty по метке окна), перехват CloseRequested
+// гасит крестик только для «грязных» окон и адресно шлёт novagrid:close-ask;
+// решение пользователя исполняет confirm_close (destroy, без повторного
+// перехвата).
 //
 // Фронтенд общается с оболочкой через window.__TAURI__ (withGlobalTauri):
 // invoke-команды ниже + события меню novagrid:menu. npm-пакеты @tauri-apps
@@ -15,7 +22,7 @@
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -42,6 +49,29 @@ struct StartupBooks(Mutex<Vec<PathBuf>>);
 
 /** Снимки байтов перетащенных книг (drag&drop не даёт путей на диск). */
 struct StagedBooks(Mutex<HashMap<u64, Vec<u8>>>);
+
+/// Метки окон с несохранёнными правками (novagrid-033): только их закрытие
+/// перехватывается — чистые окна закрываются мгновенно, без опроса фронтенда.
+struct DirtyWindows(Mutex<HashSet<String>>);
+
+/// Флаг dirty книги в этом окне: фронтенд шлёт при каждой смене (novagrid-033).
+#[tauri::command]
+fn set_window_dirty(window: tauri::WebviewWindow, state: tauri::State<DirtyWindows>, dirty: bool) {
+    if let Ok(mut set) = state.0.lock() {
+        if dirty {
+            set.insert(window.label().to_string());
+        } else {
+            set.remove(window.label());
+        }
+    }
+}
+
+/// Пользователь решил закрываться (сохранив или нет) — destroy минует
+/// перехват CloseRequested, иначе окно спрашивало бы бесконечно.
+#[tauri::command]
+fn confirm_close(window: tauri::WebviewWindow) -> Result<(), String> {
+    window.destroy().map_err(|e| e.to_string())
+}
 
 /// Нативный диалог «Открыть книгу» с мультивыбором: пути (пусто — отмена).
 /// .nvgridx — зашифрованная капсула-снапшот (Этап 7.6): открывается тем же
@@ -216,7 +246,9 @@ fn main() {
             open_book_window,
             stage_book_bytes,
             take_staged_book,
-            open_external
+            open_external,
+            set_window_dirty,
+            confirm_close
         ])
         .setup(|app| {
             // ассоциации: «NovaGrid.exe <книга> [книга …]» — файлы ждут фронтенд
@@ -227,21 +259,50 @@ fn main() {
                 .collect();
             app.manage(StartupBooks(Mutex::new(startup)));
             app.manage(StagedBooks(Mutex::new(HashMap::new())));
+            app.manage(DirtyWindows(Mutex::new(HashSet::new())));
 
             app.set_menu(build_menu(app.handle())?)?;
             Ok(())
         })
+        // novagrid-033: крестик у «грязного» окна не закрывает его молча —
+        // гасим системное закрытие и адресно просим фронтенд спросить
+        // пользователя (novagrid:close-ask; слушатель подписан target'ом
+        // на метку этого окна, чужие окна событие не получают). Чистые окна
+        // и окна без ответа фронтенда закрываются как раньше.
+        .on_window_event(|window, event| match event {
+            tauri::WindowEvent::CloseRequested { api, .. } => {
+                let dirty = window
+                    .app_handle()
+                    .try_state::<DirtyWindows>()
+                    .and_then(|d| d.0.lock().map(|s| s.contains(window.label())).ok())
+                    .unwrap_or(false);
+                if dirty {
+                    api.prevent_close();
+                    let _ = window.emit_to(window.label(), "novagrid:close-ask", ());
+                }
+            }
+            tauri::WindowEvent::Destroyed => {
+                if let Some(state) = window.app_handle().try_state::<DirtyWindows>() {
+                    if let Ok(mut set) = state.0.lock() {
+                        set.remove(window.label());
+                    }
+                }
+            }
+            _ => {}
+        })
         .on_menu_event(|app, event| match event.id().as_ref() {
             "open" | "save" | "save-as" | "print" => {
                 // только окно, чьё меню нажали: с несколькими окнами бродкаст
-                // открыл бы диалог в каждом из них
+                // открыл бы диалог в каждом из них. emit_to адресует по метке
+                // (слушатель фронтенда подписан target'ом на своё окно),
+                // fallback без фокуса — прежний бродкаст
                 let target = app
                     .webview_windows()
                     .into_values()
                     .find(|w| w.is_focused().unwrap_or(false));
                 match target {
                     Some(win) => {
-                        let _ = win.emit("novagrid:menu", event.id().as_ref());
+                        let _ = win.emit_to(win.label(), "novagrid:menu", event.id().as_ref());
                     }
                     None => {
                         let _ = app.emit("novagrid:menu", event.id().as_ref());

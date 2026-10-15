@@ -3,7 +3,18 @@
  * за isDesktop() — признаком window.__TAURI__ (withGlobalTauri в tauri.conf.json):
  * браузерная сборка ни одного вызова не выполняет. npm-пакеты @tauri-apps
  * сознательно не подключаются — глобальный invoke не меняет веб-бандл.
+ *
+ * novagrid-033: обёртка спрашивает о сохранении при закрытии окна с правками.
+ * Флаг dirty синхронизируется в Rust (set_window_dirty), событие novagrid:close-ask
+ * приходит адресно — слушатели подписываются target'ом на метку своего окна
+ * (Tauri: бродкаст дошёл бы до всех окон книг сразу).
  */
+
+/** Цель события Tauri: подписка/отправка адресуется по метке окна. */
+type TauriEventTarget =
+  | { kind: 'Any' }
+  | { kind: 'AnyLabel'; label: string }
+  | { kind: 'WebviewWindow'; label: string }
 
 type TauriGlobal = {
   core: { invoke: <T>(cmd: string, args?: Record<string, unknown>) => Promise<T> }
@@ -11,7 +22,11 @@ type TauriGlobal = {
     listen: (
       event: string,
       handler: (e: { payload: unknown }) => void,
+      options?: { target: TauriEventTarget },
     ) => Promise<() => void>
+  }
+  webview?: {
+    getCurrentWebviewWindow?: () => { label: string }
   }
 }
 
@@ -98,13 +113,50 @@ export function desktopWriteFile(path: string, buffer: ArrayBuffer): Promise<voi
   return invoke<void>('write_book_file', { path, bytes: Array.from(new Uint8Array(buffer)) })
 }
 
+/** Подписка на событие обёртки — адресно, только для своего окна (novagrid-033):
+ * слушатель регистрируется target'ом на метку этого окна, бродкаст обёртки
+ * (fallback без фокуса) доходит и так. Метка недоступна — слушаем как раньше. */
+function listenTargeted(
+  event: string,
+  handler: (e: { payload: unknown }) => void,
+): Promise<() => void> {
+  const label = window.__TAURI__?.webview?.getCurrentWebviewWindow?.().label
+  const target: TauriEventTarget | undefined = label
+    ? { kind: 'WebviewWindow', label }
+    : undefined
+  return window.__TAURI__!.event.listen(event, handler, target ? { target } : undefined)
+}
+
 /** Подписка на нативное меню «Файл» (действия open|save|save-as|print). */
 export function onDesktopMenu(handler: (action: string) => void): () => void {
+  return subscribe(listenTargeted('novagrid:menu', (e) => {
+    if (typeof e.payload === 'string') handler(e.payload)
+  }))
+}
+
+// ── защита от потери правок при закрытии (novagrid-033) ─────────────────
+// Rust по метке окна знает, есть ли несохранённые правки: только «грязные»
+// окна перехватываются на CloseRequested и получают novagrid:close-ask.
+
+/** Синхронизация флага dirty книги в обёртку (вызывать при каждой смене). */
+export function desktopSetDirty(dirty: boolean): Promise<void> {
+  return invoke<void>('set_window_dirty', { dirty })
+}
+
+/** Закрыть окно, обойдя перехват: решение «сохранить/не сохранять» принято. */
+export function desktopConfirmClose(): Promise<void> {
+  return invoke<void>('confirm_close')
+}
+
+/** Обёртка попросила спросить пользователя о сохранении перед закрытием. */
+export function onDesktopCloseAsk(handler: () => void): () => void {
+  return subscribe(listenTargeted('novagrid:close-ask', () => handler()))
+}
+
+function subscribe(listening: Promise<() => void>): () => void {
   let unlisten: (() => void) | null = null
   let disposed = false
-  void window.__TAURI__!.event.listen('novagrid:menu', (e) => {
-    if (typeof e.payload === 'string') handler(e.payload)
-  }).then((fn) => {
+  void listening.then((fn) => {
     if (disposed) fn()
     else unlisten = fn
   })
