@@ -647,6 +647,7 @@ export default function App() {
           <div className="app-shell">
             <Toolbar
               onOpen={() => void onOpenClicked()}
+              onOpenRecent={(row) => void openRecent(row)}
               onSave={() => void save()}
               onSaveAs={() => setSaveAsOpen(true)}
             />
@@ -655,7 +656,10 @@ export default function App() {
             <GridCanvas />
             <SheetsBar />
             <StatusBar />
-            <MobileBar onOpen={() => void onOpenClicked()} />
+            <MobileBar
+            onOpen={() => void onOpenClicked()}
+            onOpenRecent={(row) => void openRecent(row)}
+          />
             <ReplaceHost />
           </div>
           {/* печатная страница (Этап 7.4): прямой ребёнок app-root — в @media print

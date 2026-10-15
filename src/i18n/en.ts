@@ -128,6 +128,8 @@ const en: RuDict = {
   recentOpenedAt: (d: Date) => `opened ${formatRelative(d)}`,
   recentNoAccess: 'No access to the file — open it via “Open file…”',
   recentUnavailable: 'Quick open is unavailable (file too large) — use “Open file…”',
+  openMenuLabel: 'Open menu',
+  openMenuEmpty: 'No recent files yet',
   restoreSession: 'Continue',
   demoBookTitle: 'Demo book (spec scenario)',
   demoBookHint: 'Names and sums · xlsx · 2 sheets',

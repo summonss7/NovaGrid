@@ -360,6 +360,10 @@ test.describe('автосохранение сессии и «Недавние»
     await expect
       .poll(() => page.evaluate(() => window.__nv?.cell(1, 0) ?? ''), { timeout: 30_000 })
       .toBe('1')
+    // recordOpening летит асинхронно после загрузки книги (снимок байтов ~1 МБ
+    // в IndexedDB) — навигация reload прервала бы незавершённую транзакцию,
+    // и запись о открытии потерялась бы; даём записи уложиться
+    await page.waitForTimeout(600)
 
     await page.reload()
     const items = page.locator('.start-recent-item')
@@ -377,5 +381,73 @@ test.describe('автосохранение сессии и «Недавние»
     const book = await nv(page).book()
     expect(book.fileName).toBe('big-recent.csv')
     expect(book.dirty).toBe(false)
+  })
+})
+
+test.describe('меню «Открыть» в книге (novagrid-030)', () => {
+  test('кнопка «Открыть» показывает пикер и недавние файлы, клик переоткрывает', async ({ page }) => {
+    await page.goto('/?testui=1')
+    await openFixtureFile(page, 'public/fixtures/demo-book.xlsx')
+    await expect
+      .poll(() => page.evaluate(() => window.__nv?.cell(1, 0) ?? ''), { timeout: 3000 })
+      .toBe('Иванов')
+
+    // второй файл: в «недавних» две записи, сверху — свежий
+    await openFixtureFile(page, 'public/fixtures/ods-book.ods')
+    await expect
+      .poll(() => page.evaluate(() => window.__nv?.book().fileName ?? ''), { timeout: 3000 })
+      .toBe('ods-book.ods')
+    // recordOpening летит асинхронно после загрузки книги — даём ему уложиться
+    await page.waitForTimeout(400)
+
+    // кнопка «Открыть» в книге раскрывает меню, а не сразу пикер
+    const openBtn = page.getByRole('button', { name: 'Открыть', exact: true })
+    const menu = page.locator('.open-menu')
+    await expect(menu).toHaveCount(0)
+    await openBtn.click()
+    await expect(menu).toBeVisible()
+    await expect(openBtn).toHaveAttribute('aria-expanded', 'true')
+
+    // первый пункт — прежнее поведение кнопки: пикер (Ctrl+O)
+    await expect(menu.getByRole('menuitem', { name: 'Открыть файл…' })).toBeVisible()
+
+    // ниже — «Недавние»: оба файла, свежий сверху
+    const rows = menu.locator('.open-menu-row')
+    await expect(rows).toHaveCount(2)
+    await expect(rows.nth(0).locator('.open-menu-name')).toHaveText('ods-book.ods')
+    await expect(rows.nth(1).locator('.open-menu-name')).toHaveText('demo-book.xlsx')
+
+    // клик по недавнему переоткрывает файл в этом окне (веб-режим), dirty чист
+    await rows.nth(1).getByRole('menuitem', { name: 'demo-book.xlsx' }).click()
+    await expect(menu).toHaveCount(0)
+    await expect
+      .poll(() => page.evaluate(() => window.__nv?.book().fileName ?? ''), { timeout: 3000 })
+      .toBe('demo-book.xlsx')
+    const book = await nv(page).book()
+    expect(book.tabs).toEqual(['Сотрудники', 'Справочник'])
+    expect(book.dirty).toBe(false)
+
+    // Esc закрывает меню; повторный клик по кнопке — тоже переключает
+    await openBtn.click()
+    await expect(menu).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(menu).toHaveCount(0)
+    await expect(openBtn).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  test('«Забыть» убирает файл из меню «Открыть», пустой список честно подписан', async ({ page }) => {
+    await page.goto('/?testui=1')
+    await openFixtureFile(page, 'public/fixtures/demo-book.xlsx')
+    await expect
+      .poll(() => page.evaluate(() => window.__nv?.cell(1, 0) ?? ''), { timeout: 3000 })
+      .toBe('Иванов')
+    await page.waitForTimeout(400) // recordOpening асинхронен
+
+    await page.getByRole('button', { name: 'Открыть', exact: true }).click()
+    const menu = page.locator('.open-menu')
+    await expect(menu.locator('.open-menu-row')).toHaveCount(1)
+    await menu.getByRole('menuitem', { name: 'Забыть' }).click()
+    await expect(menu.locator('.open-menu-row')).toHaveCount(0)
+    await expect(menu.getByText('Недавних файлов пока нет')).toBeVisible()
   })
 })

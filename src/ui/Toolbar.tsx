@@ -16,8 +16,10 @@ import { printStore } from '../core/print'
 import { normalize } from '../core/selection'
 import { gridStore, rangeMetrics } from '../core/store'
 import { useT } from '../i18n'
+import type { OpeningRow } from '../storage/recents'
 import { HelpDialog } from './HelpDialog'
 import { Logo } from './Logo'
+import { OpenMenu } from './OpenMenu'
 import { SearchBox } from './SearchBox'
 import { SettingsDialog } from './SettingsDialog'
 import { SumCard } from './SumCard'
@@ -29,8 +31,15 @@ import { SumCard } from './SumCard'
  * живая сумма крупно в зоне Σ (Ф4). Справка — Этап 4.
  * Этап 5.2: на мобильном файловые кнопки уходят в меню «⋯» (нижняя панель
  * берёт Открыть/Поиск/Σ/?), тулбар остаётся тонкой строкой с именем файла.
+ * novagrid-030: «Открыть» раскрывает меню — пикер + недавние файлы (как в
+ * настольных офисах), а не сразу пикер.
  */
-export function Toolbar(props: { onOpen: () => void; onSave: () => void; onSaveAs: () => void }) {
+export function Toolbar(props: {
+  onOpen: () => void
+  onOpenRecent: (row: OpeningRow) => void
+  onSave: () => void
+  onSaveAs: () => void
+}) {
   const t = useT()
   const fileName = useStore(gridStore, (s) => s.fileName)
   const dirty = useStore(gridStore, (s) => s.dirty)
@@ -38,6 +47,7 @@ export function Toolbar(props: { onOpen: () => void; onSave: () => void; onSaveA
   const [helpOpen, setHelpOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
+  const [openMenu, setOpenMenu] = useState(false)
 
   // F1 открывает справочник — как в настольных офисных приложениях
   useEffect(() => {
@@ -63,10 +73,28 @@ export function Toolbar(props: { onOpen: () => void; onSave: () => void; onSaveA
       <Logo />
 
       <div className="toolbar-group" role="group" aria-label={t.fileGroupLabel}>
-        <button type="button" className="btn btn-primary" onClick={props.onOpen}>
-          <FolderOpen size={16} strokeWidth={1.5} aria-hidden />
-          {t.open}
-        </button>
+        {/* novagrid-030: «Открыть» показывает меню — пикер «Открыть файл…»
+            плюс ссылки на последние открытые файлы (раньше недавние были
+            доступны только на стартовом экране) */}
+        <div className="toolbar-open">
+          <button
+            type="button"
+            className="btn btn-primary"
+            aria-haspopup="menu"
+            aria-expanded={openMenu}
+            onClick={() => setOpenMenu((v) => !v)}
+          >
+            <FolderOpen size={16} strokeWidth={1.5} aria-hidden />
+            {t.open}
+          </button>
+          {openMenu && (
+            <OpenMenu
+              onBrowse={props.onOpen}
+              onOpenRecent={props.onOpenRecent}
+              onClose={() => setOpenMenu(false)}
+            />
+          )}
+        </div>
         <button type="button" className="btn btn-primary" onClick={props.onSave}>
           <Save size={16} strokeWidth={1.5} aria-hidden />
           {t.save}

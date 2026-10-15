@@ -118,6 +118,8 @@ export const ru = {
   recentOpenedAt: (d: Date) => `открыт ${formatRelative(d)}`,
   recentNoAccess: 'Нет доступа к файлу — откройте его через «Открыть файл…»',
   recentUnavailable: 'Быстрое открытие недоступно (файл большой) — откройте через «Открыть файл…»',
+  openMenuLabel: 'Меню «Открыть»',
+  openMenuEmpty: 'Недавних файлов пока нет',
   restoreSession: 'Продолжить',
   demoBookTitle: 'Демо-книга сценария ТЗ',
   demoBookHint: 'Фамилии и суммы · xlsx · 2 листа',
