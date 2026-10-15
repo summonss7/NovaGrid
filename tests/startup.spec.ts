@@ -52,13 +52,17 @@ test.describe('главный экран — каркас книги', () => {
     await expect(page.locator('canvas.grid-canvas')).toBeVisible()
   })
 
-  test('SVG-логотип «N» и словесная часть отрисованы', async ({ page }) => {
+  test('SVG-знак «ячейка с продолжением линий» и словесная часть отрисованы', async ({
+    page,
+  }) => {
     await page.goto('/?test=1')
 
     const mark = page.locator('.logo-mark')
     await expect(mark).toBeVisible()
-    // знак — это svg с фигурами стрелок (2 линии-стрелки + 2 полигона-наконечника)
-    await expect(mark.locator('polygon')).toHaveCount(2)
+    // знак (novagrid-029): 2 плитки-прямоугольника (чёрная плитка + зелёная
+    // ячейка) и 2 линии — оранжевые продолжения рёбер ячейки
+    await expect(mark.locator('rect')).toHaveCount(2)
+    await expect(mark.locator('line')).toHaveCount(2)
     await expect(page.locator('.logo-word')).toContainText('NovaGrid')
   })
 

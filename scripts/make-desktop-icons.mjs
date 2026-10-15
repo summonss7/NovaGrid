@@ -20,11 +20,16 @@ async function renderPng(browser, size) {
   const page = await browser.newPage({ viewport: { width: size, height: size } })
   await page.setContent(
     `<!doctype html><html><head><style>
-      html,body{margin:0;padding:0;width:${size}px;height:${size}px;background:#fff}
+      html,body{margin:0;padding:0;width:${size}px;height:${size}px;background:transparent}
       svg{display:block;width:${size}px;height:${size}px}
     </style></head><body>${svg}</body></html>`,
   )
-  const png = await page.screenshot({ clip: { x: 0, y: 0, width: size, height: size } })
+  // прозрачные углы вокруг скруглённой плитки знака (novagrid-029) — в exe
+  // и панели задач плитка без белой рамки
+  const png = await page.screenshot({
+    clip: { x: 0, y: 0, width: size, height: size },
+    omitBackground: true,
+  })
   await page.close()
   return png
 }

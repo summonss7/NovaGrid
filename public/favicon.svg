@@ -1,14 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
-  <!-- NovaGrid: знак «N» из двух стрелок (DESIGN-SYSTEM §5) -->
-  <rect x="1.5" y="1.5" width="45" height="45" rx="11" fill="#FFFFFF" stroke="#E4E4E1"/>
-  <g stroke="#E4E4E1" stroke-width="1.5" stroke-linecap="round">
-    <line x1="24" y1="5" x2="24" y2="43"/>
-    <line x1="5" y1="24" x2="43" y2="24"/>
+  <!-- NovaGrid: знак «ячейка с продолжением линий» (novagrid-029, DESIGN-SYSTEM §5):
+       зелёная ячейка в центре, оранжевые лучи продолжают её рёбра — ячейка не одна,
+       из них складывается целая таблица. Чёрная плитка, жирные штрихи — читается
+       в мелких иконках (16 px). -->
+  <rect x="1.5" y="1.5" width="45" height="45" rx="11" fill="#000000"/>
+  <g stroke="#F26B21" stroke-width="6" stroke-linecap="round">
+    <line x1="6" y1="24" x2="42" y2="24"/>
+    <line x1="24" y1="6" x2="24" y2="42"/>
   </g>
-  <rect x="9" y="8" width="6.5" height="32" rx="3.25" fill="#2B2B2B"/>
-  <rect x="32.5" y="8" width="6.5" height="32" rx="3.25" fill="#2B2B2B"/>
-  <line x1="34.5" y1="10" x2="22.5" y2="22" stroke="#3ADF63" stroke-width="6" stroke-linecap="round"/>
-  <polygon points="16,29 24.91,26.59 18.41,20.09" fill="#3ADF63"/>
-  <line x1="13.5" y1="38" x2="25.5" y2="26" stroke="#F26B21" stroke-width="6" stroke-linecap="round"/>
-  <polygon points="32,19 29.59,27.91 23.09,21.41" fill="#F26B21"/>
+  <rect x="15" y="15" width="18" height="18" rx="3.5" fill="#3ADF63"/>
 </svg>
