@@ -59,10 +59,11 @@ test.describe('главный экран — каркас книги', () => {
 
     const mark = page.locator('.logo-mark')
     await expect(mark).toBeVisible()
-    // знак (novagrid-029): 2 плитки-прямоугольника (чёрная плитка + зелёная
-    // ячейка) и 2 линии — оранжевые продолжения рёбер ячейки
+    // знак (novagrid-031): 2 прямоугольника (чёрная плитка + контур ячейки
+    // с чёрной заливкой) и 4 линии — сетка по рёбрам ячейки, за рамкой
+    // видны обломки линий соседних ячеек
     await expect(mark.locator('rect')).toHaveCount(2)
-    await expect(mark.locator('line')).toHaveCount(2)
+    await expect(mark.locator('line')).toHaveCount(4)
     await expect(page.locator('.logo-word')).toContainText('NovaGrid')
   })
 
