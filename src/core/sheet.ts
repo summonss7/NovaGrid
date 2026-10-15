@@ -12,6 +12,20 @@ export const MIN_ROWS = 100
 export const MIN_COLS = 26
 
 /**
+ * Пределы листа — как у Excel .xlsx: выросший лист всегда честно экспортируется.
+ */
+export const MAX_ROWS = 1_048_576
+export const MAX_COLS = 16_384
+
+/**
+ * Запас пустых строк/колонок за границей контента (novagrid-032): лист всегда
+ * продолжается пустым местом вправо и вниз — есть куда вставить скопированный
+ * блок. Прокрутка к краю запаса расширяет лист ещё (GridCanvas → growSheet).
+ */
+export const SPACE_ROWS = 50
+export const SPACE_COLS = 10
+
+/**
  * Минимальный стиль ячейки, который честно переносится файл⇄модель (Этап 2):
  * жирность, выравнивание, заливка и цвет текста. Форматы чисел — Этап 4+.
  */
@@ -104,6 +118,18 @@ export function withStyle(
   if (!style || Object.keys(style).length === 0) styles.delete(key)
   else styles.set(key, style)
   return { ...sheet, styles }
+}
+
+/**
+ * Запас пустого места за контентом (novagrid-032): логические границы листа
+ * всегда дальше последней тронутой ячейки на SPACE_ROWS/SPACE_COLS — за данными
+ * видно пустые ячейки, куда можно вставить скопированный блок. Границы только
+ * растут (как у withCell), экспорт не меняется: он идёт по maxRow/maxCol.
+ */
+export function withSpace(sheet: SheetModel): SheetModel {
+  const rows = Math.min(MAX_ROWS, Math.max(sheet.rows, sheet.maxRow + 1 + SPACE_ROWS))
+  const cols = Math.min(MAX_COLS, Math.max(sheet.cols, sheet.maxCol + 1 + SPACE_COLS))
+  return rows === sheet.rows && cols === sheet.cols ? sheet : { ...sheet, rows, cols }
 }
 
 export function isNumericCell(sheet: SheetModel, row: number, col: number): boolean {

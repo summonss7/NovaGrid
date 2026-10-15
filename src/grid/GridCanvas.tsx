@@ -21,7 +21,7 @@ import { useStore } from 'zustand'
 import { visibleRowsOf, type ColumnFilter } from '../core/filter'
 import { normalize, inSelection } from '../core/selection'
 import { gridStore, rangeMetrics } from '../core/store'
-import type { SheetModel } from '../core/sheet'
+import { SPACE_COLS, SPACE_ROWS, type SheetModel } from '../core/sheet'
 import { useSettings, useT } from '../i18n'
 import { selectionText } from '../core/copy'
 import { copyText } from '../ui/clipboard'
@@ -368,6 +368,7 @@ export function GridCanvas() {
     const onScroll = () => {
       scheduleDraw()
       positionEditor()
+      maybeGrowSheet()
     }
     scrollEl?.addEventListener('scroll', onScroll)
     // Ctrl+колесо — зум таблицы (и тачпад-пинч, который шлёт wheel с ctrlKey)
@@ -496,6 +497,30 @@ export function GridCanvas() {
     else if (y > el.clientHeight - zone) el.scrollTop += METRICS.rowH
     if (x < METRICS.rowHeaderW + METRICS.colW) el.scrollLeft -= METRICS.colW
     else if (x > el.clientWidth - METRICS.colW) el.scrollLeft += METRICS.colW
+  }
+
+  /**
+   * «Бесконечное» пустое место (novagrid-032): прокрутка к правому/нижнему
+   * краю расширяет логические границы листа — за данными всегда есть пустые
+   * ячейки, куда можно поставить скопированный блок. Порог — 2 строки/колонки
+   * до края спейсера; рост — блоками SPACE_ROWS/SPACE_COLS (стор ограничит
+   * пределами Excel .xlsx).
+   */
+  const maybeGrowSheet = () => {
+    const el = scrollRef.current
+    if (!el) return
+    const st = gridStore.getState()
+    const size = totalSize(
+      layoutFor(st.sheet, st.filters).count,
+      st.sheet.cols,
+      undefined,
+      colsLayoutFor(st.sheet.cols, st.colWidths),
+    )
+    let rows = st.sheet.rows
+    let cols = st.sheet.cols
+    if (el.scrollTop + el.clientHeight >= size.h - METRICS.rowH * 2) rows += SPACE_ROWS
+    if (el.scrollLeft + el.clientWidth >= size.w - METRICS.colW * 2) cols += SPACE_COLS
+    if (rows !== st.sheet.rows || cols !== st.sheet.cols) st.growSheet(rows, cols)
   }
 
   // ── длинное нажатие = ПКМ (5.3) ───────────────────────────────────────
@@ -931,6 +956,15 @@ export function GridCanvas() {
       e.preventDefault()
       return
     }
+    // Ctrl+X — вырезать (novagrid-032): блок в буфер, ячейки очищаются;
+    // очистка только при успешной записи в буфер — как вырезание в Excel
+    if (mod && e.code === 'KeyX') {
+      void (async () => {
+        if (await copyText(selectionText(st.sheet, st.selection))) st.deleteSelection()
+      })()
+      e.preventDefault()
+      return
+    }
     // зум таблицы с клавиатуры (5.3): Ctrl + / − / 0 — как в настольных офисах
     if (mod && (e.code === 'Equal' || e.code === 'NumpadAdd')) {
       zoomStep(0.1)
@@ -1086,7 +1120,10 @@ export function GridCanvas() {
           col={ctxMenu.col}
           onClose={() => {
             setCtxMenu(null)
-            mainRef.current?.focus({ preventScroll: true })
+            // фокус после коммита: кнопки меню размонтируются уже после
+            // синхронного focus() (async-пункты — буфер), и браузер роняет
+            // фокус на body — клавиатура грида «замирала» (novagrid-032)
+            requestAnimationFrame(() => mainRef.current?.focus({ preventScroll: true }))
           }}
         />
       )}

@@ -347,6 +347,51 @@ test.describe('вставка Ctrl+V (novagrid-025)', () => {
   })
 })
 
+test.describe('пустое место для вставки (novagrid-032)', () => {
+  test('прокрутка к краю расширяет лист — место есть всегда', async ({ page }) => {
+    await page.goto('/?test=1&stress=1000')
+    await nv(page).ready()
+    const book = () => page.evaluate(() => window.__nv!.book())
+
+    // после загрузки за данными уже запас пустых строк (1000 → 1050)
+    await expect.poll(() => book().then((b) => b.rows)).toBe(1050)
+
+    // доехали до низа — лист подрос ещё блоком (и дальше так же)
+    await nv(page).scrollTo(0, 10 ** 9)
+    await expect.poll(() => book().then((b) => b.rows)).toBe(1100)
+
+    // правый край — колонки растут так же (30 → 40)
+    await nv(page).scrollTo(10 ** 9, 0)
+    await expect.poll(() => book().then((b) => b.cols)).toBe(40)
+  })
+
+  test('скопированный блок вставляется в пустые ячейки под данными', async ({ page }) => {
+    await page.context().grantPermissions(['clipboard-read', 'clipboard-write'])
+    await page.goto('/?test=1')
+    await nv(page).ready()
+    const api = nv(page)
+
+    // блок A1:B2 демо-таблицы → буфер
+    await clickCell(page, 0, 0)
+    await page.keyboard.press('Shift+ArrowDown')
+    await page.keyboard.press('Shift+ArrowRight')
+    await page.keyboard.press('Control+c')
+    await expect
+      .poll(() =>
+        page.evaluate(() => navigator.clipboard.readText().then((t) => t.replace(/\r\n/g, '\n'))),
+      )
+      .toBe('Фамилия\tОтдел\nИванов\tПродажи')
+
+    // пустое место под данными: строка 12 кликается и принимает блок
+    await api.scrollTo(0, 30 * 11 - 120)
+    await clickCell(page, 11, 0)
+    await page.keyboard.press('Control+v')
+    await expect.poll(() => api.cell(11, 0)).toBe('Фамилия')
+    expect(await api.cell(12, 1)).toBe('Продажи')
+    expect(await api.ranges()).toEqual(['A12:B13'])
+  })
+})
+
 test.describe('стресс 100k×30 — виртуализация (1.2)', () => {
   test('прокрутка в глубину рисует правильное окно, кадр укладывается в бюджет 60 fps', async ({
     page,
@@ -398,8 +443,9 @@ test.describe('прокрутка таблицы (novagrid-027)', () => {
     const api = nv(page)
     await page.click('.grid-area')
     await page.keyboard.press('Control+End')
-    await expect.poll(() => api.activeRef()).toBe('AD1000') // 30-я колонка
-    // прокрутка доехала до конца листа (глубина минус экран)
+    // лист = данные (1000) + запас пустых строк (novagrid-032); 30-я колонка
+    await expect.poll(() => api.activeRef()).toBe('AD1050')
+    // прокрутка доехала до конца данных (глубина минус экран)
     await expect
       .poll(() => page.locator('.grid-scroll').evaluate((n) => n.scrollTop))
       .toBeGreaterThan(30 * 1000 - 30 * 40)

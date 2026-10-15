@@ -123,6 +123,62 @@ test.describe('КТ-3: ПКМ-фильтрация сценария ТЗ → 132
     await page.getByRole('menuitem', { name: 'Копировать ячейку' }).click()
     await expect(page.locator('.ctx-menu')).toBeHidden()
   })
+
+  test('основные операции в меню ПКМ: копировать/вставить/удалить/вырезать (novagrid-032)', async ({
+    page,
+  }) => {
+    await page.context().grantPermissions(['clipboard-read', 'clipboard-write'])
+    const api = nv(page)
+    const menu = page.getByRole('menu', { name: 'Меню ячейки' })
+    const clipboard = () =>
+      page.evaluate(() => navigator.clipboard.readText().then((t) => t.replace(/\r\n/g, '\n')))
+
+    // выделяем блок A1:B2 (шапка + первая строка данных) обычным кликом
+    const c = await api.cellCenter(0, 0)
+    await page.mouse.click(c.x, c.y)
+    await page.keyboard.press('Shift+ArrowDown')
+    await page.keyboard.press('Shift+ArrowRight')
+    // эталон блока — из самой фикстуры (демо-книга не равна демо-листу)
+    const block = [
+      [await api.cell(0, 0), await api.cell(0, 1)],
+      [await api.cell(1, 0), await api.cell(1, 1)],
+    ]
+    const blockTsv = block.map((r) => r.join('\t')).join('\n')
+
+    // ПКМ внутри выделения: в меню появились основные действия с подсказками клавиш
+    await rightClickCell(page, 1, 1)
+    for (const name of ['Вырезать', 'Копировать', 'Вставить', 'Удалить содержимое']) {
+      await expect(menu.getByRole('menuitem', { name, exact: true })).toBeVisible()
+    }
+
+    // «Копировать» кладёт блок TSV (не только ячейку)
+    await menu.getByRole('menuitem', { name: 'Копировать', exact: true }).click()
+    await expect.poll(clipboard).toBe(blockTsv)
+
+    // «Удалить содержимое» очищает блок, Ctrl+Z возвращает
+    await rightClickCell(page, 0, 0)
+    await menu.getByRole('menuitem', { name: 'Удалить содержимое' }).click()
+    await expect.poll(() => api.cell(0, 0)).toBe('')
+    expect(await api.cell(1, 1)).toBe('')
+    await page.keyboard.press('Control+z')
+    await expect.poll(() => api.cell(0, 0)).toBe('Фамилия')
+
+    // «Вставить» читает системный буфер и пишет блок от активной ячейки
+    // (ПКМ по соседней ячейке выделения — guard не даёт переоткрыть меню
+    // в той же точке раньше 400 мс; активной остаётся A1)
+    await rightClickCell(page, 0, 1)
+    await menu.getByRole('menuitem', { name: 'Вставить', exact: true }).click()
+    await expect.poll(() => api.cell(0, 0)).toBe(block[0][0])
+    expect(await api.cell(1, 1)).toBe(block[1][1])
+
+    // «Вырезать»: блок снова в буфере, ячейки пусты; Ctrl+Z возвращает
+    await rightClickCell(page, 1, 0)
+    await menu.getByRole('menuitem', { name: 'Вырезать', exact: true }).click()
+    await expect.poll(() => api.cell(0, 0)).toBe('')
+    await expect.poll(clipboard).toBe(blockTsv)
+    await page.keyboard.press('Control+z')
+    await expect.poll(() => api.cell(1, 1)).toBe(block[1][1])
+  })
 })
 
 test.describe('поиск (Ф2): инкрементальный, лист/книга, счётчик, навигация', () => {

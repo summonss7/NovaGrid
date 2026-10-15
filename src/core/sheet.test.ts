@@ -1,5 +1,16 @@
 import { describe, expect, it } from 'vitest'
-import { createSheet, getCell, isNumericCell, parseNumber, withCell } from './sheet'
+import {
+  MAX_COLS,
+  MAX_ROWS,
+  SPACE_COLS,
+  SPACE_ROWS,
+  createSheet,
+  getCell,
+  isNumericCell,
+  parseNumber,
+  withCell,
+  withSpace,
+} from './sheet'
 
 describe('sheet: модель листа', () => {
   it('пустой лист отдаёт пустую строку и не хранит пустых ячеек', () => {
@@ -34,6 +45,36 @@ describe('sheet: модель листа', () => {
     expect(getCell(base, 1, 1)).toBe('')
     expect(getCell(next, 0, 0)).toBe('a')
     expect(getCell(next, 1, 1)).toBe('b')
+  })
+})
+
+describe('withSpace: запас пустого места за контентом (novagrid-032)', () => {
+  it('за границей контента всегда есть пустые строки и колонки', () => {
+    // таблица 500×30 целиком заполняет лист — за ней места нет
+    let sheet = createSheet(500, 30)
+    sheet = { ...sheet, maxRow: 499, maxCol: 29 }
+    const next = withSpace(sheet)
+    expect(next.rows).toBe(500 + SPACE_ROWS)
+    expect(next.cols).toBe(30 + SPACE_COLS)
+    expect(next.maxRow).toBe(499) // контент не меняется
+    expect(next.cells).toBe(sheet.cells)
+  })
+
+  it('не сжимает уже большие границы и идемпотентен', () => {
+    let sheet = createSheet(500, 30)
+    sheet = { ...sheet, maxRow: 499, maxCol: 29 }
+    const grown = withSpace(sheet)
+    expect(withSpace(grown)).toBe(grown) // второй проход — та же ссылка
+    const fresh = createSheet() // пустой лист и так просторен — без изменений
+    expect(withSpace(fresh)).toBe(fresh)
+  })
+
+  it('лист не растёт за пределы Excel .xlsx', () => {
+    let sheet = createSheet(MAX_ROWS, MAX_COLS)
+    sheet = { ...sheet, maxRow: MAX_ROWS - 1, maxCol: MAX_COLS - 1 }
+    const next = withSpace(sheet)
+    expect(next.rows).toBe(MAX_ROWS)
+    expect(next.cols).toBe(MAX_COLS)
   })
 })
 

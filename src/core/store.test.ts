@@ -120,6 +120,58 @@ describe('store: вставка из буфера (novagrid-025)', () => {
   })
 })
 
+describe('store: пустое место для вставки (novagrid-032)', () => {
+  it('загруженная книга получает запас пустых строк/колонок за контентом', () => {
+    const rows = Array.from({ length: 200 }, (_, r) => [`r${r}`, `c${r}`])
+    s().loadBook({
+      sheets: [
+        {
+          name: 'Полная',
+          sheet: {
+            cells: new Map(
+              rows.flatMap((pair, r) => [
+                [`${r}:0`, pair[0]],
+                [`${r}:1`, pair[1]],
+              ]),
+            ),
+            styles: new Map(),
+            rows: 200,
+            cols: 2,
+            maxRow: 199,
+            maxCol: 1,
+          },
+        },
+      ],
+    })
+    // лист был ровно по данным — теперь за ними видно пустое место
+    expect(s().sheet.rows).toBeGreaterThanOrEqual(250)
+    expect(s().sheet.cols).toBeGreaterThanOrEqual(12)
+    expect(s().dirty).toBe(false) // запас — не правка данных
+  })
+
+  it('growSheet расширяет границы активного листа без истории и dirty', () => {
+    const before = s().sheet
+    s().growSheet(before.rows + 100, before.cols + 5)
+    expect(s().sheet.rows).toBe(before.rows + 100)
+    expect(s().sheet.cols).toBe(before.cols + 5)
+    expect(s().dirty).toBe(false)
+    s().undo() // роста нет в истории — откатить нечего
+    expect(s().sheet.rows).toBe(before.rows + 100)
+    // сжимать и повторять бессмысленный рост growSheet не должен
+    s().growSheet(5, 5)
+    expect(s().sheet.rows).toBe(before.rows + 100)
+  })
+
+  it('вставка в последнюю строку оставляет за блоком пустое место', () => {
+    const sheet = s().sheet
+    const startRow = sheet.rows - 1
+    s().clickCell(startRow, 0)
+    s().pasteText('a\tb\nc\td')
+    expect(getCell(s().sheet, startRow + 1, 1)).toBe('d') // блок занял ещё строку
+    expect(s().sheet.rows).toBeGreaterThanOrEqual(startRow + 2 + 50) // запас восстановился
+  })
+})
+
 describe('store: выделение (1.4)', () => {
   it('Ctrl-клик собирает несмежные области, повторный снимает одиночную', () => {
     s().clickCell(1, 2) // Иванов 10000
@@ -192,7 +244,9 @@ describe('store: выделение (1.4)', () => {
 describe('store: стресс-режим', () => {
   it('seedStress создаёт 100k×30 с числовой колонкой', () => {
     s().seedStress(100000, 30)
-    expect(s().sheet.rows).toBe(100000)
+    // логические границы — данные плюс запас пустого места (novagrid-032);
+    // колонок уже 30 при контенте в одной — запас их не сжимает и не трогает
+    expect(s().sheet.rows).toBe(100050)
     expect(s().sheet.cols).toBe(30)
     expect(getCell(s().sheet, 99999, 0)).toBe('100000')
     // границы и история сброшены

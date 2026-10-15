@@ -82,6 +82,13 @@ const en: RuDict = {
   filterShownOf: (shown: number, total: number) =>
     `Showing ${shown.toLocaleString('en-US')} of ${total.toLocaleString('en-US')}`,
   ctxMenuLabel: 'Cell menu',
+  /** core clipboard actions of the context menu (novagrid-032) */
+  ctxClipboardGroup: 'Basic actions',
+  ctxCut: 'Cut',
+  ctxCopy: 'Copy',
+  ctxPaste: 'Paste',
+  ctxClear: 'Delete contents',
+  ctxPasteUnavailable: 'Clipboard unavailable — press Ctrl+V instead',
   ctxFilterEqual: (col: string, value: string) => `Filter: ${col} = "${value}"`,
   ctxFilterNotEqual: (col: string, value: string) => `Exclude: ${col} ≠ "${value}"`,
   ctxAddValue: (value: string) => `Add "${value}" to filter`,

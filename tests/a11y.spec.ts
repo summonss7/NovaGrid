@@ -32,10 +32,14 @@ test.describe('клавиатура везде (6.2)', () => {
     const menu = page.locator('.ctx-menu')
     await page.keyboard.press('Shift+F10')
     await expect(menu).toBeVisible()
-    // паттерн menu: фокус в первом пункте
+    // паттерн menu: фокус в первом пункте — основные действия (novagrid-032)
     await expect(menu.locator('button').first()).toBeFocused()
-    await expect(menu.locator('button').first()).toContainText('Фильтровать: A = «Иванов»')
+    await expect(menu.locator('button').first()).toContainText('Вырезать')
 
+    // стрелками доходим до фильтра и применяем Enter'ом
+    for (let i = 0; i < 4; i++) await page.keyboard.press('ArrowDown')
+    const filterItem = menu.getByRole('menuitem', { name: 'Фильтровать: A = «Иванов»' })
+    await expect(filterItem).toBeFocused()
     await page.keyboard.press('Enter')
     await expect(menu).toBeHidden()
     await expect

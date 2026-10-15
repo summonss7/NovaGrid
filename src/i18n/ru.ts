@@ -69,6 +69,13 @@ export const ru = {
   filterShownOf: (shown: number, total: number) =>
     `Показано ${shown.toLocaleString('ru-RU')} из ${total.toLocaleString('ru-RU')}`,
   ctxMenuLabel: 'Меню ячейки',
+  /** основные операции ПКМ-меню (novagrid-032) */
+  ctxClipboardGroup: 'Основные действия',
+  ctxCut: 'Вырезать',
+  ctxCopy: 'Копировать',
+  ctxPaste: 'Вставить',
+  ctxClear: 'Удалить содержимое',
+  ctxPasteUnavailable: 'Буфер обмена недоступен — вставьте Ctrl+V',
   ctxFilterEqual: (col: string, value: string) => `Фильтровать: ${col} = «${value}»`,
   ctxFilterNotEqual: (col: string, value: string) => `Исключить: ${col} ≠ «${value}»`,
   ctxAddValue: (value: string) => `Добавить «${value}» к фильтру`,

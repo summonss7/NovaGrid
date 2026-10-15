@@ -31,6 +31,8 @@ import {
   selectionOf,
 } from './selection'
 import {
+  MAX_COLS,
+  MAX_ROWS,
   MIN_COLS,
   MIN_ROWS,
   type SheetModel,
@@ -39,6 +41,7 @@ import {
   getCell,
   parseNumber,
   withCell,
+  withSpace,
 } from './sheet'
 import { applyFormulaChanges, cellNumber, recalcSheet } from '../formula/engine'
 import { parseClipboardTsv } from './copy'
@@ -239,6 +242,12 @@ export interface GridState {
    * накрывает вставленный блок.
    */
   pasteText: (text: string) => void
+  /**
+   * Расширить логические границы активного листа до rows×cols (novagrid-032):
+   * «бесконечное» пустое место вправо/вниз при прокрутке к краю. Не правка
+   * данных — без истории и флага dirty; экспорт не меняется (он по maxRow/maxCol).
+   */
+  growSheet: (rows: number, cols: number) => void
   beginEdit: (initial?: string) => void
   /** правка активной ячейки из строки формул (4.3) */
   beginBarEdit: () => void
@@ -768,6 +777,11 @@ export const gridStore = createStore<GridState>((set, get) => {
 
     loadBook: (wire, meta) => {
       const tabs = tabsFromWire(wire)
+      // запас пустого места за контентом (novagrid-032): открытая таблица
+      // всегда продолжается пустыми ячейками вправо и вниз
+      tabs.forEach((t) => {
+        t.sheet = withSpace(t.sheet)
+      })
       const sheets = tabs.length > 0 ? tabs : [createTab(DEFAULT_SHEET_NAME)]
       sheets.forEach((t) => recalcSheet(t.sheet))
       clearHistories()
@@ -1113,7 +1127,9 @@ export const gridStore = createStore<GridState>((set, get) => {
       )
       if (changes.length > 0) {
         historyOf(tabs[activeTab].id).push({ label: 'paste', changes })
-        commitSheet(sheet, applyChanges(sheet, changes, 'after'), changes)
+        // withSpace: вставленный блок не упирается в край — за ним снова
+        // пустое место (novagrid-032)
+        commitSheet(sheet, withSpace(applyChanges(sheet, changes, 'after')), changes)
         set({ dirty: true })
       }
       // выделение накрывает вставленный блок — видно, что и куда легло (как Excel)
@@ -1123,6 +1139,17 @@ export const gridStore = createStore<GridState>((set, get) => {
         selection: { active: { row, col }, ranges: [{ fr: row, fc: col, tr: lastRow, tc: lastCol }] },
       })
       refreshSearch()
+    },
+
+    growSheet: (rows, cols) => {
+      const { sheet } = get()
+      const next = {
+        ...sheet,
+        rows: Math.min(MAX_ROWS, Math.max(sheet.rows, Math.round(rows))),
+        cols: Math.min(MAX_COLS, Math.max(sheet.cols, Math.round(cols))),
+      }
+      if (next.rows === sheet.rows && next.cols === sheet.cols) return
+      patchSheet(next)
     },
 
     beginEdit: (initial) => {

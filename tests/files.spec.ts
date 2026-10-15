@@ -261,7 +261,8 @@ test.describe('стресс 100k строк (2.5)', () => {
 
     const api = nv(page)
     const book = await api.book()
-    expect(book.rows).toBe(100_001)
+    // данные 100 001 строка + запас пустых строк за контентом (novagrid-032)
+    expect(book.rows).toBe(100_051)
     expect(book.tabs).toEqual(['stress-100k'])
 
     // эталон последней строки берём из самого файла фикстуры (детерминированной)

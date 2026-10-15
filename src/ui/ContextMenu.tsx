@@ -1,6 +1,7 @@
-import { Copy, Filter, FilterX, ListPlus } from 'lucide-react'
-import { useRef } from 'react'
+import { ClipboardPaste, Copy, Eraser, Filter, FilterX, ListPlus, Scissors } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
 import { useStore } from 'zustand'
+import { selectionText } from '../core/copy'
 import { colName } from '../grid/geometry'
 import { gridStore } from '../core/store'
 import { cellText } from '../formula/engine'
@@ -9,10 +10,12 @@ import { copyText } from './clipboard'
 import { useMenuKeys } from './menuKeys'
 
 /**
- * Контекстное меню ПКМ по ячейке (CONCEPT Ф3, DESIGN-SYSTEM §7) — ключевой
- * жест ТЗ: «Фильтровать: A = «Иванов»» первым пунктом, инверсия, добавление
- * значения к фильтру, сброс, копирование. Значение берётся то, на котором
- * нажали, — без диалогов.
+ * Контекстное меню ПКМ по ячейке (CONCEPT Ф3, DESIGN-SYSTEM §7; novagrid-032).
+ * Первая группа — основные операции, как в Excel: вырезать/копировать/вставить/
+ * удалить содержимое (блок — по выделению). Дальше ключевой жест ТЗ:
+ * «Фильтровать: A = «Иванов»», инверсия, добавление значения к фильтру, сброс.
+ * Вставка читает системный буфер (Clipboard API); если браузер не дал
+ * разрешение — меню остаётся с подсказкой, Ctrl+V работает всегда.
  */
 export function ContextMenu(props: {
   x: number
@@ -24,7 +27,22 @@ export function ContextMenu(props: {
   const t = useT()
   const filters = useStore(gridStore, (s) => s.filters)
   const menuRef = useRef<HTMLDivElement>(null)
+  const [pasteHint, setPasteHint] = useState(false)
   useMenuKeys(menuRef, props.onClose)
+
+  // асинхронные пункты (буфер) закрывают меню только пока оно открыто:
+  // если пользователь успел переоткрыть меню, чужое закрытие не должно
+  // хлопнуть новым — экземпляр размонтируется при смене key row:col
+  const aliveRef = useRef(true)
+  useEffect(() => {
+    aliveRef.current = true
+    return () => {
+      aliveRef.current = false
+    }
+  }, [])
+  const closeIfAlive = () => {
+    if (aliveRef.current) props.onClose()
+  }
 
   const st = gridStore.getState()
   // отображаемое значение: фильтры сравнивают то, что видно (формулы вычислены)
@@ -42,7 +60,31 @@ export function ContextMenu(props: {
 
   const copyValue = async (text: string) => {
     await copyText(text)
-    props.onClose()
+    closeIfAlive()
+  }
+
+  // блок выделения (TSV) — то, что кладут в буфер Ctrl+C/Ctrl+X
+  const blockText = selectionText(st.sheet, st.selection)
+
+  const cutSelection = async () => {
+    if (await copyText(blockText)) st.deleteSelection()
+    closeIfAlive()
+  }
+
+  const pasteFromClipboard = async () => {
+    try {
+      const text = await navigator.clipboard.readText()
+      // жест актуален, только пока это меню открыто: чтение буфера может
+      // длиться долго (запрос разрешения) и пережить закрытие/замену меню —
+      // поздняя вставка падала бы в изменившиеся ячейки
+      if (aliveRef.current) {
+        if (text !== '') st.pasteText(text)
+        props.onClose()
+      }
+    } catch {
+      // разрешения нет (браузер спросил и отказали / WebView) — Ctrl+V доступен всегда
+      if (aliveRef.current) setPasteHint(true)
+    }
   }
 
   // строка для «Копировать строку»: значения колонок контента через таб
@@ -52,7 +94,7 @@ export function ContextMenu(props: {
 
   // не вылезать за пределы окна
   const left = Math.min(props.x, window.innerWidth - 300)
-  const top = Math.min(props.y, window.innerHeight - 330)
+  const top = Math.min(props.y, window.innerHeight - 440)
 
   return (
     <>
@@ -68,6 +110,53 @@ export function ContextMenu(props: {
         role="menu"
         aria-label={t.ctxMenuLabel}
       >
+        <div className="ctx-clip-group" role="group" aria-label={t.ctxClipboardGroup}>
+          <button
+            type="button"
+            role="menuitem"
+            className="ctx-item"
+            onClick={() => void cutSelection()}
+          >
+            <Scissors size={14} strokeWidth={1.5} aria-hidden />
+            <span className="ctx-item-text">{t.ctxCut}</span>
+            <span className="ctx-key" aria-hidden>
+              Ctrl+X
+            </span>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className="ctx-item"
+            onClick={() => void copyValue(blockText)}
+          >
+            <Copy size={14} strokeWidth={1.5} aria-hidden />
+            <span className="ctx-item-text">{t.ctxCopy}</span>
+            <span className="ctx-key" aria-hidden>
+              Ctrl+C
+            </span>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className="ctx-item"
+            onClick={() => void pasteFromClipboard()}
+          >
+            <ClipboardPaste size={14} strokeWidth={1.5} aria-hidden />
+            <span className="ctx-item-text">{t.ctxPaste}</span>
+            <span className="ctx-key" aria-hidden>
+              Ctrl+V
+            </span>
+          </button>
+          <button type="button" role="menuitem" className="ctx-item" onClick={act(() => st.deleteSelection())}>
+            <Eraser size={14} strokeWidth={1.5} aria-hidden />
+            <span className="ctx-item-text">{t.ctxClear}</span>
+            <span className="ctx-key" aria-hidden>
+              Del
+            </span>
+          </button>
+        </div>
+        {pasteHint && <div className="ctx-note">{t.ctxPasteUnavailable}</div>}
+        <div className="ctx-sep" aria-hidden />
         <button
           type="button"
           role="menuitem"
