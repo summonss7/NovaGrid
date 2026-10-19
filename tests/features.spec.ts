@@ -124,6 +124,46 @@ test.describe('КТ-3: ПКМ-фильтрация сценария ТЗ → 132
     await expect(page.locator('.ctx-menu')).toBeHidden()
   })
 
+  test('снятие фильтра возвращает курсор и вид на строку до фильтра (novagrid-034)', async ({
+    page,
+  }) => {
+    const api = nv(page)
+    // visible() даёт визуальные индексы — модельная строка в поле зрения,
+    // если её позиция в списке видимых попадает в окно региона; без фильтров
+    // visualRows() === null и визуальный индекс равен модельной строке
+    const rowInView = (row: number) =>
+      page.evaluate((r) => {
+        const vis = window.__nv!.visibleRows()
+        const reg = window.__nv!.visible()
+        if (!reg) return false
+        const i = vis ? vis.indexOf(r) : r
+        return i >= 0 && reg.firstRow <= i && i <= reg.lastRow
+      }, row)
+
+    // 1. «нашёл в поиске то, что надо» — курсор глубоко в таблице, строка 400
+    const rowH = await page.evaluate(() => window.__nv!.cellMetrics().rowH)
+    await page.evaluate((y) => window.__nv!.scrollTo(0, y), 400 * rowH)
+    const c = await api.cellCenter(400, 0)
+    await page.mouse.click(c.x, c.y)
+    await expect.poll(() => api.activeRef()).toBe('A401')
+
+    // 2. фильтр по значению этой строки (ПКМ → «Фильтровать: A = …»)
+    await rightClickCell(page, 400, 0)
+    await page.getByRole('menuitem', { name: /Фильтровать: A = «/ }).click()
+    await expect.poll(() => api.filters().then((f) => f.length)).toBe(1)
+    // строка, по которой фильтровали, осталась в поле зрения
+    await expect.poll(() => rowInView(400)).toBe(true)
+
+    // 3. пока фильтр стоит — курсор ушёл на другую видимую строку
+    await page.keyboard.press('ArrowDown')
+    await expect.poll(() => api.activeRef()).not.toBe('A401')
+
+    // 4. сняли фильтр — курсор и вид вернулись на ту же строку 400
+    await page.getByRole('button', { name: 'Сбросить всё' }).click()
+    await expect.poll(() => api.activeRef()).toBe('A401')
+    await expect.poll(() => rowInView(400)).toBe(true)
+  })
+
   test('основные операции в меню ПКМ: копировать/вставить/удалить/вырезать (novagrid-032)', async ({
     page,
   }) => {

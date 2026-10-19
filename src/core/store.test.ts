@@ -422,6 +422,64 @@ describe('store: фильтры (Этап 3, Ф3)', () => {
   })
 })
 
+describe('store: якорь курсора при фильтрации (novagrid-034)', () => {
+  it('снятие последнего фильтра возвращает курсор на ячейку до фильтра', () => {
+    s().clickCell(4, 1) // стояли на «Кузнецова» B5
+    s().excludeByValue(0, 'Иванов') // видны все строки, кроме Ивановых
+    expect(s().filterAnchor).toEqual({ row: 4, col: 1 })
+    // пока фильтр стоит, курсор свободно ходит по видимым строкам
+    s().clickCell(6, 2)
+    expect(s().selection.active).toEqual({ row: 6, col: 2 })
+    s().clearAllFilters()
+    expect(s().selection.active).toEqual({ row: 4, col: 1 })
+    expect(s().filterAnchor).toBeNull()
+  })
+
+  it('снятие одного из фильтров курсор не возвращает — якорь ждёт последнего', () => {
+    s().clickCell(4, 1)
+    s().filterByValue(0, 'Иванов')
+    s().filterByValue(2, '10000')
+    // второй фильтр якорь не перезаписал — он про место до ПЕРВОГО
+    expect(s().filterAnchor).toEqual({ row: 4, col: 1 })
+    s().clickCell(1, 2)
+    s().clearColumnFilter(0)
+    expect(s().selection.active).toEqual({ row: 1, col: 2 })
+    expect(s().filterAnchor).toEqual({ row: 4, col: 1 })
+    // последний фильтр снят — курсор вернулся
+    s().clearColumnFilter(2)
+    expect(s().selection.active).toEqual({ row: 4, col: 1 })
+    expect(s().filterAnchor).toBeNull()
+  })
+
+  it('include, покрывающий все значения колонки, снимает фильтр и возвращает курсор', () => {
+    s().clickCell(4, 1)
+    s().filterByValue(0, 'Иванов')
+    s().setColumnFilter({
+      col: 0,
+      mode: 'include',
+      values: ['Фамилия', 'Иванов', 'Петров', 'Сидоров', 'Кузнецова', 'Смирнов', 'Волкова'],
+    })
+    expect(s().filters).toEqual([])
+    expect(s().selection.active).toEqual({ row: 4, col: 1 })
+    expect(s().filterAnchor).toBeNull()
+  })
+
+  it('якорь изолирован по вкладкам, как фильтры', () => {
+    s().clickCell(4, 1)
+    s().filterByValue(0, 'Иванов')
+    s().addTab()
+    expect(s().filterAnchor).toBeNull()
+    s().clickCell(2, 2)
+    s().filterByValue(0, 'Петров')
+    expect(s().filterAnchor).toEqual({ row: 2, col: 2 })
+    // возврат на первую вкладку — её фильтр и её якорь
+    s().activateTab(0)
+    expect(s().filterAnchor).toEqual({ row: 4, col: 1 })
+    s().clearAllFilters()
+    expect(s().selection.active).toEqual({ row: 4, col: 1 })
+  })
+})
+
 describe('store: поиск (Этап 3, Ф2)', () => {
   it('инкрементальный поиск по листу: счётчик, шаг, закрытие', () => {
     s().openSearch()

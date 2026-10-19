@@ -15,6 +15,7 @@ import {
   type ColumnFilter,
   columnValueCounts,
   compareCellValues,
+  isActiveFilter,
   nearestVisibleRow,
   visibleIndexOf,
   visibleRowsOf,
@@ -170,6 +171,12 @@ export interface GridState {
 
   /** фильтры активной вкладки (Ф3); хранение по вкладкам — как история */
   filters: ColumnFilter[]
+  /**
+   * Ячейка, где стоял курсор до первого фильтра (novagrid-034): снятие
+   * последнего фильтра возвращает курсор сюда — «программа помнит, где я
+   * был». null — фильтров нет и якорь не сохранён. По вкладкам, как фильтры.
+   */
+  filterAnchor: { row: number; col: number } | null
   /** состояние поиска (Ф2) */
   search: SearchState
   /** состояние «Найти и заменить» (Этап 7) */
@@ -500,6 +507,9 @@ const histories = new Map<string, History>()
 /** Фильтры — тоже по вкладкам (id), но живут в state для активной (как sheet). */
 const tabFilters = new Map<string, ColumnFilter[]>()
 
+/** Якорь курсора фильтра — по вкладкам (id), как фильтры (novagrid-034). */
+const tabFilterAnchors = new Map<string, { row: number; col: number } | null>()
+
 /** Ширины колонок — по вкладкам (id), как фильтры (novagrid-020). */
 const tabColWidths = new Map<string, ReadonlyMap<number, number>>()
 
@@ -515,6 +525,7 @@ function historyOf(tabId: string): History {
 function clearHistories(): void {
   histories.clear()
   tabFilters.clear()
+  tabFilterAnchors.clear()
   tabColWidths.clear()
 }
 
@@ -566,9 +577,40 @@ export const gridStore = createStore<GridState>((set, get) => {
 
   /** Сохранить фильтры и ширины колонок активной вкладки (перед сменой). */
   const saveFilters = () => {
-    const { tabs, activeTab, filters, colWidths } = get()
+    const { tabs, activeTab, filters, colWidths, filterAnchor } = get()
     tabFilters.set(tabs[activeTab].id, filters)
+    tabFilterAnchors.set(tabs[activeTab].id, filterAnchor)
     tabColWidths.set(tabs[activeTab].id, colWidths ?? new Map())
+  }
+
+  /**
+   * Переходы «без фильтров ↔ с фильтрами» (novagrid-034): первый фильтр
+   * запоминает активную ячейку (якорь «где я был»), снятие последнего —
+   * возвращает на неё курсор. Дальнейшие фильтры якорь не трогают: якорь —
+   * именно место до фильтрации. Возвращает патч для set (selection/якорь).
+   */
+  const applyFilterAnchor = (
+    prevFilters: readonly ColumnFilter[],
+    nextFilters: readonly ColumnFilter[],
+  ): Partial<GridState> => {
+    const { selection, sheet, tabs, activeTab } = get()
+    const had = prevFilters.some(isActiveFilter)
+    const has = nextFilters.some(isActiveFilter)
+    if (!had && has) {
+      const anchor = selection.active
+      tabFilterAnchors.set(tabs[activeTab].id, anchor)
+      return { filterAnchor: anchor }
+    }
+    if (had && !has) {
+      const anchor = tabFilterAnchors.get(tabs[activeTab].id) ?? null
+      tabFilterAnchors.delete(tabs[activeTab].id)
+      if (!anchor) return { filterAnchor: null }
+      // границы листа за время фильтра могли измениться (growSheet при
+      // прокрутке) — якорь клампится, но не теряется
+      const target = clampRef(anchor, sheet.rows, sheet.cols)
+      return { filterAnchor: null, selection: selectionOf(target.row, target.col) }
+    }
+    return {}
   }
 
   /**
@@ -764,6 +806,7 @@ export const gridStore = createStore<GridState>((set, get) => {
     edit: null,
     altRange: null,
     filters: [],
+    filterAnchor: null,
     colWidths: null,
     sumPick: null,
     search: EMPTY_SEARCH,
@@ -793,6 +836,7 @@ export const gridStore = createStore<GridState>((set, get) => {
         edit: null,
         altRange: null,
         filters: [],
+        filterAnchor: null,
         colWidths: null,
         sumPick: null,
         search: EMPTY_SEARCH,
@@ -836,6 +880,7 @@ export const gridStore = createStore<GridState>((set, get) => {
         edit: null,
         altRange: null,
         filters: tabFilters.get(tabs[i].id) ?? [],
+        filterAnchor: tabFilterAnchors.get(tabs[i].id) ?? null,
         colWidths: savedWidths && savedWidths.size > 0 ? savedWidths : null,
         sumPick: null,
       })
@@ -859,6 +904,7 @@ export const gridStore = createStore<GridState>((set, get) => {
         edit: null,
         altRange: null,
         filters: [],
+        filterAnchor: null,
         colWidths: null,
         sumPick: null,
         dirty: true,
@@ -882,6 +928,7 @@ export const gridStore = createStore<GridState>((set, get) => {
       const next = tabs.filter((_, i) => i !== index)
       histories.delete(removed.id)
       tabFilters.delete(removed.id)
+      tabFilterAnchors.delete(removed.id)
       tabColWidths.delete(removed.id)
       const nextActive = index < activeTab ? activeTab - 1 : Math.min(activeTab, next.length - 1)
       if (get().edit) get().cancelEdit()
@@ -894,6 +941,7 @@ export const gridStore = createStore<GridState>((set, get) => {
         edit: null,
         altRange: null,
         filters: tabFilters.get(next[nextActive].id) ?? [],
+        filterAnchor: tabFilterAnchors.get(next[nextActive].id) ?? null,
         colWidths: savedWidths && savedWidths.size > 0 ? savedWidths : null,
         sumPick: null,
         dirty: true,
@@ -936,6 +984,7 @@ export const gridStore = createStore<GridState>((set, get) => {
         edit: null,
         altRange: null,
         filters: [],
+        filterAnchor: null,
         colWidths: copyWidths.size > 0 ? copyWidths : null,
         sumPick: null,
         dirty: true,
@@ -1369,13 +1418,13 @@ export const gridStore = createStore<GridState>((set, get) => {
         const covers =
           filter.values.length >= distinct.size && filter.values.every((v) => distinct.has(v))
         if (covers) {
-          set({ filters: next })
+          set({ filters: next, ...applyFilterAnchor(filters, next) })
           refreshSearch()
           return
         }
       }
       next = [...next, filter].sort((a, b) => a.col - b.col)
-      set({ filters: next })
+      set({ filters: next, ...applyFilterAnchor(filters, next) })
       refreshSearch()
     },
 
@@ -1401,13 +1450,15 @@ export const gridStore = createStore<GridState>((set, get) => {
     clearColumnFilter: (col) => {
       const { filters } = get()
       if (!filters.some((f) => f.col === col)) return
-      set({ filters: filters.filter((f) => f.col !== col) })
+      const next = filters.filter((f) => f.col !== col)
+      set({ filters: next, ...applyFilterAnchor(filters, next) })
       refreshSearch()
     },
 
     clearAllFilters: () => {
-      if (get().filters.length === 0) return
-      set({ filters: [] })
+      const { filters } = get()
+      if (filters.length === 0) return
+      set({ filters: [], ...applyFilterAnchor(filters, []) })
       refreshSearch()
     },
 
