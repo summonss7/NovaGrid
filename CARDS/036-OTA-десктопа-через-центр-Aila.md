@@ -30,7 +30,7 @@ NovaGrid — две поверхности: веб-PWA (обновляется S
    rename-swap запущенного exe (exe → .old, новый на место, перезапуск,
    .old удалить при следующем старте); работает в любом месте установки.
 4. Интеграция публикации в scripts/desktop-build.sh / deploy-portable.sh:
-   `node D:\Scheduler\tools\publish-update.cjs novagrid` (эндпоинт aila-162)
+   `node D:\Scheduler\tools\publish-update.cjs novagrid` (эндпоинт aila-163)
    кладёт артефакты релиза в центр; локальный деплой в C:\NovaGrid сохранить.
 5. Живая проверка: опубликовать текущую 1.17.0, приложение отвечает «у вас
    последняя версия»; на подменённом манифесте — полный цикл swap+перезапуск.
