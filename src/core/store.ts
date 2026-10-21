@@ -41,7 +41,7 @@ import {
   createSheet,
   getCell,
   parseNumber,
-  withCell,
+  withCellList,
   withSpace,
 } from './sheet'
 import { applyFormulaChanges, cellNumber, recalcSheet } from '../formula/engine'
@@ -495,10 +495,16 @@ function applyChanges(
   changes: readonly CellChange[],
   direction: 'before' | 'after',
 ): SheetModel {
-  let next = sheet
-  for (const ch of changes)
-    next = withCell(next, ch.row, ch.col, direction === 'before' ? ch.before : ch.after)
-  return next
+  // одним клоном Map на весь батч: цепочка withCell была O(n²) и замораживала
+  // интерфейс на больших вставках/удалениях (novagrid-035)
+  return withCellList(
+    sheet,
+    changes.map((ch) => ({
+      row: ch.row,
+      col: ch.col,
+      value: direction === 'before' ? ch.before : ch.after,
+    })),
+  )
 }
 
 /** История правок — по вкладкам (delta-стек экономен: клонируются только изменения). */

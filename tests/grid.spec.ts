@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { colName } from '../src/grid/geometry'
 import type { NvTestApi } from '../src/grid/testHook'
 
 /*
@@ -512,5 +513,111 @@ test.describe('ширины колонок мышью (novagrid-020)', () => {
     await expect(page.locator('.col-menu')).toHaveCount(0)
     // выделение осталось исходным (A1), колонка не выделась
     expect(await nv(page).ranges()).toEqual(['A1:A1'])
+  })
+})
+
+test.describe('пустое место за границей листа (novagrid-035)', () => {
+  test.beforeEach(async ({ page }) => {
+    // широкое окно: за узким листом остаётся заметная полоса «пустого места»
+    await page.setViewportSize({ width: 1600, height: 800 })
+    await page.goto('/?test=1')
+    await nv(page).ready()
+  })
+
+  test('за последней колонкой узкого листа сетка и буквы идут до края окна', async ({ page }) => {
+    // у всех листов минимум 26 колонок (MIN_COLS) — при зуме 100 % они накрывают
+    // окно целиком и «обрыва» не видно. Отдаляем таблицу до 50 % (Ctrl+«−»):
+    // 26·48 + 44 = 1292 px контента, за ним — зона заполнителя до края окна.
+    // Это же видно на мониторах шире 2540 px без зума.
+    await clickCell(page, 0, 0) // фокус на грид — зум слушает клавиатуру грида
+    for (let i = 0; i < 5; i++) await page.keyboard.press('Control+Minus')
+    // зум 50 %: колонка 96 → 48 px (проверка без float-хвостов)
+    await expect
+      .poll(() => page.evaluate(() => window.__nv!.cellMetrics().colW), { timeout: 3000 })
+      .toBe(48)
+
+    const geom = await page.evaluate(() => {
+      const m = window.__nv!.cellMetrics()
+      const canvas = document.querySelector('.grid-canvas') as HTMLCanvasElement
+      return { m, cols: window.__nv!.book().cols, canvasW: canvas.getBoundingClientRect().width }
+    })
+    const contentRight = geom.m.rowHeaderW + geom.cols * geom.m.colW
+    // за краем контента видно минимум две колонки заполнителя
+    expect(geom.canvasW - contentRight).toBeGreaterThanOrEqual(2 * geom.m.colW)
+
+    // (1) в теле таблицы за краем есть вертикальные линии сетки (не чистый фон)
+    const linePixels = await page.evaluate(
+      ({ x0, w, y }) => {
+        const canvas = document.querySelector('.grid-canvas') as HTMLCanvasElement
+        const ctx = canvas.getContext('2d')!
+        const dpr = window.devicePixelRatio || 1
+        const data = ctx.getImageData(
+          Math.round(x0 * dpr),
+          Math.round(y * dpr),
+          Math.round(w * dpr),
+          1,
+        ).data
+        let nonBg = 0
+        for (let i = 0; i < data.length; i += 4)
+          if (data[i] < 250 || data[i + 1] < 250 || data[i + 2] < 250) nonBg++
+        return nonBg
+      },
+      { x0: contentRight + 2, w: geom.canvasW - contentRight - 4, y: geom.m.headerH + 2.5 * geom.m.rowH },
+    )
+    expect(linePixels).toBeGreaterThan(0)
+
+    // (2) в шапке заполнителя нарисованы буквы колонок (тёмные чернила на surface)
+    const inkPixels = await page.evaluate(
+      ({ x0, w, y0, h }) => {
+        const canvas = document.querySelector('.grid-canvas') as HTMLCanvasElement
+        const ctx = canvas.getContext('2d')!
+        const dpr = window.devicePixelRatio || 1
+        const data = ctx.getImageData(
+          Math.round(x0 * dpr),
+          Math.round(y0 * dpr),
+          Math.round(w * dpr),
+          Math.round(h * dpr),
+        ).data
+        let ink = 0
+        for (let i = 0; i < data.length; i += 4)
+          if (data[i] < 180 && data[i + 1] < 180 && data[i + 2] < 180) ink++
+        return ink
+      },
+      {
+        x0: contentRight + 4,
+        w: geom.m.colW - 8,
+        y0: 4,
+        h: geom.m.headerH - 8,
+      },
+    )
+    expect(inkPixels).toBeGreaterThan(3)
+
+    // (3) клик по заполнителю не уводит выделение за логическую границу листа
+    const box = await page.locator('.grid-area').boundingBox()
+    await page.mouse.click(
+      box!.x + contentRight + geom.m.colW / 2,
+      box!.y + geom.m.headerH + 3 * geom.m.rowH + geom.m.rowH / 2,
+    )
+    // последняя реальная колонка листа (M для демо-книги 13 колонок)
+    expect(await nv(page).activeRef()).toBe(`${colName(geom.cols - 1)}4`)
+  })
+})
+
+test.describe('ширина колонки до 1000 px (novagrid-035)', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/?test=1')
+    await nv(page).ready()
+  })
+
+  test('растяжение дальше 400 упирается в новый предел 1000 px', async ({ page }) => {
+    const box = await page.locator('.grid-area').boundingBox()
+    const m = await page.evaluate(() => window.__nv!.cellMetrics())
+    const x = box!.x + m.rowHeaderW + m.colW // граница A|B
+    const y = box!.y + m.headerH / 2
+    await page.mouse.move(x, y)
+    await page.mouse.down()
+    await page.mouse.move(x + 1200, y, { steps: 20 }) // 96 + 1200 → кламп 1000
+    await page.mouse.up()
+    expect(await page.evaluate(() => window.__nv!.colWidth(0))).toBe(1000)
   })
 })

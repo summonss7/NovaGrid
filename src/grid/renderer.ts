@@ -128,6 +128,16 @@ export function drawGrid(input: DrawInput): VisibleRegion {
   const lastRow = Math.min(rows.last, layout.count - 1)
   const lastCol = Math.min(colRange.last, sheet.cols - 1)
 
+  // «пустое место» за границей листа (novagrid-035): сетка и заголовки
+  // рисуются до края окна — узкий лист не выглядит «закончившимся» на
+  // полпути (как в Excel, грид всегда заполняет окно). Колонки/строки
+  // заполнителя виртуальные: клики и навигация до них не доходят.
+  const contentRight =
+    m.rowHeaderW + (sheet.cols > 0 ? cols.x0(sheet.cols - 1) + cols.width(sheet.cols - 1) : 0)
+  const fillerCols = Math.max(0, Math.ceil((width - (contentRight - scrollX)) / m.colW))
+  const contentBottom = m.headerH + layout.count * m.rowH
+  const fillerRows = Math.max(0, Math.ceil((height - (contentBottom - scrollY)) / m.rowH))
+
   ctx.save()
   ctx.clearRect(0, 0, width, height)
   ctx.fillStyle = theme.bg
@@ -167,6 +177,18 @@ export function drawGrid(input: DrawInput): VisibleRegion {
     const x = m.rowHeaderW + cols.x0(c) - scrollX + 0.5
     ctx.moveTo(x, m.headerH)
     ctx.lineTo(x, height)
+  }
+  for (let k = 1; k <= fillerCols; k++) {
+    const x = contentRight - scrollX + k * m.colW + 0.5
+    if (x > width) break
+    ctx.moveTo(x, m.headerH)
+    ctx.lineTo(x, height)
+  }
+  for (let k = 1; k <= fillerRows; k++) {
+    const y = contentBottom - scrollY + k * m.rowH + 0.5
+    if (y > height) break
+    ctx.moveTo(m.rowHeaderW, y)
+    ctx.lineTo(width, y)
   }
   ctx.stroke()
 
@@ -319,6 +341,9 @@ export function drawGrid(input: DrawInput): VisibleRegion {
     selection,
     filteredCols,
     theme,
+    fillerCols,
+    fillerRows,
+    layout.count === sheet.rows,
   )
 
   const ms = performance.now() - t0
@@ -413,6 +438,9 @@ function drawHeaders(
   selection: Selection,
   filteredCols: ReadonlySet<number>,
   theme: GridTheme,
+  fillerCols: number,
+  fillerRows: number,
+  fillerRowsNumbered: boolean,
 ): void {
   const m = METRICS
   const selected = selection.ranges.map(normalize)
@@ -454,6 +482,20 @@ function drawHeaders(
     }
   }
 
+  // буквы виртуальных колонок заполнителя (novagrid-035): без меню-кнопки —
+  // колонки ненастоящие, только продолжение сетки до края окна
+  if (fillerCols > 0 && cols.count > 0) {
+    const right =
+      m.rowHeaderW + cols.x0(cols.count - 1) + cols.width(cols.count - 1) - scrollX
+    ctx.fillStyle = theme.inkSoft
+    ctx.textAlign = 'center'
+    for (let k = 0; k < fillerCols; k++) {
+      const x = right + k * m.colW
+      if (x >= width) break
+      ctx.fillText(colName(cols.count + k), x + m.colW / 2, m.headerH / 2)
+    }
+  }
+
   // номера строк (модельные — скрытые не сдвигают нумерацию)
   ctx.textAlign = 'center'
   for (let i = firstRow; i <= lastRow; i++) {
@@ -467,6 +509,17 @@ function drawHeaders(
     }
     ctx.fillStyle = isSel ? theme.greenBorder : theme.inkSoft
     ctx.fillText(String(r + 1), m.rowHeaderW / 2, y + m.rowH / 2)
+  }
+
+  // номера виртуальных строк заполнителя — только без фильтров (иначе
+  // визуальный индекс не совпадает с модельным номером)
+  if (fillerRows > 0 && fillerRowsNumbered) {
+    ctx.fillStyle = theme.inkSoft
+    for (let k = 0; k < fillerRows; k++) {
+      const y = m.headerH + (layout.count + k) * m.rowH - scrollY
+      if (y >= height) break
+      ctx.fillText(String(layout.count + k + 1), m.rowHeaderW / 2, y + m.rowH / 2)
+    }
   }
 }
 

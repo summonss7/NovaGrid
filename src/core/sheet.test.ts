@@ -9,6 +9,7 @@ import {
   isNumericCell,
   parseNumber,
   withCell,
+  withCellList,
   withSpace,
 } from './sheet'
 
@@ -45,6 +46,40 @@ describe('sheet: модель листа', () => {
     expect(getCell(base, 1, 1)).toBe('')
     expect(getCell(next, 0, 0)).toBe('a')
     expect(getCell(next, 1, 1)).toBe('b')
+  })
+})
+
+describe('withCellList: массовые правки одним клоном Map (novagrid-035)', () => {
+  it('эквивалент цепочки withCell: значения, границы, удаление пустых', () => {
+    let chained = withCell(createSheet(), 1, 1, 'старое')
+    chained = withCell(chained, 0, 0, 'a')
+    chained = withCell(chained, 3, 4, 'b')
+    chained = withCell(chained, 1, 1, '') // удаление
+
+    const bulk = withCellList(withCell(createSheet(), 1, 1, 'старое'), [
+      { row: 0, col: 0, value: 'a' },
+      { row: 3, col: 4, value: 'b' },
+      { row: 1, col: 1, value: '' },
+    ])
+    expect([...bulk.cells.entries()]).toEqual([...chained.cells.entries()])
+    expect(bulk.rows).toBe(chained.rows)
+    expect(bulk.cols).toBe(chained.cols)
+    expect(bulk.maxRow).toBe(chained.maxRow)
+    expect(bulk.maxCol).toBe(chained.maxCol)
+    expect(getCell(bulk, 1, 1)).toBe('')
+  })
+
+  it('пустой список возвращает ту же модель без клона', () => {
+    const sheet = withCell(createSheet(), 0, 0, 'x')
+    expect(withCellList(sheet, [])).toBe(sheet)
+  })
+
+  it('границы листа растут и от пустых значений (клетка за краем тронута)', () => {
+    const sheet = createSheet(10, 5)
+    const next = withCellList(sheet, [{ row: 20, col: 7, value: '' }])
+    expect(next.rows).toBe(21)
+    expect(next.cols).toBe(8)
+    expect(next.maxRow).toBe(-1) // контента нет — maxRow не растёт
   })
 })
 

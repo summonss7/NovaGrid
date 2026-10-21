@@ -91,6 +91,43 @@ export function withCell(sheet: SheetModel, row: number, col: number, value: Cel
 }
 
 /**
+ * Массовое применение списка правок одним клоном Map (novagrid-035): цепочка
+ * withCell на каждую ячейку клонировала Map целиком — вставка/удаление
+ * большого блока и их undo были O(n²) и замораживали интерфейс на минутах
+ * (карточка novagrid-035). values — итоговые значения; семантика той же
+ * цепочки: пустая строка удаляет ячейку, границы и maxRow/maxCol только
+ * растут (заполненные ячейки), никогда не уменьшаются.
+ */
+export function withCellList(
+  sheet: SheetModel,
+  values: readonly { row: number; col: number; value: CellRaw }[],
+): SheetModel {
+  if (values.length === 0) return sheet
+  const cells = new Map(sheet.cells)
+  let { rows, cols, maxRow, maxCol } = sheet
+  for (const ch of values) {
+    const key = cellKey(ch.row, ch.col)
+    if (ch.value === '') cells.delete(key)
+    else {
+      cells.set(key, ch.value)
+      if (ch.row > maxRow) maxRow = ch.row
+      if (ch.col > maxCol) maxCol = ch.col
+    }
+    if (ch.row + 1 > rows) rows = ch.row + 1
+    if (ch.col + 1 > cols) cols = ch.col + 1
+  }
+  return {
+    cells,
+    styles: sheet.styles,
+    formulaCache: sheet.formulaCache,
+    rows,
+    cols,
+    maxRow,
+    maxCol,
+  }
+}
+
+/**
  * Число из сырой строки: точка или запятая как десятичный разделитель
  * (русская локаль), без разделителей тысяч и валют — честный «простой»
  * разбор Этапа 1; формулы и богатые форматы появятся на Этапе 4.

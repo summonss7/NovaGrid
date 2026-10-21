@@ -1127,10 +1127,12 @@ export function GridCanvas() {
           row={ctxMenu.row}
           col={ctxMenu.col}
           onClose={() => {
+            // фокус возвращаем гриду синхронно ДО размонтирования меню:
+            // удаление сфокусированной кнопки роняет фокус на body, и до
+            // следующего кадра клавиатура грида не отвечала (novagrid-035)
+            mainRef.current?.focus({ preventScroll: true })
             setCtxMenu(null)
-            // фокус после коммита: кнопки меню размонтируются уже после
-            // синхронного focus() (async-пункты — буфер), и браузер роняет
-            // фокус на body — клавиатура грида «замирала» (novagrid-032)
+            // страховка на случай, что коммит React всё же собьёт фокус
             requestAnimationFrame(() => mainRef.current?.focus({ preventScroll: true }))
           }}
         />
@@ -1142,8 +1144,9 @@ export function GridCanvas() {
           x={colMenu.x}
           y={colMenu.y}
           onClose={() => {
-            setColMenu(null)
             mainRef.current?.focus({ preventScroll: true })
+            setColMenu(null)
+            requestAnimationFrame(() => mainRef.current?.focus({ preventScroll: true }))
           }}
         />
       )}

@@ -120,6 +120,51 @@ describe('store: вставка из буфера (novagrid-025)', () => {
   })
 })
 
+describe('store: массовые правки без квадратичного клонирования (novagrid-035)', () => {
+  /** TSV-блок rows×cols уникальных значений. */
+  const bigTsv = (rows: number, cols: number) =>
+    Array.from({ length: rows }, (_, r) =>
+      Array.from({ length: cols }, (_, c) => `v${r}:${c}`).join('\t'),
+    ).join('\n')
+
+  it('вставка блока 300×40 (12 000 ячеек) мгновенна и откатывается целиком', () => {
+    s().clickCell(200, 0)
+    const t0 = performance.now()
+    s().pasteText(bigTsv(300, 40))
+    const pasteMs = performance.now() - t0
+    expect(getCell(s().sheet, 200, 0)).toBe('v0:0')
+    expect(getCell(s().sheet, 499, 39)).toBe('v299:39')
+    // цепочка withCell на каждую ячейку висела здесь минутами (O(n²));
+    // бюджет с 50-кратным запасом от фактических ~20 мс
+    expect(pasteMs).toBeLessThan(2000)
+
+    const t1 = performance.now()
+    s().undo()
+    const undoMs = performance.now() - t1
+    expect(getCell(s().sheet, 200, 0)).toBe('')
+    expect(getCell(s().sheet, 499, 39)).toBe('')
+    expect(undoMs).toBeLessThan(2000)
+  })
+
+  it('Delete на большой области очищает блок сразу, undo возвращает значения', () => {
+    s().clickCell(0, 0)
+    s().pasteText(bigTsv(150, 30))
+    expect(getCell(s().sheet, 149, 29)).toBe('v149:29')
+
+    // выделение накрыло вставленный блок — Delete чистит его целиком
+    const t0 = performance.now()
+    s().deleteSelection()
+    const delMs = performance.now() - t0
+    expect(getCell(s().sheet, 0, 0)).toBe('')
+    expect(getCell(s().sheet, 149, 29)).toBe('')
+    expect(delMs).toBeLessThan(2000)
+
+    s().undo()
+    expect(getCell(s().sheet, 0, 0)).toBe('v0:0')
+    expect(getCell(s().sheet, 149, 29)).toBe('v149:29')
+  })
+})
+
 describe('store: пустое место для вставки (novagrid-032)', () => {
   it('загруженная книга получает запас пустых строк/колонок за контентом', () => {
     const rows = Array.from({ length: 200 }, (_, r) => [`r${r}`, `c${r}`])
@@ -541,12 +586,12 @@ describe('store: ширины колонок (novagrid-020)', () => {
   it('ширины клампятся и хранятся по вкладкам', () => {
     s().setColWidth(1, 10)
     expect(s().colWidths?.get(1)).toBe(32) // минимум
-    s().setColWidth(1, 1000)
-    expect(s().colWidths?.get(1)).toBe(400) // максимум
+    s().setColWidth(1, 5000)
+    expect(s().colWidths?.get(1)).toBe(1000) // максимум (поднят novagrid-035)
     s().addTab()
     expect(s().colWidths).toBeNull() // новый лист — стандартные
     s().activateTab(0)
-    expect(s().colWidths?.get(1)).toBe(400) // прежний лист помнит
+    expect(s().colWidths?.get(1)).toBe(1000) // прежний лист помнит
   })
 })
 
