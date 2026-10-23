@@ -1,6 +1,6 @@
 [package]
 name = "novagrid"
-version = "1.18.0"
+version = "1.19.0"
 description = "NovaGrid — таблицы без изучения Excel (десктоп-оболочка)"
 edition = "2021"
 
@@ -20,6 +20,15 @@ tauri-build = { version = "2.7.1", features = [] }
 tauri = { version = "=2.12.1", features = [] }
 # нативные диалоги «Файл → Открыть/Сохранить как» (синхронные, Windows)
 rfd = "0.15.4"
+# OTA из центра обновлений Aila (novagrid-036, паттерн alnavi-039): reqwest
+# уже был в lock (0.13.x); native-tls = schannel — системный TLS Windows без
+# openssl/C-сборки на GNU-тулчейне; sha2 и futures-util — сверка и стриминг
+reqwest = { version = "0.13", default-features = false, features = ["native-tls", "stream"] }
+sha2 = "0.10"
+futures-util = "0.3"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["fs", "io-util"] }
 
 [profile.release]
 codegen-units = 1

@@ -1990,6 +1990,58 @@
   padding: 6px 12px;
 }
 
+/* Диалог OTA-обновления десктопа (novagrid-036): «что нового» и прогресс */
+.upd-notes {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  background: var(--nv-surface);
+  border: 1.5px solid var(--nv-grid-line);
+  border-radius: var(--nv-radius-btn);
+}
+
+.upd-notes-title {
+  margin: 0 0 4px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--nv-ink-soft);
+}
+
+.upd-notes-body {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--nv-ink);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.upd-progress {
+  margin: 0 0 12px;
+}
+
+.upd-progress-bar {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--nv-grid-line);
+  overflow: hidden;
+}
+
+.upd-progress-fill {
+  height: 100%;
+  border-radius: 4px;
+  background: var(--nv-accent);
+  transition: width 0.15s ease-out;
+}
+
+.upd-progress-text {
+  display: block;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--nv-ink-soft);
+}
+
 /* Нижняя панель действий (5.2, §9): только мобильная раскладка */
 .mobile-bar {
   display: none;

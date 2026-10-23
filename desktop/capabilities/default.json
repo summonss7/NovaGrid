@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Окна приложения (main + book-N): события оболочки (меню novagrid:menu, вопрос о сохранении novagrid:close-ask, прогресс OTA novagrid:updater-progress) требуют core:event — без этого файла подписки фронтенда молча отбивались ACL и нативное меню не работало (найдено в novagrid-036)",
+  "windows": ["*"],
+  "permissions": ["core:default"]
+}

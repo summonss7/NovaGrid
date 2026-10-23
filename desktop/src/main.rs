@@ -16,6 +16,10 @@
 // решение пользователя исполняет confirm_close (destroy, без повторного
 // перехвата).
 //
+// novagrid-036: OTA из центра обновлений Aila — «Справка → Проверить
+// обновления…» и тихая проверка раз в сутки (модуль updater): манифест v2,
+// сверка versionName, скачивание со sha256 и rename-swap exe с перезапуском.
+//
 // Фронтенд общается с оболочкой через window.__TAURI__ (withGlobalTauri):
 // invoke-команды ниже + события меню novagrid:menu. npm-пакеты @tauri-apps
 // в веб-часть не подключаются — браузерная сборка не меняется вовсе.
@@ -33,6 +37,8 @@ use tauri::Manager;
 use tauri::menu::{AboutMetadata, Menu, MenuItem, PredefinedMenuItem, SubmenuBuilder};
 use tauri::ipc::Response;
 use tauri::webview::WebviewWindowBuilder;
+
+mod updater;
 
 /// Сайт проекта для «Справка → Открыть сайт» (GitHub Pages — та же сборка PWA).
 const SITE_URL: &str = "https://summonss7.github.io/NovaGrid/";
@@ -217,6 +223,10 @@ fn build_menu<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<Men
         .build()?;
 
     let site = MenuItem::with_id(app, "site", "Открыть сайт NovaGrid", true, None::<&str>)?;
+    // novagrid-036: проверка обновлений из центра Aila — диалог открывает
+    // окно, чьё меню нажали (событие уходит как у «Файл», адресно)
+    let check_update =
+        MenuItem::with_id(app, "check-update", "Проверить обновления…", true, None::<&str>)?;
     let about = PredefinedMenuItem::about(
         app,
         Some("О программе"),
@@ -228,6 +238,7 @@ fn build_menu<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<Men
     )?;
     let help_menu = SubmenuBuilder::new(app, "Справка")
         .item(&site)
+        .item(&check_update)
         .separator()
         .item(&about)
         .build()?;
@@ -248,7 +259,10 @@ fn main() {
             take_staged_book,
             open_external,
             set_window_dirty,
-            confirm_close
+            confirm_close,
+            updater::updater_check,
+            updater::updater_download,
+            updater::updater_apply
         ])
         .setup(|app| {
             // ассоциации: «NovaGrid.exe <книга> [книга …]» — файлы ждут фронтенд
@@ -260,6 +274,10 @@ fn main() {
             app.manage(StartupBooks(Mutex::new(startup)));
             app.manage(StagedBooks(Mutex::new(HashMap::new())));
             app.manage(DirtyWindows(Mutex::new(HashSet::new())));
+
+            // novagrid-036: .old от прошлого самообновления больше не запущен —
+            // можно удалить (см. updater::updater_apply)
+            updater::cleanup_old();
 
             app.set_menu(build_menu(app.handle())?)?;
             Ok(())
@@ -291,7 +309,7 @@ fn main() {
             _ => {}
         })
         .on_menu_event(|app, event| match event.id().as_ref() {
-            "open" | "save" | "save-as" | "print" => {
+            "open" | "save" | "save-as" | "print" | "check-update" => {
                 // только окно, чьё меню нажали: с несколькими окнами бродкаст
                 // открыл бы диалог в каждом из них. emit_to адресует по метке
                 // (слушатель фронтенда подписан target'ом на своё окно),

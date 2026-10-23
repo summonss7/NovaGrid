@@ -6,8 +6,11 @@
  *
  * novagrid-033: обёртка спрашивает о сохранении при закрытии окна с правками.
  * Флаг dirty синхронизируется в Rust (set_window_dirty), событие novagrid:close-ask
- * приходит адресно — слушатели подписываются target'ом на метку своего окна
+ * приходит адресно — слушатели подписываются target'ом на метку окна
  * (Tauri: бродкаст дошёл бы до всех окон книг сразу).
+ *
+ * novagrid-036: OTA-обновления из центра Aila — updater_check/download/apply
+ * обёртки (манифест v2, sha256, rename-swap exe) и событие прогресса.
  */
 
 /** Цель события Tauri: подписка/отправка адресуется по метке окна. */
@@ -151,6 +154,64 @@ export function desktopConfirmClose(): Promise<void> {
 /** Обёртка попросила спросить пользователя о сохранении перед закрытием. */
 export function onDesktopCloseAsk(handler: () => void): () => void {
   return subscribe(listenTargeted('novagrid:close-ask', () => handler()))
+}
+
+// ── OTA-обновления из центра Aila (novagrid-036) ────────────────────────
+// Манифест v2 проверяет и качает сама обёртка (updater_check/download/apply
+// в Rust: sha256, прогресс, rename-swap запущенного exe). Здесь — только
+// типы и тонкие обёртки invoke; браузерная сборка их не вызывает.
+
+/** Ассет манифеста: portable-exe, который swap ставит на место запущенного. */
+export interface UpdateAsset {
+  name: string
+  url: string
+  size?: number
+  sha256?: string
+}
+
+/** Ответ updater_check: статус + версии; asset — только при «available». */
+export interface UpdateCheck {
+  status: 'latest' | 'available' | 'network-error' | 'bad-manifest'
+  current: string
+  latest: string | null
+  notes: string | null
+  publishedAt: string | null
+  asset: UpdateAsset | null
+  error: string | null
+}
+
+/** Проверить манифест канала и сравнить версии (никогда не бросает). */
+export function desktopUpdateCheck(): Promise<UpdateCheck> {
+  return invoke<UpdateCheck>('updater_check')
+}
+
+/** Скачать exe-ассет в %TEMP% (sha256 сверен в обёртке): путь temp-файла. */
+export function desktopUpdateDownload(url: string, sha256: string, size: number): Promise<string> {
+  return invoke<string>('updater_download', { url, sha256, size })
+}
+
+/** Rename-swap запущенного exe + перезапуск (процесс завершается). */
+export function desktopUpdateApply(path: string): Promise<void> {
+  return invoke<void>('updater_apply', { path })
+}
+
+/** Прогресс скачивания обновления (бродкаст обёртки — слушает окно диалога). */
+export function onDesktopUpdaterProgress(
+  handler: (p: { downloaded: number; total: number }) => void,
+): () => void {
+  return subscribe(
+    window
+      .__TAURI__!.event.listen('novagrid:updater-progress', (e) => {
+        const p = e.payload as { downloaded: number; total: number } | null
+        if (p && typeof p.downloaded === 'number') handler(p)
+      })
+      .catch(() => Promise.resolve(() => undefined)),
+  )
+}
+
+/** Метка этого окна ('main' — главное; null — метка недоступна/браузер). */
+export function desktopWindowLabel(): string | null {
+  return window.__TAURI__?.webview?.getCurrentWebviewWindow?.().label ?? null
 }
 
 function subscribe(listening: Promise<() => void>): () => void {

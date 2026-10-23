@@ -13,6 +13,19 @@ import { AUTOSAVE_CELL_LIMIT, countCells, saveSession } from './db'
 
 const DEBOUNCE_MS = 1000
 
+/**
+ * Немедленная запись сессии текущей книги (novagrid-036): перезапуск после
+ * OTA-обновления не ждёт дебаунса автосохранения — обёртка завершает процесс
+ * сразу после updater_apply. Правила те же: книги без файла не сессируются
+ * (novagrid-026), гигантские books пишутся только файлом.
+ */
+export async function flushSession(): Promise<void> {
+  const st = gridStore.getState()
+  if (st.fileName === null) return
+  if (countCells(st.tabs) > AUTOSAVE_CELL_LIMIT) return
+  await saveSession(st.tabs, st.fileName).catch(() => undefined)
+}
+
 export function installAutosave(): () => void {
   let timer = 0
   let lastTabs: unknown = null

@@ -37,11 +37,13 @@ import {
   desktopStageBookBytes,
   desktopStartupBooks,
   desktopTakeStagedBook,
+  desktopWindowLabel,
   desktopWriteFile,
   isDesktop,
   onDesktopCloseAsk,
   onDesktopMenu,
 } from '../io/desktop'
+import { useUpdaterStore } from '../io/updater'
 import { CloseAskDialog } from '../ui/CloseAskDialog'
 import { FilterBar } from '../ui/FilterBar'
 import { FormulaBar } from '../ui/FormulaBar'
@@ -56,6 +58,7 @@ import { SnapshotDialog } from '../ui/SnapshotDialog'
 import { StartScreen } from '../ui/StartScreen'
 import { StatusBar } from '../ui/StatusBar'
 import { Toolbar } from '../ui/Toolbar'
+import { UpdateDialog } from '../ui/UpdateDialog'
 import { useThemeSync } from '../ui/theme'
 
 type Mode = 'boot' | 'start' | 'book'
@@ -102,6 +105,7 @@ export default function App() {
   const [dropping, setDropping] = useState(false)
   const [swReload, setSwReload] = useState<(() => void) | null>(null)
   const printOpen = useStore(printStore, (s) => s.dialogOpen)
+  const updOpen = useStore(useUpdaterStore, (s) => s.dialogOpen)
   const bootedRef = useRef(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const toastTimer = useRef(0)
@@ -605,8 +609,19 @@ export default function App() {
       else if (action === 'save') void save()
       else if (action === 'save-as') setSaveAsOpen(true)
       else if (action === 'print') printStore.getState().openDialog()
+      // novagrid-036: «Справка → Проверить обновления…» — диалог с исходом
+      else if (action === 'check-update') void useUpdaterStore.getState().check(true)
     })
   }, [onOpenClicked, save])
+
+  // ── OTA-обновления (novagrid-036): тихая проверка раз в сутки ────────
+  // только в главном окне — окна книг делят localStorage и молчат, диалог
+  // по тихой проверке не должен открываться в каждом окне разом
+  useEffect(() => {
+    if (!isDesktop()) return
+    if (desktopWindowLabel() !== null && desktopWindowLabel() !== 'main') return
+    void useUpdaterStore.getState().init()
+  }, [])
 
   // ── несохранённые правки не теряются при закрытии (novagrid-033) ─────
   // десктоп: обёртка знает флаг dirty своего окна и на крестике у «грязной»
@@ -844,6 +859,8 @@ export default function App() {
       )}
 
       {printOpen && <PrintDialog onClose={() => printStore.getState().closeDialog()} />}
+
+      {updOpen && <UpdateDialog />}
     </div>
   )
 }
