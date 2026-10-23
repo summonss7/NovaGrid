@@ -1849,3 +1849,6 @@ Deploy to GitHub Pages ран 38018213931 success (шаги деплоя кор�
   публикации (cygpath -w); +9 юнит (272), 3 Rust-теста, 100 e2e,
   README/ROADMAP/WRAPPER, карточка 036 (done)» (код, тесты, версия,
   документация, карточка).
+  - Дополнено (07:03): CI на GitHub зелёный на push 12f4182 (ран 39894594893:
+    lint · typecheck · test · e2e · build — success), Deploy to GitHub Pages —
+    success (ран 39894594847): веб-версия v1.19.0 опубликована.
