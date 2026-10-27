@@ -23,7 +23,7 @@ import { normalize, inSelection } from '../core/selection'
 import { gridStore, rangeMetrics } from '../core/store'
 import { SPACE_COLS, SPACE_ROWS, type SheetModel } from '../core/sheet'
 import { useSettings, useT } from '../i18n'
-import { selectionText } from '../core/copy'
+import { rememberCopy, selectionText } from '../core/copy'
 import { copyText } from '../ui/clipboard'
 import { AssistPopup } from '../ui/AssistPopup'
 import { useFormulaAssist } from '../ui/useFormulaAssist'
@@ -958,9 +958,13 @@ export function GridCanvas() {
       return
     }
     // Ctrl+C — копировать выделение (novagrid-024): значения вычисленные,
-    // колонки через таб, строки через перевод — вставляется в Excel/Таблицы
+    // колонки через таб, строки через перевод — вставляется в Excel/Таблицы.
+    // novagrid-037: своя копия помнит и формулы — вставка внутри NovaGrid
+    // переносит их со сдвигом относительных ссылок
     if (mod && e.code === 'KeyC') {
-      void copyText(selectionText(st.sheet, st.selection))
+      const text = selectionText(st.sheet, st.selection)
+      rememberCopy(st.sheet, st.selection, text)
+      void copyText(text)
       e.preventDefault()
       return
     }

@@ -146,6 +146,14 @@ export function desktopSetDirty(dirty: boolean): Promise<void> {
   return invoke<void>('set_window_dirty', { dirty })
 }
 
+/**
+ * Нативный заголовок этого окна (novagrid-037): «NovaGrid — файл — v1.x».
+ * document.title обёртка в заголовок окна не переносит — только команда.
+ */
+export function desktopSetTitle(title: string): Promise<void> {
+  return invoke<void>('set_window_title', { title })
+}
+
 /** Закрыть окно, обойдя перехват: решение «сохранить/не сохранять» принято. */
 export function desktopConfirmClose(): Promise<void> {
   return invoke<void>('confirm_close')

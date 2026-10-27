@@ -45,7 +45,8 @@ import {
   withSpace,
 } from './sheet'
 import { applyFormulaChanges, cellNumber, recalcSheet } from '../formula/engine'
-import { parseClipboardTsv } from './copy'
+import { shiftFormulaRefs } from '../formula/parser'
+import { parseClipboardTsv, takeInternalCopy, tileRect } from './copy'
 import { BASE_COL_W, COL_W_MAX, COL_W_MIN, cellRefName } from '../grid/geometry'
 // метрики выделения (6.1) агрегируются потоком; sum/average из ./stats
 // остаются для движка формул и юнит-тестов
@@ -246,7 +247,10 @@ export interface GridState {
   /**
    * Вставка TSV из системного буфера (novagrid-025): блок пишется от активной
    * ячейки, границы листа растут, одна транзакция истории; выделение
-   * накрывает вставленный блок.
+   * накрывает вставленный блок. novagrid-037: своя копия (Ctrl+C внутри
+   * NovaGrid) переносит формулы со сдвигом относительных ссылок, а блок
+   * меньше выделения мостится по нему — строку в несколько выделенных
+   * строк встаёт в каждую (как Excel), даты «+1» идут дальше по строкам.
    */
   pasteText: (text: string) => void
   /**
@@ -1166,20 +1170,41 @@ export const gridStore = createStore<GridState>((set, get) => {
     },
 
     pasteText: (text) => {
-      const grid = parseClipboardTsv(text)
-      if (grid.length === 0) return
+      const parsed = parseClipboardTsv(text)
+      if (parsed.length === 0) return
       const state = get()
       const { sheet, selection, activeTab, tabs } = state
+      const internal = takeInternalCopy(text)
+      const grid = internal ? internal.grid : parsed
+      const gridRows = grid.length
+      const gridCols = Math.max(...grid.map((cells) => cells.length))
+
+      // цель вставки: одна область крупнее блока и кратная ему → замостить
+      // блоком (Excel: скопировал строку, выделил несколько — встала в каждую);
+      // выделение всей строки/колонки мостится по своему измерению, второе
+      // берётся шириной блока — Excel не требует кратности у полных строк
+      const norm = selection.ranges.length === 1 ? normalize(selection.ranges[0]) : null
+      const tile = norm ? tileRect(norm, sheet.rows, sheet.cols, gridRows, gridCols) : null
       const { row, col } = selection.active
+      const r1 = tile ? tile.r1 : row
+      const c1 = tile ? tile.c1 : col
+      const r2 = tile ? tile.r2 : row + gridRows - 1
+      const c2 = tile ? tile.c2 : col + gridCols - 1
+
       const changes: CellChange[] = []
-      grid.forEach((cells, dr) =>
-        cells.forEach((v, dc) => {
-          const r = row + dr
-          const c = col + dc
+      for (let r = r1; r <= r2; r++) {
+        const srcR = (r - r1) % gridRows
+        for (let c = c1; c <= c2; c++) {
+          const srcC = (c - c1) % gridCols
+          let v = grid[srcR][srcC] ?? ''
+          // своя копия: формулы переезжают со сдвигом относительных ссылок
+          // от источника к этой позиции мозаики (novagrid-037)
+          if (internal && v.startsWith('='))
+            v = shiftFormulaRefs(v, r - (internal.fr + srcR), c - (internal.fc + srcC))
           const before = getCell(sheet, r, c)
           if (before !== v) changes.push({ row: r, col: c, before, after: v })
-        }),
-      )
+        }
+      }
       if (changes.length > 0) {
         historyOf(tabs[activeTab].id).push({ label: 'paste', changes })
         // withSpace: вставленный блок не упирается в край — за ним снова
@@ -1187,11 +1212,10 @@ export const gridStore = createStore<GridState>((set, get) => {
         commitSheet(sheet, withSpace(applyChanges(sheet, changes, 'after')), changes)
         set({ dirty: true })
       }
-      // выделение накрывает вставленный блок — видно, что и куда легло (как Excel)
-      const lastRow = row + grid.length - 1
-      const lastCol = col + Math.max(...grid.map((cells) => cells.length)) - 1
+      // выделение накрывает вставленное — видно, что и куда легло (как Excel);
+      // при мозаике это вся замощённая область
       set({
-        selection: { active: { row, col }, ranges: [{ fr: row, fc: col, tr: lastRow, tc: lastCol }] },
+        selection: { active: { row: r1, col: c1 }, ranges: [{ fr: r1, fc: c1, tr: r2, tc: c2 }] },
       })
       refreshSearch()
     },

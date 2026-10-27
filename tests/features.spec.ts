@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { expect, test, type Page } from '@playwright/test'
 
 /*
@@ -400,5 +401,102 @@ test.describe('Alt-выделение (Ф4): живая сумма крупно 
     await page.mouse.up()
     await page.keyboard.up('Alt')
     await expect(page.locator('.sum-live')).toBeHidden()
+  })
+})
+
+/*
+ * novagrid-037: заголовок окна с именем файла и версией, память «где я был»
+ * (лист + курсор) при закрытии/переоткрытии книги, мозаичная вставка строки
+ * с формулой «+1 день» в несколько выделенных строк.
+ */
+const APP_VERSION = JSON.parse(readFileSync('package.json', 'utf8')).version
+
+test.describe('novagrid-037: заголовок окна, память позиции, мозаичная вставка', () => {
+  test('заголовок: старт — версия, открытая книга — имя файла и версия', async ({ page }) => {
+    await page.goto('/?testui=1')
+    await expect.poll(() => page.title()).toBe(`NovaGrid — v${APP_VERSION}`)
+
+    await page.setInputFiles('#nv-file-input', 'public/fixtures/demo-book.xlsx')
+    await expect
+      .poll(() => page.evaluate(() => window.__nv?.cell(1, 0) ?? ''), { timeout: 5000 })
+      .toBe('Иванов')
+    await expect.poll(() => page.title()).toBe(`NovaGrid — demo-book.xlsx — v${APP_VERSION}`)
+  })
+
+  test('программа помнит лист и строку курсора после закрытия файла', async ({ page }) => {
+    await openDemoBook(page)
+    const api = nv(page)
+
+    // второй лист фикстуры, курсор на B5
+    await page.getByRole('tab', { name: 'Справочник' }).click()
+    const a1 = await api.cellCenter(0, 0)
+    await page.mouse.click(a1.x, a1.y)
+    for (let i = 0; i < 4; i++) await page.keyboard.press('ArrowDown')
+    await page.keyboard.press('ArrowRight')
+    await expect.poll(() => api.activeRef()).toBe('B5')
+    await expect
+      .poll(() => page.evaluate(() => window.__nv!.book().activeTab))
+      .toBe(1)
+    // даём дебаунсу записать позицию (при закрытии её дозаписывает pagehide)
+    await page.waitForTimeout(1100)
+
+    // «закрыли» и открыли заново; готовность — по имени книги: восстановление
+    // само переключит лист, поэтому cell(1,0) «Иванов» ждать нельзя
+    await page.reload()
+    await page.setInputFiles('#nv-file-input', 'public/fixtures/demo-book.xlsx')
+    await expect
+      .poll(() => page.evaluate(() => window.__nv?.book().fileName ?? ''), { timeout: 5000 })
+      .toBe('demo-book.xlsx')
+
+    // вернулись туда же: лист «Справочник», курсор B5
+    await expect
+      .poll(() => page.evaluate(() => window.__nv!.book().activeTab))
+      .toBe(1)
+    await expect.poll(() => api.activeRef()).toBe('B5')
+  })
+
+  test('строка с формулой «+1» копируется в каждую выделенную строку со сдвигом', async ({
+    page,
+  }) => {
+    await page.context().grantPermissions(['clipboard-read', 'clipboard-write'])
+    await page.goto('/?test=1')
+    await nv(page).ready()
+    const api = nv(page)
+
+    // шаблон в пустой зоне: A9=10, B9==A9+1 (11) — как «дата + 1 день»
+    const a9 = await api.cellCenter(8, 0)
+    await page.mouse.click(a9.x, a9.y)
+    await page.keyboard.type('10')
+    await page.keyboard.press('Tab')
+    await page.keyboard.type('=A9+1')
+    await page.keyboard.press('Enter')
+    await expect.poll(() => api.cell(8, 1)).toBe('=A9+1')
+
+    // Ctrl+C строки-шаблона (A9:B9): буфер значений «10\t11»
+    await page.mouse.click(a9.x, a9.y)
+    await page.keyboard.press('Shift+ArrowRight')
+    await page.keyboard.press('Control+c')
+    await expect
+      .poll(() =>
+        page.evaluate(() => navigator.clipboard.readText().then((t) => t.replace(/\r\n/g, '\n'))),
+      )
+      .toBe('10\t11')
+
+    // выделяем три строки ниже (A10:B12) и вставляем — блок встаёт в каждую
+    const a10 = await api.cellCenter(9, 0)
+    await page.mouse.click(a10.x, a10.y)
+    await page.keyboard.press('Shift+ArrowDown')
+    await page.keyboard.press('Shift+ArrowDown')
+    await page.keyboard.press('Shift+ArrowRight')
+    await page.keyboard.press('Control+v')
+
+    await expect.poll(() => api.cell(9, 1)).toBe('=A10+1')
+    expect(await api.cell(10, 1)).toBe('=A11+1')
+    expect(await api.cell(11, 1)).toBe('=A12+1')
+    expect(await api.cell(9, 0)).toBe('10')
+    // формула посчиталась в каждой строке: 10 + 1 = 11
+    await expect
+      .poll(() => page.evaluate(() => window.__nv!.cellText(10, 1)))
+      .toBe('11')
   })
 })

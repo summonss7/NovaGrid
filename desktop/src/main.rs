@@ -72,6 +72,13 @@ fn set_window_dirty(window: tauri::WebviewWindow, state: tauri::State<DirtyWindo
     }
 }
 
+/// Нативный заголовок окна (novagrid-037): «NovaGrid — файл — v1.x». Обёртка
+/// сама document.title не переносит — фронтенд синхронизирует командой.
+#[tauri::command]
+fn set_window_title(window: tauri::WebviewWindow, title: String) {
+    let _ = window.set_title(&title);
+}
+
 /// Пользователь решил закрываться (сохранив или нет) — destroy минует
 /// перехват CloseRequested, иначе окно спрашивало бы бесконечно.
 #[tauri::command]
@@ -259,6 +266,7 @@ fn main() {
             take_staged_book,
             open_external,
             set_window_dirty,
+            set_window_title,
             confirm_close,
             updater::updater_check,
             updater::updater_download,

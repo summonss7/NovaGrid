@@ -3,6 +3,7 @@ import { visibleRowsOf } from './filter'
 import { createSheet, getCell, withCell } from './sheet'
 import { cellNumber } from '../formula/engine'
 import { gridStore, selectionMetrics } from './store'
+import { rememberCopy } from './copy'
 
 const s = () => gridStore.getState()
 
@@ -658,5 +659,80 @@ describe('store: автосумма Σ (novagrid-020)', () => {
     s().clickCell(1, 2)
     s().applySumPick() // уже выключен — ничего не пишет
     expect(getCell(s().sheet, 9, 2)).toBe('')
+  })
+})
+
+describe('store: вставка мозаикой и формулы со сдвигом (novagrid-037)', () => {
+  /** Строка-шаблон как в пожелании: A2=10, B2==A2+1 — «дата + 1 день». */
+  const seedTemplateRow = () => {
+    s().clickCell(1, 0)
+    s().pasteText('10\t=A2+1')
+    expect(cellNumber(s().sheet, 1, 1)).toBe(11)
+  }
+  /** Ctrl+C шаблонной строки: буфер значений «10\t11», внутри — формула. */
+  const copyTemplateRow = () => {
+    const st = s()
+    rememberCopy(
+      st.sheet,
+      { active: { row: 1, col: 0 }, ranges: [{ fr: 1, fc: 0, tr: 1, tc: 1 }] },
+      '10\t11',
+    )
+  }
+
+  it('скопированная строка с формулой встаёт в каждую выделенную строку, ссылки сдвигаются', () => {
+    seedTemplateRow()
+    copyTemplateRow()
+
+    // выделяем три строки ниже (те же колонки A:B) и вставляем
+    s().clickCell(2, 0)
+    s().dragTo(4, 1)
+    s().pasteText('10\t11')
+
+    expect(getCell(s().sheet, 2, 0)).toBe('10')
+    expect(getCell(s().sheet, 2, 1)).toBe('=A3+1')
+    expect(getCell(s().sheet, 3, 1)).toBe('=A4+1')
+    expect(getCell(s().sheet, 4, 1)).toBe('=A5+1')
+    expect(cellNumber(s().sheet, 2, 1)).toBe(11)
+    // выделение накрывает всю замощённую область
+    expect(s().selection.ranges[0]).toEqual({ fr: 2, fc: 0, tr: 4, tc: 1 })
+  })
+
+  it('выделение целых строк: блок входит с первой колонки в каждую строку', () => {
+    seedTemplateRow()
+    copyTemplateRow()
+    // строки 2..4 целиком (ширина листа не кратна блоку — как в Excel, неважно)
+    const st = s()
+    gridStore.setState({
+      selection: {
+        active: { row: 2, col: 0 },
+        ranges: [{ fr: 2, fc: 0, tr: 4, tc: st.sheet.cols - 1 }],
+      },
+    })
+    s().pasteText('10\t11')
+    expect(getCell(s().sheet, 3, 0)).toBe('10')
+    expect(getCell(s().sheet, 3, 1)).toBe('=A4+1')
+    // за шириной блока целые строки не трогаются
+    expect(getCell(s().sheet, 3, 2)).toBe('8000')
+  })
+
+  it('чужой буфер (Excel/Таблицы) вставляется значениями без формул', () => {
+    s().clickCell(2, 0)
+    s().dragTo(4, 1)
+    s().pasteText('7\t8')
+    expect(getCell(s().sheet, 2, 1)).toBe('8')
+    expect(getCell(s().sheet, 3, 1)).toBe('8')
+    expect(getCell(s().sheet, 2, 1)).not.toContain('=')
+  })
+
+  it('мозаика откатывается одним Ctrl+Z', () => {
+    seedTemplateRow()
+    copyTemplateRow()
+    s().clickCell(2, 0)
+    s().dragTo(4, 1)
+    s().pasteText('10\t11')
+    expect(getCell(s().sheet, 4, 1)).toBe('=A5+1')
+    s().undo()
+    expect(getCell(s().sheet, 4, 0)).toBe('Кузнецова')
+    expect(getCell(s().sheet, 4, 1)).toBe('Бухгалтерия')
   })
 })

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { FormulaError } from './types'
-import { compileFormula, formatAst, parseCellRef, refName } from './parser'
+import { compileFormula, formatAst, parseCellRef, refName, shiftFormulaRefs } from './parser'
 
 /*
  * Парсер формул (Этап 4.1): структура, приоритеты, локали разделителей,
@@ -152,5 +152,41 @@ describe('канонический текст для .xlsx', () => {
     expect(formatAst(compileFormula('SUM(A1;1,5)').ast)).toBe('SUM(A1,1.5)')
     expect(formatAst(compileFormula('IF(A1>=2;"да";"")').ast)).toBe('IF(A1>=2,"да","")')
     expect(formatAst(compileFormula('B:B').ast)).toBe('B:B')
+  })
+})
+
+describe('shiftFormulaRefs — сдвиг ссылок при копировании (novagrid-037)', () => {
+  it('относительные ссылки двигаются, $-абсолютные стоят', () => {
+    expect(shiftFormulaRefs('=A1+1', 1, 0)).toBe('=A2+1')
+    expect(shiftFormulaRefs('=A1+$B$2', 1, 1)).toBe('=B2+$B$2')
+    expect(shiftFormulaRefs('=$A1+B$2', 2, 2)).toBe('=$A3+D$2')
+  })
+
+  it('диапазон сдвигается целиком, у каждой границы свои $', () => {
+    expect(shiftFormulaRefs('=SUM(A1:A5)', 2, 0)).toBe('=SUM(A3:A7)')
+    expect(shiftFormulaRefs('=SUM($A1:A$5)', 1, 1)).toBe('=SUM($A2:B$5)')
+  })
+
+  it('строки в кавычках не трогаются', () => {
+    expect(shiftFormulaRefs('="A1"+"B2"', 5, 5)).toBe('="A1"+"B2"')
+    expect(shiftFormulaRefs('="дата +""A1""..."&B1', 1, 0)).toBe('="дата +""A1""..."&B2')
+  })
+
+  it('имя функции с цифрами (LOG10) — не ссылка', () => {
+    expect(shiftFormulaRefs('=LOG10(100)+A1', 1, 0)).toBe('=LOG10(100)+A2')
+    expect(shiftFormulaRefs('=СУММ(A1:A2)', 1, 0)).toBe('=СУММ(A2:A3)')
+  })
+
+  it('хвост имени (A1 внутри A1Б) не сдвигается', () => {
+    expect(shiftFormulaRefs('=A1Б+1', 1, 0)).toBe('=A1Б+1')
+  })
+
+  it('сдвиг за край клампится к началу листа', () => {
+    expect(shiftFormulaRefs('=A1+B2', -5, -5)).toBe('=A1+A1')
+  })
+
+  it('не формула и нулевой сдвиг — текст без изменений', () => {
+    expect(shiftFormulaRefs('A1', 1, 1)).toBe('A1')
+    expect(shiftFormulaRefs('=A1', 0, 0)).toBe('=A1')
   })
 })

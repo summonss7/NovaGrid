@@ -21,14 +21,29 @@ export interface SessionRow {
   sheets: { name: string; sheet: SheetModel }[]
 }
 
+/**
+ * Память «где я был» в открытой книге (novagrid-037): последний лист и
+ * курсор. Ключ — тот же, что у «Недавних» (openingKey), храним немного.
+ */
+export interface ViewStateRow {
+  key: string
+  fileName: string
+  sheetName: string
+  row: number
+  col: number
+  updatedAt: number
+}
+
 class NovaDB extends Dexie {
   sessions!: EntityTable<SessionRow, 'id'>
   openings!: EntityTable<OpeningRow, 'id'>
+  viewStates!: EntityTable<ViewStateRow, 'key'>
 
   constructor() {
     super('novagrid')
     this.version(1).stores({ sessions: '++id, savedAt' })
     this.version(2).stores({ openings: '++id, openedAt, key' })
+    this.version(3).stores({ viewStates: 'key, updatedAt' })
   }
 }
 
@@ -84,6 +99,20 @@ export async function deleteUnnamedSessions(): Promise<void> {
 export const OPENING_BYTES_LIMIT = 16 * 1024 * 1024
 
 /**
+ * Идентификатор файла для «Недавних» и памяти позиции (novagrid-037):
+ * ключ из хаба → путь обёртки → «имя|размер|mtime». Одна формула — открытие
+ * и переоткрытие дают один ключ.
+ */
+export function openingKey(
+  file: File,
+  meta: { path?: string; handle?: FileSystemFileHandle; key?: string } = {},
+): string {
+  return (
+    meta.key ?? meta.path ?? `${file.name}|${file.size}|${file.lastModified}`
+  ).toLowerCase()
+}
+
+/**
  * Запомнить открытие файла (novagrid-022): дедуп по key — повторное открытие
  * поднимает запись вверх списком (openedAt = сейчас). Снимок байтов кладём
  * только в веб-fallback (нет ни пути, ни хэндла) и только для малых файлов.
@@ -92,9 +121,7 @@ export async function recordOpening(
   file: File,
   meta: { path?: string; handle?: FileSystemFileHandle; key?: string } = {},
 ): Promise<void> {
-  const key = (
-    meta.key ?? meta.path ?? `${file.name}|${file.size}|${file.lastModified}`
-  ).toLowerCase()
+  const key = openingKey(file, meta)
   const wantBytes = !meta.path && !meta.handle && file.size <= OPENING_BYTES_LIMIT
   const row: OpeningRow = {
     key,
@@ -117,4 +144,23 @@ export async function listOpenings(limit = RECENT_LIMIT): Promise<OpeningRow[]> 
 
 export async function deleteOpening(id: number): Promise<void> {
   await db.openings.delete(id)
+}
+
+// ── память «где я был» (novagrid-037) ─────────────────────────────────────
+
+/** Сколько книг помнят позицию — как «Недавние», только с запасом. */
+const VIEW_STATE_LIMIT = 32
+
+export async function saveViewState(row: ViewStateRow): Promise<void> {
+  await db.viewStates.put(row)
+  const old = await db.viewStates
+    .orderBy('updatedAt')
+    .reverse()
+    .offset(VIEW_STATE_LIMIT)
+    .toArray()
+  if (old.length > 0) await db.viewStates.bulkDelete(old.map((r) => r.key))
+}
+
+export async function loadViewState(key: string): Promise<ViewStateRow | null> {
+  return (await db.viewStates.get(key)) ?? null
 }

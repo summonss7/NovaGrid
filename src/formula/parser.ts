@@ -396,6 +396,112 @@ function columnIndexOf(token: string): number {
   return col - 1
 }
 
+/* ── сдвиг ссылок при копировании (novagrid-037) ─────────────────────── */
+
+/** Ссылка/диапазон с маркерами абсолютности: «$A$1», «A1:$B2». */
+interface RefMatch {
+  absCol1: boolean
+  col1: number
+  absRow1: boolean
+  row1: number
+  absCol2: boolean | null
+  col2: number | null
+  absRow2: boolean | null
+  row2: number | null
+}
+
+const REF_AT_RE =
+  /^(\$?)([A-Za-z]{1,3})(\$?)(\d{1,7})(?::(\$?)([A-Za-z]{1,3})(\$?)(\d{1,7}))?/
+
+/** Попытка прочитать ссылку/диапазон с начала s; null — не похоже. */
+function refAt(s: string): (RefMatch & { len: number }) | null {
+  const m = REF_AT_RE.exec(s)
+  if (!m) return null
+  const start = parseCellRef(`${m[2]}${m[4]}`)
+  if (!start) return null
+  let col2: number | null = null
+  let row2: number | null = null
+  let absCol2: boolean | null = null
+  let absRow2: boolean | null = null
+  if (m[6] !== undefined) {
+    const end = parseCellRef(`${m[6]}${m[8]}`)
+    if (!end) return null
+    col2 = end.col
+    row2 = end.row
+    absCol2 = m[5] === '$'
+    absRow2 = m[7] === '$'
+  }
+  return {
+    absCol1: m[1] === '$',
+    col1: start.col,
+    absRow1: m[3] === '$',
+    row1: start.row,
+    absCol2,
+    col2,
+    absRow2,
+    row2,
+    len: m[0].length,
+  }
+}
+
+const SHIFT_NAME_CHAR = /[A-Za-zА-Яа-яЁё0-9_.$]/
+
+/**
+ * Сдвиг A1-ссылок формулы на (dr, dc) — как Excel при копировании ячейки:
+ * относительные ссылки двигаются, $-абсолютные стоят на месте, строки
+ * "в кавычках" не трогаются. Ссылкой считается только целое имя с чистыми
+ * границами (не «A1» внутри «LOG10(» или «A1Б»). Отрицательный результат
+ * клампится к началу листа.
+ */
+export function shiftFormulaRefs(src: string, dr: number, dc: number): string {
+  if (!src.startsWith('=') || (dr === 0 && dc === 0)) return src
+  const n = src.length
+  let out = ''
+  let i = 0
+  const shiftCol = (c: number, abs: boolean) =>
+    abs ? c : Math.min(MAX_REF_COL, Math.max(0, c + dc))
+  const shiftRow = (r: number, abs: boolean) =>
+    abs ? r : Math.min(MAX_REF_ROW, Math.max(0, r + dr))
+  const part = (absCol: boolean, col: number, absRow: boolean, row: number) =>
+    `${absCol ? '$' : ''}${colLetters(col)}${absRow ? '$' : ''}${row + 1}`
+  while (i < n) {
+    const ch = src[i]
+    if (ch === '"') {
+      let j = i + 1
+      while (j < n) {
+        if (src[j] === '"') {
+          if (src[j + 1] === '"') {
+            j += 2
+            continue
+          }
+          j++
+          break
+        }
+        j++
+      }
+      out += src.slice(i, j)
+      i = j
+      continue
+    }
+    // границы имени: слева не хвост идентификатора, справа после ссылки
+    // не идентификатор и не «(» (иначе LOG10( примем за ссылку)
+    const leftOk = i === 0 || !SHIFT_NAME_CHAR.test(src[i - 1])
+    const ref = leftOk && /[A-Za-z$]/.test(ch) ? refAt(src.slice(i)) : null
+    if (ref && !SHIFT_NAME_CHAR.test(src[i + ref.len] ?? '') && src[i + ref.len] !== '(') {
+      let text = part(ref.absCol1, shiftCol(ref.col1, ref.absCol1), ref.absRow1, shiftRow(ref.row1, ref.absRow1))
+      if (ref.col2 !== null && ref.row2 !== null && ref.absCol2 !== null && ref.absRow2 !== null) {
+        text += `:${part(ref.absCol2, shiftCol(ref.col2, ref.absCol2), ref.absRow2, shiftRow(ref.row2, ref.absRow2))}`
+      }
+      out += text
+      i += ref.len
+      continue
+    }
+    out += ch
+    i++
+  }
+  return out
+}
+
 /** Компиляция: AST + список прямоугольников зависимостей. */
 export function compileFormula(src: string): CompiledFormula {
   const ast = new Parser(tokenize(src)).parse()

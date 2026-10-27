@@ -1,7 +1,7 @@
 import { ClipboardPaste, Copy, Eraser, Filter, FilterX, ListPlus, Scissors } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useStore } from 'zustand'
-import { selectionText } from '../core/copy'
+import { selectionText, rememberCopy } from '../core/copy'
 import { colName } from '../grid/geometry'
 import { gridStore } from '../core/store'
 import { cellText } from '../formula/engine'
@@ -63,8 +63,13 @@ export function ContextMenu(props: {
     closeIfAlive()
   }
 
-  // блок выделения (TSV) — то, что кладут в буфер Ctrl+C/Ctrl+X
+  // блок выделения (TSV) — то, что кладут в буфер Ctrl+C/Ctrl+X;
+  // копирование блока помнит формулы для вставки со сдвигом (novagrid-037)
   const blockText = selectionText(st.sheet, st.selection)
+  const copyBlock = async () => {
+    rememberCopy(st.sheet, st.selection, blockText)
+    await copyValue(blockText)
+  }
 
   const cutSelection = async () => {
     if (await copyText(blockText)) st.deleteSelection()
@@ -127,7 +132,7 @@ export function ContextMenu(props: {
             type="button"
             role="menuitem"
             className="ctx-item"
-            onClick={() => void copyValue(blockText)}
+            onClick={() => void copyBlock()}
           >
             <Copy size={14} strokeWidth={1.5} aria-hidden />
             <span className="ctx-item-text">{t.ctxCopy}</span>

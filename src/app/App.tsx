@@ -4,8 +4,16 @@ import { gridStore } from '../core/store'
 import { printStore } from '../core/print'
 import { TABLE_SIZE_SCALE, useDocumentLang, useSettings, useT } from '../i18n'
 import { installAutosave } from '../storage/autosave'
-import { OPENING_BYTES_LIMIT, recordOpening, type SessionRow } from '../storage/db'
+import { OPENING_BYTES_LIMIT, openingKey, recordOpening, type SessionRow } from '../storage/db'
 import type { OpeningRow } from '../storage/recents'
+import {
+  applyViewState,
+  beginViewStateTracking,
+  installViewStateSync,
+  restoreViewState,
+  trackingKey,
+} from '../storage/viewState'
+import { installTitleSync } from './titleSync'
 import { onPwaUpdate, registerServiceWorker } from '../pwa/registerSW'
 import { zoomStore } from '../grid/zoom'
 import {
@@ -127,6 +135,12 @@ export default function App() {
         setSnapshotPending({ file, buffer: await file.arrayBuffer(), meta })
         return
       }
+      // память позиции (novagrid-037): ключ переключается до загрузки —
+      // прежняя книга успевает дослать свою позицию; неудачное открытие
+      // откатывает отслеживание назад
+      const viewKey = openingKey(file, meta)
+      const prevKey = trackingKey()
+      beginViewStateTracking(viewKey)
       setBusy(t.openingFile)
       try {
         await readBookFile(file)
@@ -137,7 +151,11 @@ export default function App() {
         // не дожидаясь автосохранения сессии (которое большие книги пропускает)
         void recordOpening(file, meta).catch(() => undefined)
         setMode('book')
+        // «где я был» (novagrid-037): вернуть курсор на запомненный лист/строку
+        const saved = await restoreViewState(viewKey)
+        if (saved) applyViewState(saved)
       } catch (err) {
+        beginViewStateTracking(prevKey)
         showToast(
           `${t.openErrorTitle}: ${err instanceof Error ? err.message : String(err)}`,
           'error',
@@ -230,6 +248,8 @@ export default function App() {
       if (!pending) return
       const payload = await decryptSnapshot(pending.buffer, passphrase)
       const name = payload.book.fileName ?? pending.file.name.replace(/\.nvgridx$/i, '')
+      const viewKey = pending.meta ? openingKey(pending.file, pending.meta) : null
+      beginViewStateTracking(viewKey)
       gridStore.getState().loadBook(snapshotToBook(payload), {
         fileName: name,
         fileFormat: extToFormat(name),
@@ -238,6 +258,10 @@ export default function App() {
       void recordOpening(pending.file, pending.meta).catch(() => undefined)
       setSnapshotPending(null)
       setMode('book')
+      if (viewKey) {
+        const saved = await restoreViewState(viewKey)
+        if (saved) applyViewState(saved)
+      }
     },
     [snapshotPending],
   )
@@ -417,6 +441,8 @@ export default function App() {
           gridStore
             .getState()
             .markSaved(name, { fileFormat: choice.format, csvDelimiter: choice.delimiter })
+          // книга сменила путь — позиция дальше помнится по нему (novagrid-037)
+          beginViewStateTracking(path.toLowerCase())
           showToast(t.savedToast(name), 'ok')
         } else if (isFsaAvailable()) {
           const handle = await window.showSaveFilePicker!({
@@ -461,6 +487,7 @@ export default function App() {
   )
 
   const restoreSession = useCallback((row: SessionRow) => {
+    beginViewStateTracking(null) // сессия без файла — позицию не помним
     gridStore
       .getState()
       .loadBook(
@@ -476,6 +503,7 @@ export default function App() {
     async (url: string, name: string) => {
       setBusy(t.openingFile)
       try {
+        beginViewStateTracking(null)
         await openFixture(new URL(url, document.baseURI).href, name)
         setMode('book')
       } catch (err) {
@@ -539,6 +567,10 @@ export default function App() {
 
   // ── автосохранение сессии (отдельный эффект: переживёт StrictMode) ──
   useEffect(() => installAutosave(), [])
+
+  // ── заголовок окна и память позиции (novagrid-037) ────────────────────
+  useEffect(() => installTitleSync(), [])
+  useEffect(() => installViewStateSync(), [])
 
   // ── десктоп-обёртка (Этап 7.5): книги из аргументов запуска ──────────
   // (ассоциации .xlsx/.csv/.xls/.ods: «NovaGrid.exe <путь> [путь …]» —
@@ -749,6 +781,7 @@ export default function App() {
         <StartScreen
           onOpenFile={() => void onOpenClicked()}
           onNewBook={() => {
+            beginViewStateTracking(null)
             gridStore.getState().newBook()
             setMode('book')
           }}
