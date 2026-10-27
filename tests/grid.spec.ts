@@ -621,3 +621,64 @@ test.describe('ширина колонки до 1000 px (novagrid-035)', () => {
     expect(await page.evaluate(() => window.__nv!.colWidth(0))).toBe(1000)
   })
 })
+
+test.describe('протяжка выделения от шапки (novagrid-038)', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/?test=1')
+    await nv(page).ready()
+  })
+
+  /** Центр номера строки row и заголовка колонки col. */
+  async function headerPoints(page: Page, row: number, col: number) {
+    const box = await page.locator('.grid-area').boundingBox()
+    const m = await page.evaluate(() => window.__nv!.cellMetrics())
+    const cell = await page.evaluate(
+      ({ row, col }) => window.__nv!.cellCenter(row, col),
+      { row, col },
+    )
+    return {
+      rowHeader: { x: box!.x + m.rowHeaderW / 2, y: cell.y },
+      colHeader: { x: cell.x, y: box!.y + m.headerH / 2 },
+    }
+  }
+
+  test('тяну за номера строк вниз — выделяются строки целиком, Σ живая', async ({ page }) => {
+    const api = nv(page)
+    const from = await headerPoints(page, 1, 0)
+    const to = await headerPoints(page, 3, 0)
+
+    await page.mouse.move(from.rowHeader.x, from.rowHeader.y)
+    await page.mouse.down()
+    await page.mouse.move(to.rowHeader.x, to.rowHeader.y, { steps: 5 })
+    await page.mouse.up()
+
+    // строки 2–4 на всю ширину листа (26 колонок → Z)
+    expect(await api.ranges()).toEqual(['A2:Z4'])
+    expect((await api.activeRef())).toBe('A2')
+    // Σ считает числа выделенных строк: 10000+12500+8000
+    const m = await api.metrics()
+    expect(m.total).toBe(30500)
+    expect(m.count).toBe(3)
+  })
+
+  test('тяну вверх — охват от якоря до курсора; колонки тоже тянутся', async ({ page }) => {
+    const api = nv(page)
+    const bottom = await headerPoints(page, 3, 0)
+    const top = await headerPoints(page, 1, 0)
+
+    await page.mouse.move(bottom.rowHeader.x, bottom.rowHeader.y)
+    await page.mouse.down()
+    await page.mouse.move(top.rowHeader.x, top.rowHeader.y, { steps: 5 })
+    await page.mouse.up()
+    expect(await api.ranges()).toEqual(['A2:Z4'])
+
+    // колонки B..D на всю высоту (100 строк демо-листа)
+    const b = await headerPoints(page, 0, 1)
+    const d = await headerPoints(page, 0, 3)
+    await page.mouse.move(b.colHeader.x, b.colHeader.y)
+    await page.mouse.down()
+    await page.mouse.move(d.colHeader.x, d.colHeader.y, { steps: 5 })
+    await page.mouse.up()
+    expect(await api.ranges()).toEqual(['B1:D100'])
+  })
+})

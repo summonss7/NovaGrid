@@ -14,6 +14,11 @@
  * длинное нажатие (500 мс без сдвига) = ПКМ — то же меню фильтрации;
  * два пальца — пинч-зум таблицы (METRICS масштабируются, якорь — середина
  * жеста). Ctrl+колесо и Ctrl +/−/0 дублируют зум с клавиатуры.
+ *
+ * novagrid-038: протяжка мышью от номера строки/заголовка колонки (как
+ * клик, но с удержанием и движением) расширяет выделение на несколько
+ * строк/колонок целиком — выделенные строки принимают мозаичную вставку
+ * скопированной строки.
  */
 
 import { useEffect, useRef, useState } from 'react'
@@ -45,7 +50,7 @@ import { zoomStore } from './zoom'
 import { drawGrid, themeFromCSS, type GridTheme, type VisibleRegion } from './renderer'
 import { installTestHook } from './testHook'
 
-type DragMode = 'select' | 'alt' | 'point' | 'colresize' | null
+type DragMode = 'select' | 'alt' | 'point' | 'colresize' | 'rowselect' | 'colselect' | null
 
 /** Захват границы колонки для перетаскивания ширины (novagrid-020). */
 interface ColResizeState {
@@ -619,6 +624,12 @@ export function GridCanvas() {
       }
       gridStore.getState().selectCol(hit.col)
       sumArmed()
+      // протяжка от заголовка расширяет выделение на колонки (novagrid-038);
+      // границы и кнопка ▾ выше разобрали свои зоны — здесь чистый выбор
+      if (!isTouch) {
+        mainRef.current?.setPointerCapture(e.pointerId)
+        dragModeRef.current = 'colselect'
+      }
       if (isTouch) startLongPress(e.clientX, e.clientY, 'colHeader', hit.col)
       return
     }
@@ -626,6 +637,11 @@ export function GridCanvas() {
       mainRef.current?.focus({ preventScroll: true })
       gridStore.getState().selectRow(hit.row)
       sumArmed()
+      // протяжка от номера строки расширяет выделение на строки (novagrid-038)
+      if (!isTouch) {
+        mainRef.current?.setPointerCapture(e.pointerId)
+        dragModeRef.current = 'rowselect'
+      }
       return
     }
 
@@ -746,6 +762,20 @@ export function GridCanvas() {
       }
     }
     if (!mode) return
+
+    // протяжка от шапки (novagrid-038): строки тянутся по номерам (или поверх
+    // ячеек), колонки — по заголовкам; движение расширяет выделение от якоря
+    if (mode === 'rowselect' || mode === 'colselect') {
+      const { x, y } = localPoint(e.clientX, e.clientY)
+      const hit = cellFromPoint(x, y)
+      const ok = hit && (hit.kind === 'cell' || hit.kind === (mode === 'rowselect' ? 'rowHeader' : 'colHeader'))
+      if (ok) {
+        if (mode === 'rowselect') gridStore.getState().dragRowTo(hit!.row)
+        else gridStore.getState().dragColTo(hit!.col)
+      }
+      autoScrollDuringDrag(x, y)
+      return
+    }
 
     const { x, y } = localPoint(e.clientX, e.clientY)
     const hit = cellFromPoint(x, y)

@@ -428,3 +428,39 @@ test.describe('чужие формулы (4.6): кэш значений и ∛',
     expect((await api.formulaInfo(5, 1))?.display).toBe('28600')
   })
 })
+
+test.describe('дата-арифметика «+»/«−» (novagrid-038)', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/?test=1')
+    await nv(page).ready()
+  })
+
+  test('«=F1+1» от даты — следующий календарный день; конец месяца и года', async ({ page }) => {
+    const api = nv(page)
+    await typeFormula(page, 0, 5, '2026-10-27') // F1: дата руками
+    await typeFormula(page, 1, 5, '=F1+1') // F2: ссылка на дату + 1
+    expect((await api.formulaInfo(1, 5))?.display).toBe('2026-10-28')
+
+    await typeFormula(page, 0, 6, '2026-12-31')
+    await typeFormula(page, 1, 6, '=G1+1')
+    expect((await api.formulaInfo(1, 6))?.display).toBe('2027-01-01')
+
+    await typeFormula(page, 0, 7, '2026-01-31')
+    await typeFormula(page, 1, 7, '=H1+1')
+    expect((await api.formulaInfo(1, 7))?.display).toBe('2026-02-01')
+  })
+
+  test('русский формат даты и разность дат в днях', async ({ page }) => {
+    const api = nv(page)
+    await typeFormula(page, 0, 5, '27.10.2026')
+    await typeFormula(page, 1, 5, '=F1+1')
+    expect((await api.formulaInfo(1, 5))?.display).toBe('28.10.2026')
+
+    await typeFormula(page, 0, 6, '2026-12-31')
+    await typeFormula(page, 1, 6, '=G1-F1') // 31.12 − 27.10 → 65 дней
+    expect((await api.formulaInfo(1, 6))?.display).toBe('65')
+    // YEAR понимает дату, собранную формулой
+    await typeFormula(page, 2, 5, '=YEAR(F1+1)')
+    expect((await api.formulaInfo(2, 5))?.display).toBe('2026')
+  })
+})

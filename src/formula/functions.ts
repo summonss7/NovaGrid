@@ -10,6 +10,7 @@
  */
 
 import { criterionPredicate } from './criteria'
+import { parseDay } from './dates'
 import { FormulaError, type CellValue } from './types'
 
 export interface FnMeta {
@@ -734,6 +735,10 @@ function dateParts(v: Arg, fname: string): [number, number, number] | FormulaErr
   const s = scalar(v, fname)
   if (s instanceof FormulaError) return s
   const text = typeof s === 'number' ? String(Math.trunc(s)) : typeof s === 'string' ? s : ''
+  // сначала строгий разбор ISO/русской даты (novagrid-038), потом мягкий ISO
+  // с временем-хвостом («2026-10-09T00:00:00» из файлов)
+  const day = parseDay(text.trim())
+  if (day) return [day.y, day.m, day.d]
   const m = ISO_RE.exec(text.trim())
   if (!m) return err(`${fname}: нужна дата вида 2026-10-09`)
   return [Number(m[1]), Number(m[2]), Number(m[3])]

@@ -242,6 +242,13 @@ export interface GridState {
   /** клик по шапке — выделить колонку/строку целиком */
   selectCol: (col: number) => void
   selectRow: (row: number) => void
+  /**
+   * Протяжка от номера строки (novagrid-038): расширяет выделение строк от
+   * якоря (строка клика) до row, на всю ширину листа — как в Excel.
+   */
+  dragRowTo: (row: number) => void
+  /** Протяжка от заголовка колонки (novagrid-038): расширение на всю высоту. */
+  dragColTo: (col: number) => void
   /** Delete/Backspace — очистить ячейки выделения (одна транзакция истории) */
   deleteSelection: () => void
   /**
@@ -1086,6 +1093,22 @@ export const gridStore = createStore<GridState>((set, get) => {
           ranges: [{ fr: row, fc: 0, tr: row, tc: sheet.cols - 1 }],
         },
       })
+    },
+
+    dragRowTo: (row) => {
+      const { selection, sheet } = get()
+      const ranges = [...selection.ranges]
+      // якорь — fr клика selectRow, ширина — весь лист (границы растут при
+      // прокрутке, поэтому tc пересчитывается на каждом шаге)
+      ranges[ranges.length - 1] = { ...ranges[ranges.length - 1], tr: row, tc: sheet.cols - 1 }
+      set({ selection: { ...selection, ranges } })
+    },
+
+    dragColTo: (col) => {
+      const { selection, sheet } = get()
+      const ranges = [...selection.ranges]
+      ranges[ranges.length - 1] = { ...ranges[ranges.length - 1], tr: sheet.rows - 1, tc: col }
+      set({ selection: { ...selection, ranges } })
     },
 
     dragTo: (row, col) => {

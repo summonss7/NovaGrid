@@ -3,6 +3,7 @@ import { visibleRowsOf } from './filter'
 import { createSheet, getCell, withCell } from './sheet'
 import { cellNumber } from '../formula/engine'
 import { gridStore, selectionMetrics } from './store'
+import { normalize } from './selection'
 import { rememberCopy } from './copy'
 
 const s = () => gridStore.getState()
@@ -734,5 +735,53 @@ describe('store: вставка мозаикой и формулы со сдви
     s().undo()
     expect(getCell(s().sheet, 4, 0)).toBe('Кузнецова')
     expect(getCell(s().sheet, 4, 1)).toBe('Бухгалтерия')
+  })
+})
+
+describe('store: протяжка от шапки (novagrid-038)', () => {
+  it('dragRowTo расширяет выделение строк от якоря на всю ширину, вниз и вверх', () => {
+    s().selectRow(2)
+    s().dragRowTo(5)
+    expect(normalize(s().selection.ranges[0])).toEqual({
+      r1: 2,
+      c1: 0,
+      r2: 5,
+      c2: s().sheet.cols - 1,
+    })
+    // якорь не двигается: протянули назад выше якоря — охват от якоря до курсора
+    s().dragRowTo(1)
+    expect(normalize(s().selection.ranges[0])).toEqual({
+      r1: 1,
+      c1: 0,
+      r2: 2,
+      c2: s().sheet.cols - 1,
+    })
+    // активная ячейка — строка клика, первая колонка (как при выборе строки)
+    expect(s().selection.active).toEqual({ row: 2, col: 0 })
+  })
+
+  it('dragColTo расширяет выделение колонок от якоря на всю высоту', () => {
+    s().selectCol(1)
+    s().dragColTo(3)
+    const rg = s().selection.ranges[0]
+    expect(Math.min(rg.fc, rg.tc)).toBe(1)
+    expect(Math.max(rg.fc, rg.tc)).toBe(3)
+    expect(rg.fr).toBe(0)
+    expect(rg.tr).toBe(s().sheet.rows - 1)
+  })
+
+  it('выделенные протяжкой строки принимают мозаичную вставку скопированной строки', () => {
+    // сценарий пожелания: скопировал строку, выделил несколько строк за
+    // номера, вставил — строка встала в каждую
+    s().clickCell(1, 0)
+    s().dragTo(1, 1)
+    rememberCopy(s().sheet, s().selection, 'Иванов\tПродажи')
+    s().selectRow(3)
+    s().dragRowTo(4)
+    s().pasteText('Иванов\tПродажи')
+    expect(getCell(s().sheet, 3, 0)).toBe('Иванов')
+    expect(getCell(s().sheet, 3, 1)).toBe('Продажи')
+    expect(getCell(s().sheet, 4, 0)).toBe('Иванов')
+    expect(getCell(s().sheet, 4, 1)).toBe('Продажи')
   })
 })

@@ -136,6 +136,12 @@ describe('даты (ISO-строки)', () => {
     expect(evalErr('=YEAR("не дата")')).toContain('вида')
   })
 
+  it('YEAR/MONTH/DAY понимают и русский формат «ДД.ММ.ГГГГ» (novagrid-038)', () => {
+    expect(evalOn('=YEAR("27.10.2026")')).toBe(2026)
+    expect(evalOn('=MONTH("27.10.2026")')).toBe(10)
+    expect(evalOn('=DAY("27.10.2026")')).toBe(27)
+  })
+
   it('TODAY — формат ГГГГ-ММ-ДД', () => {
     expect(evalOn('=TODAY()')).toMatch(/^\d{4}-\d{2}-\d{2}$/)
   })

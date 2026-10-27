@@ -253,3 +253,68 @@ describe('живые примеры справочника (example.ts)', () => 
     expect(sum.result).toBe('59800')
   })
 })
+
+describe('дата-арифметика «+»/«−» (novagrid-038)', () => {
+  it('«=A1+1» от даты — следующий календарный день', () => {
+    const sheet = sheetOf([
+      ['2026-10-27', '=A1+1'],
+      ['=A1+0', '=A1+100'],
+    ])
+    recalcSheet(sheet)
+    expect(cellText(sheet, 0, 1)).toBe('2026-10-28')
+    expect(cellText(sheet, 1, 0)).toBe('2026-10-27')
+    expect(cellText(sheet, 1, 1)).toBe('2027-02-04')
+    // дата-результат — текст, не число: Σ его не суммирует
+    expect(cellNumber(sheet, 0, 1)).toBeNull()
+  })
+
+  it('«−1» назад по календарю, «дата − дата» — дни между', () => {
+    const sheet = sheetOf([
+      ['2026-03-01', '=A1-1'],
+      ['2026-10-27', '=A2-A1'],
+    ])
+    recalcSheet(sheet)
+    expect(cellText(sheet, 0, 1)).toBe('2026-02-28')
+    expect(cellText(sheet, 1, 1)).toBe('240')
+    expect(cellNumber(sheet, 1, 1)).toBe(240)
+  })
+
+  it('русский формат «ДД.ММ.ГГГГ» тоже дата, результат в нём же', () => {
+    const sheet = sheetOf([
+      ['27.10.2026', '=A1+1', '=A1-31'],
+    ])
+    recalcSheet(sheet)
+    expect(cellText(sheet, 0, 1)).toBe('28.10.2026')
+    expect(cellText(sheet, 0, 2)).toBe('26.09.2026')
+  })
+
+  it('число + дата, дата с временем, TODAY()+1', () => {
+    const sheet = sheetOf([
+      ['2026-12-31 10:30', '=1+A1', '=A1+0.5'],
+    ])
+    recalcSheet(sheet)
+    expect(cellText(sheet, 0, 1)).toBe('2027-01-01 10:30')
+    // +0.5 дня — время сдвигается на 12 часов (дробные дни честно считаются)
+    expect(cellText(sheet, 0, 2)).toBe('2026-12-31 22:30')
+    expect(evalStandalone(sheetOf([[]]), '=TODAY()+1')).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+  })
+
+  it('ошибки человеческим языком: складывать даты, число минус дата, дата плюс текст', () => {
+    const sheet = sheetOf([
+      ['2026-10-27', '2026-10-28'],
+      ['=A1+B1', '=5-A1', '=A1+"два"'],
+    ])
+    recalcSheet(sheet)
+    expect(cellError(sheet, 1, 0)).toContain('нельзя складывать')
+    expect(cellError(sheet, 1, 1)).toContain('Из числа нельзя вычесть дату')
+    expect(cellError(sheet, 1, 2)).toContain('не число')
+  })
+
+  it('обычные числа «+»/«−» работают как раньше', () => {
+    const sheet = sheetOf([['10', '=A1+1', '=A1-1', '=A1*2']])
+    recalcSheet(sheet)
+    expect(cellText(sheet, 0, 1)).toBe('11')
+    expect(cellText(sheet, 0, 2)).toBe('9')
+    expect(cellText(sheet, 0, 3)).toBe('20')
+  })
+})

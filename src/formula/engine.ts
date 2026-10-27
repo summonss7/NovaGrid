@@ -17,6 +17,7 @@
 
 import type { CellChange } from '../core/history'
 import { cellKey, getCell, parseNumber, type SheetModel } from '../core/sheet'
+import { daysBetween, parseDay, shiftDays } from './dates'
 import { FUNCTIONS, type Arg, type FnCtx, type RangeArg } from './functions'
 import {
   type CompiledFormula,
@@ -222,6 +223,28 @@ function isRangeArg(v: Arg): v is RangeArg {
   return typeof v === 'object' && v !== null && 'values' in v
 }
 
+/**
+ * Дата-арифметика «+»/«−» (novagrid-038): «дата + 1» — следующий
+ * календарный день, «дата − дата» — дни между датами. null — ни один
+ * операнд не дата, обычный числовой путь.
+ */
+function dateArith(op: '+' | '-', l: CellValue, r: CellValue): CellValue | null {
+  const ld = typeof l === 'string' ? parseDay(l.trim()) : null
+  const rd = typeof r === 'string' ? parseDay(r.trim()) : null
+  if (!ld && !rd) return null
+  if (ld && rd) {
+    if (op === '+') return new FormulaError('Даты нельзя складывать — вычитание дат даёт дни между ними')
+    return daysBetween(l as string, r as string)
+  }
+  if (op === '-' && !ld)
+    return new FormulaError('Из числа нельзя вычесть дату — вычтите дату из даты')
+  const dateText = (ld ? l : r) as string
+  const other = ld ? r : l
+  const n = numOrNull(other)
+  if (n === null) return new FormulaError(`«${textOf(other)}» — не число`)
+  return shiftDays(dateText, op === '+' ? n : -n) ?? new FormulaError('Не получилось сдвинуть дату')
+}
+
 function evalNode(st: EvalState, node: FormulaNode, selfRow: number, selfCol: number): Arg {
   switch (node.t) {
     case 'num':
@@ -264,6 +287,11 @@ function evalNode(st: EvalState, node: FormulaNode, selfRow: number, selfCol: nu
         return new FormulaError('С диапазоном нельзя делать арифметику — сначала SUM/AVERAGE')
       if (['=', '<>', '<', '>', '<=', '>='].includes(node.op))
         return compareOp(node.op as '=' | '<>' | '<' | '>' | '<=' | '>=', l, r)
+      // даты в «+»/«−» идут по календарю (novagrid-038): =A1+1 → следующий день
+      if (node.op === '+' || node.op === '-') {
+        const d = dateArith(node.op, l, r)
+        if (d !== null) return d
+      }
       const ln = numOrNull(l)
       const rn = numOrNull(r)
       if (ln === null || rn === null) return new FormulaError(`«${ln === null ? textOf(l) : textOf(r)}» — не число`)
