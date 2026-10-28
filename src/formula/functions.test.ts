@@ -70,6 +70,21 @@ describe('агрегаты (математика)', () => {
     expect(evalOn('=ROUND(12550;2)')).toBe(12550)
   })
 
+  it('ROUNDDOWN: к нулю (novagrid-040, книги .ods)', () => {
+    expect(evalOn('=ROUNDDOWN(2.9)')).toBe(2)
+    expect(evalOn('=ROUNDDOWN(-2.9)')).toBe(-2)
+    expect(evalOn('=ROUNDDOWN(12550;-3)')).toBe(12000)
+    expect(evalOn('=ROUNDDOWN(3.14159;2)')).toBe(3.14)
+  })
+
+  it('MROUND: ближайшее кратное (novagrid-040)', () => {
+    expect(evalOn('=MROUND(10;3)')).toBe(9)
+    expect(evalOn('=MROUND(11;3)')).toBe(12)
+    expect(evalOn('=MROUND(-10;-3)')).toBe(-9)
+    expect(evalOn('=MROUND(10;0)')).toBe(0)
+    expect(evalErr('=MROUND(10;-3)')).toContain('одного знака')
+  })
+
   it('ABS', () => {
     expect(evalOn('=ABS(-500)')).toBe(500)
     expect(evalOn('=ABS(C2-C3)')).toBe(2500)

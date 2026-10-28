@@ -381,7 +381,8 @@ const defIfs: FnDef = {
   minArgs: 2,
   maxArgs: Infinity,
   impl: (args) => {
-    if (args.length % 2 !== 0) return err('IFS: условия и значения идут парами — нужно чётное число аргументов')
+    if (args.length % 2 !== 0)
+      return err('IFS: условия и значения идут парами — нужно чётное число аргументов')
     for (let i = 0; i < args.length; i += 2) {
       const cond = toBool(scalar(args[i], 'IFS'))
       if (cond instanceof FormulaError) return err(`IFS: ${cond.message}`)
@@ -649,6 +650,48 @@ const defRound: FnDef = {
   },
 }
 
+/* ROUNDDOWN/MROUND — функции книг .ods/.xlsx владельца (novagrid-040) */
+
+const defRoundDown: FnDef = {
+  meta: {
+    name: 'ROUNDDOWN',
+    args: ['число', '[знаков]'],
+    desc: 'Округление к нулю: =ROUNDDOWN(12550;-3) → 12000.',
+    group: 'Математика',
+  },
+  minArgs: 1,
+  maxArgs: 2,
+  impl: (args) => {
+    const n = toNum(scalar(args[0], 'ROUNDDOWN'))
+    if (n instanceof FormulaError) return err(`ROUNDDOWN: ${n.message}`)
+    const digits = args.length > 1 ? toNum(scalar(args[1], 'ROUNDDOWN')) : 0
+    if (digits instanceof FormulaError) return err(`ROUNDDOWN: ${digits.message}`)
+    if (!Number.isInteger(digits)) return err('ROUNDDOWN: число знаков должно быть целым')
+    const f = Math.pow(10, digits)
+    return (Math.sign(n) * Math.floor(Math.abs(n) * f + 1e-9)) / f
+  },
+}
+
+const defMround: FnDef = {
+  meta: {
+    name: 'MROUND',
+    args: ['число', 'кратность'],
+    desc: 'Ближайшее кратное: =MROUND(10;3) → 9. Знаки аргументов должны совпадать.',
+    group: 'Математика',
+  },
+  minArgs: 2,
+  maxArgs: 2,
+  impl: (args) => {
+    const n = toNum(scalar(args[0], 'MROUND'))
+    if (n instanceof FormulaError) return err(`MROUND: ${n.message}`)
+    const m = toNum(scalar(args[1], 'MROUND'))
+    if (m instanceof FormulaError) return err(`MROUND: ${m.message}`)
+    if (m === 0) return 0
+    if (n > 0 !== m > 0) return err('MROUND: число и кратность должны быть одного знака')
+    return Math.sign(n) * Math.round(Math.abs(n / m) + 1e-9) * Math.abs(m)
+  },
+}
+
 const defAbs: FnDef = {
   meta: {
     name: 'ABS',
@@ -845,6 +888,8 @@ const DEFS: readonly FnDef[] = [
   defMin,
   defMax,
   defRound,
+  defRoundDown,
+  defMround,
   defAbs,
   defIf,
   defIfs,

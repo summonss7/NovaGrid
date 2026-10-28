@@ -1,7 +1,7 @@
 {
   "name": "novagrid",
   "private": true,
-  "version": "1.22.0",
+  "version": "1.23.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -20,6 +20,7 @@
   "dependencies": {
     "dexie": "^4.4.6",
     "exceljs": "^4.4.0",
+    "jszip": "^3.10.2",
     "lucide-react": "^1.52.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

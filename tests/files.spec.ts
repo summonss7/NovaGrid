@@ -29,6 +29,8 @@ function nv(page: Page) {
     ready: () => page.waitForFunction(() => window.__nv !== undefined),
     cell: (row: number, col: number) =>
       page.evaluate(({ row, col }) => window.__nv!.cell(row, col), { row, col }),
+    cellText: (row: number, col: number) =>
+      page.evaluate(({ row, col }) => window.__nv!.cellText(row, col), { row, col }),
     book: () => page.evaluate(() => window.__nv!.book()),
     scrollTo: (x: number, y: number) =>
       page.evaluate(({ x, y }) => window.__nv!.scrollTo(x, y), { x, y }),
@@ -150,7 +152,7 @@ test.describe('файловой цикл: открыл → изменил → с
     expect(book.fileName).toBe('legacy-demo.xls')
   })
 
-  test('.ods: листы → вкладки, даты ISO, правка → сохранить как .xlsx → переоткрыть', async ({
+  test('.ods: листы → вкладки, формулы, даты ISO, правка → сохранить как .xlsx → переоткрыть', async ({
     page,
   }) => {
     await page.goto('/?testui=1')
@@ -166,18 +168,26 @@ test.describe('файловой цикл: открыл → изменил → с
     expect(book.fileName).toBe('ods-book.ods')
     await expect.poll(() => api.cell(1, 3)).toBe('2026-09-01')
 
-    // второй лист книги ODS открывается вкладкой
+    // формулы .ods читаются и пересчитываются (novagrid-040): «×2» и итог SUM
+    await expect.poll(() => api.cellText(1, 4)).toBe('20000')
+    await expect.poll(() => api.cellText(5, 2)).toBe('45900')
+
+    // второй лист книги ODS открывается вкладкой; межлистовая ссылка
+    // показывает кэш из файла (∛) — =данные!C6
     await page.getByRole('tab', { name: 'Справка' }).click()
     await expect.poll(() => api.cell(0, 0)).toBe('Отдел')
+    await expect.poll(() => api.cellText(4, 2)).toBe('45900')
     await page.getByRole('tab', { name: 'Данные' }).click()
 
-    // правка C2 → 4242
+    // правка C2 → 4242: формулы листа пересчитались (×2 и итог)
     const center = await api.cellCenter(1, 2)
     await page.mouse.click(center.x, center.y)
     await page.keyboard.press('4')
     await page.keyboard.type('242')
     await page.keyboard.press('Enter')
     await expect.poll(() => api.cell(1, 2)).toBe('4242')
+    await expect.poll(() => api.cellText(1, 4)).toBe('8484')
+    await expect.poll(() => api.cellText(5, 2)).toBe('40142')
 
     // «Сохранить как…»: формат .xlsx по умолчанию, заметка о конверте видна
     const downloadPromise = page.waitForEvent('download')
@@ -191,11 +201,13 @@ test.describe('файловой цикл: открыл → изменил → с
     const savedPath = test.info().outputPath('ods-saved.xlsx')
     await download.saveAs(savedPath)
 
-    // переоткрыли сохранённый .xlsx: правка и второй лист на месте
+    // переоткрыли сохранённый .xlsx: правка, второй лист и формулы на месте
     await openFixtureFile(page, savedPath)
     await expect
       .poll(() => page.evaluate(() => window.__nv?.cell(1, 2) ?? ''), { timeout: 3000 })
       .toBe('4242')
+    await expect.poll(() => api.cellText(1, 4)).toBe('8484')
+    await expect.poll(() => api.cellText(5, 2)).toBe('40142')
     book = await api.book()
     expect(book.tabs).toEqual(['Данные', 'Справка'])
     expect(book.fileName).toBe('ods-book.xlsx')
@@ -399,7 +411,9 @@ test.describe('автосохранение сессии и «Недавние»
 })
 
 test.describe('меню «Открыть» в книге (novagrid-030)', () => {
-  test('кнопка «Открыть» показывает пикер и недавние файлы, клик переоткрывает', async ({ page }) => {
+  test('кнопка «Открыть» показывает пикер и недавние файлы, клик переоткрывает', async ({
+    page,
+  }) => {
     await page.goto('/?testui=1')
     await openFixtureFile(page, 'public/fixtures/demo-book.xlsx')
     await expect
@@ -449,7 +463,9 @@ test.describe('меню «Открыть» в книге (novagrid-030)', () => 
     await expect(openBtn).toHaveAttribute('aria-expanded', 'false')
   })
 
-  test('«Забыть» убирает файл из меню «Открыть», пустой список честно подписан', async ({ page }) => {
+  test('«Забыть» убирает файл из меню «Открыть», пустой список честно подписан', async ({
+    page,
+  }) => {
     await page.goto('/?testui=1')
     await openFixtureFile(page, 'public/fixtures/demo-book.xlsx')
     await expect
@@ -511,7 +527,13 @@ test.describe('меню «Открыть» в книге (novagrid-030)', () => 
     await expect
       .poll(() => page.evaluate(() => window.__nv?.cell(1, 0) ?? ''), { timeout: 3000 })
       .toBe('Иванов')
-    await expect.poll(() => nv(page).book().then((b) => b.dirty)).toBe(false)
+    await expect
+      .poll(() =>
+        nv(page)
+          .book()
+          .then((b) => b.dirty),
+      )
+      .toBe(false)
 
     // чистая книга: диалога нет, закрытие (с runBeforeUnload оно асинхронное)
     // доходит само
@@ -563,7 +585,9 @@ test.describe('меню «Открыть» в книге (novagrid-030)', () => 
     // флаг dirty уехал в обёртку (по нему Rust решает, перехватывать ли крестик)
     const calls = () => page.evaluate(() => window.__tauriMock!.calls)
     await expect
-      .poll(() => calls().then((c) => c.some((x) => x.cmd === 'set_window_dirty' && x.args?.dirty === true)))
+      .poll(() =>
+        calls().then((c) => c.some((x) => x.cmd === 'set_window_dirty' && x.args?.dirty === true)),
+      )
       .toBe(true)
 
     // обёртка прислала close-ask → диалог с тройкой кнопок

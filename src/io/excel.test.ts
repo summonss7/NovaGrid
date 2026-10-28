@@ -138,8 +138,8 @@ describe('excel: запись .xlsx со стилями', () => {
   })
 })
 
-describe('excel: чтение .ods (SheetJS, значения)', () => {
-  it('несколько листов → вкладки; кириллица/числа/даты-ISO; пустые не хранятся', () => {
+describe('excel: чтение .ods (свой парсер novagrid-040)', () => {
+  it('несколько листов → вкладки; кириллица/числа/даты-ISO; пустые не хранятся', async () => {
     const wb = XLSX.utils.book_new()
     const ws = XLSX.utils.aoa_to_sheet(
       [
@@ -159,7 +159,7 @@ describe('excel: чтение .ods (SheetJS, значения)', () => {
       buf.byteOffset + buf.byteLength,
     ) as ArrayBuffer
 
-    const sheets: SheetWire[] = odsToSheets(arrayBuf)
+    const sheets: SheetWire[] = await odsToSheets(arrayBuf)
     expect(sheets.map((s) => s.name)).toEqual(['Лист1', 'Лист2'])
     const data = sheets[0].sheet
     expect(getCell(data, 0, 0)).toBe('Фамилия')
@@ -189,10 +189,26 @@ describe('excel: чтение .xls (SheetJS, BIFF8)', () => {
       buf.byteOffset + buf.byteLength,
     ) as ArrayBuffer
 
-    const sheets: SheetWire[] = xlsToSheets(arrayBuf)
+    const sheets = xlsToSheets(arrayBuf)
     expect(sheets.map((s) => s.name)).toEqual(['Лист1'])
     expect(getCell(sheets[0].sheet, 0, 0)).toBe('Фамилия')
     expect(getCell(sheets[0].sheet, 1, 1)).toBe('10000')
     expect(getCell(sheets[0].sheet, 2, 0)).toBe('Петров')
+  })
+
+  it('пустая строка внутри листа не сдвигает данные вверх (novagrid-040)', () => {
+    const wb = XLSX.utils.book_new()
+    const ws = XLSX.utils.aoa_to_sheet([['первая'], [], ['третья']])
+    XLSX.utils.book_append_sheet(wb, ws, 'Лист1')
+    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'biff8' }) as Buffer
+    const arrayBuf = buf.buffer.slice(
+      buf.byteOffset,
+      buf.byteOffset + buf.byteLength,
+    ) as ArrayBuffer
+
+    const sheets = xlsToSheets(arrayBuf)
+    expect(getCell(sheets[0].sheet, 0, 0)).toBe('первая')
+    expect(getCell(sheets[0].sheet, 1, 0)).toBe('')
+    expect(getCell(sheets[0].sheet, 2, 0)).toBe('третья')
   })
 })

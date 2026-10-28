@@ -159,33 +159,106 @@ async function makeLegacyXls() {
   }
 }
 
-/* ── ODS-книга (Этап 7.3): 2 листа, числа/текст/даты ─────────────────── */
+/* ── ODS-книга (Этап 7.3 + формулы novagrid-040): 2 листа, значения,
+      формулы с кэшем, межлистовая ссылка ──────────────────────────────── */
 
 async function makeOdsBook() {
-  const XLSX = await import('xlsx')
-  const wb = XLSX.utils.book_new()
-  // cellDates: true — даты пишутся как office:date-value (разметка LibreOffice),
-  // читатель odsToSheets вернёт их ISO-датами
-  const ws = XLSX.utils.aoa_to_sheet(
+  const JSZip = (await import('jszip')).default
+  // SheetJS не пишет формулы в .ods, поэтому content.xml рукописный —
+  // как его пишет LibreOffice (office:value = кэш результата формулы)
+  const num = (v) => `<table:table-cell office:value-type="float" office:value="${v}"/>`
+  const text = (v) =>
+    `<table:table-cell office:value-type="string"><text:p>${v}</text:p></table:table-cell>`
+  const date = (iso) => `<table:table-cell office:value-type="date" office:date-value="${iso}"/>`
+  const formula = (odf, cache) =>
+    `<table:table-cell table:formula="${odf}" office:value-type="float" office:value="${cache}"/>`
+  const empty = '<table:table-cell/>'
+  const row = (...cells) => `<table:table-row>${cells.join('')}</table:table-row>`
+  const data = [
     [
-      ['Фамилия', 'Отдел', 'Сумма', 'Дата'],
-      ['Иванов', 'Продажи', 10000, new Date(Date.UTC(2026, 8, 1))],
-      ['Петров', 'Логистика', 12500, new Date(Date.UTC(2026, 8, 3))],
-      ['Сидоров', 'Бухгалтерия', 8000, new Date(Date.UTC(2026, 8, 7))],
-      ['Кузнецова', 'Снабжение', 15400, new Date(Date.UTC(2026, 8, 10))],
+      'Данные',
+      [
+        row(text('Фамилия'), text('Отдел'), text('Сумма'), text('Дата'), text('×2')),
+        row(
+          text('Иванов'),
+          text('Продажи'),
+          num(10000),
+          date('2026-09-01'),
+          formula('of:=[.C2]*2', 20000),
+        ),
+        row(
+          text('Петров'),
+          text('Логистика'),
+          num(12500),
+          date('2026-09-03'),
+          formula('of:=[.C3]*2', 25000),
+        ),
+        row(
+          text('Сидоров'),
+          text('Бухгалтерия'),
+          num(8000),
+          date('2026-09-07'),
+          formula('of:=[.C4]*2', 16000),
+        ),
+        row(
+          text('Кузнецова'),
+          text('Снабжение'),
+          num(15400),
+          date('2026-09-10'),
+          formula('of:=[.C5]*2', 30800),
+        ),
+        row(
+          text('Итог'),
+          empty,
+          formula('of:=SUM([.C2:.C5])', 45900),
+          empty,
+          formula('of:=SUM([.E2:.E5])', 91800),
+        ),
+      ],
     ],
-    { cellDates: true },
+    [
+      'Справка',
+      [
+        row(text('Отдел'), text('Руководитель'), text('Телефон')),
+        row(text('Продажи'), text('Алексеева М.'), num(101)),
+        row(text('Логистика'), text('Титов В.'), num(102)),
+        row(text('Бухгалтерия'), text('Гусева О.'), num(103)),
+        row(
+          text('Всего продаж'),
+          empty,
+          // межлистовая ссылка: движок не считает, показывается кэш «∛»
+          formula('of:=[$Данные.C6]', 45900),
+        ),
+      ],
+    ],
+  ]
+  const content =
+    '<?xml version="1.0" encoding="UTF-8"?>' +
+    '<office:document-content' +
+    ' xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"' +
+    ' xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0"' +
+    ' xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"' +
+    ' office:version="1.3">' +
+    '<office:body><office:spreadsheet>' +
+    data
+      .map(([name, rows]) => `<table:table table:name="${name}">${rows.join('')}</table:table>`)
+      .join('') +
+    '</office:spreadsheet></office:body></office:document-content>'
+
+  const zip = new JSZip()
+  zip.file('mimetype', 'application/vnd.oasis.opendocument.spreadsheet', {
+    compression: 'STORE',
+  })
+  zip.file(
+    'META-INF/manifest.xml',
+    '<?xml version="1.0" encoding="UTF-8"?>' +
+      '<manifest:manifest xmlns:manifest="urn:oasis:names:tc:opendocument:xmlns:manifest:1.0">' +
+      '<manifest:file-entry manifest:full-path="/"/></manifest:manifest>',
   )
-  XLSX.utils.book_append_sheet(wb, ws, 'Данные')
-  const ref = XLSX.utils.aoa_to_sheet([
-    ['Отдел', 'Руководитель', 'Телефон'],
-    ['Продажи', 'Алексеева М.', '101'],
-    ['Логистика', 'Титов В.', '102'],
-    ['Бухгалтерия', 'Гусева О.', '103'],
-  ])
-  XLSX.utils.book_append_sheet(wb, ref, 'Справка')
+  zip.file('content.xml', content)
+  const zipped = await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' })
   const path = join(outDir, 'ods-book.ods')
-  XLSX.writeFile(wb, path, { bookType: 'ods' })
+  writeFileSync(path, zipped)
   return path
 }
 

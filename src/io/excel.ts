@@ -1,22 +1,31 @@
 /*
  * Адаптер Excel (Этап 2.1/2.3, ARCHITECTURE §4): ExcelJS читает и пишет
- * .xlsx/.xlsm со стилями; SheetJS CE читает старый .xls (BIFF8) и .ods
- * (Этап 7.3 — значения, без стилей). Модуль исполняется в IO-воркере
+ * .xlsx/.xlsm со стилями и формулами; SheetJS CE читает старый .xls (BIFF8);
+ * .ods с novagrid-040 читает собственный парсер src/io/ods.ts (значения
+ * + формулы + кэш результатов). Модуль исполняется в IO-воркере
  * и в юнит-тестах Node — без DOM.
  *
  * Ограничения v1 (сознательные, см. CONCEPT Ф1/Этап 4): формулы чужих файлов
- * читаются кэшем значений (пересчёт — свой движок на Этапе 4); макросы .xlsm
+ * с неподдержанными функциями читаются кэшем значений («∛»); макросы .xlsm
  * не сохраняются; объединённые ячейки читаются как значение левой ячейки;
- * стили переносятся только для .xlsx; .ods читается значениями и не пишется
- * (прямой записи .ods нет — «Сохранить как .xlsx/.csv»).
+ * стили переносятся только для .xlsx; .ods читается значениями и формулами,
+ * но не пишется (прямой записи .ods нет — «Сохранить как .xlsx/.csv»).
  */
 
 import ExcelJS from 'exceljs'
 import * as XLSX from 'xlsx'
-import { normalizeCellSize, parseNumber, type CellStyle, type SheetModel, cellKey } from '../core/sheet'
+import {
+  normalizeCellSize,
+  parseNumber,
+  type CellStyle,
+  type SheetModel,
+  cellKey,
+} from '../core/sheet'
 import { MIN_COLS, MIN_ROWS } from '../core/sheet'
 import { formulaResultForSave, isFormulaRaw } from '../formula/engine'
 import { sanitizeSheetName, uniqueTabName } from '../core/workbook'
+
+export { odsToSheets } from './ods'
 
 export interface SheetWire {
   name: string
@@ -120,9 +129,7 @@ export async function xlsxToSheets(buffer: ArrayBuffer): Promise<SheetWire[]> {
           let formula = fv.formula
           if (!formula && typeof fv.sharedFormula === 'string') {
             try {
-              const master = ws.getCell(fv.sharedFormula).value as
-                | { formula?: string }
-                | undefined
+              const master = ws.getCell(fv.sharedFormula).value as { formula?: string } | undefined
               if (master && typeof master === 'object' && typeof master.formula === 'string')
                 formula = master.formula
             } catch {
@@ -163,7 +170,7 @@ export async function xlsxToSheets(buffer: ArrayBuffer): Promise<SheetWire[]> {
   return out
 }
 
-/* ── чтение .xls/.ods (SheetJS CE, значения; стили не переносятся) ────── */
+/* ── чтение .xls (SheetJS CE, значения; стили не переносятся) ─────────── */
 
 /** Значение AOA SheetJS → сырая строка модели (даты — ISO, как у .xlsx). */
 function aoaValueToString(value: unknown): string {
@@ -194,7 +201,9 @@ function sheetsFromSheetJs(wb: XLSX.WorkBook, raw: boolean): SheetWire[] {
       header: 1,
       raw,
       defval: '',
-      blankrows: false,
+      // пустые строки сохраняют позиции: blankrows:false сдвигал данные вверх
+      // при пустых строках внутри листа (novagrid-040)
+      blankrows: true,
     })
     const cells = new Map<string, string>()
     let maxRow = -1
@@ -228,10 +237,8 @@ export function xlsToSheets(buffer: ArrayBuffer): SheetWire[] {
   return sheetsFromSheetJs(XLSX.read(buffer, { type: 'array' }), false)
 }
 
-/** ODS: значения; даты — Date (cellDates) → ISO. Стили ODS не читаются. */
-export function odsToSheets(buffer: ArrayBuffer): SheetWire[] {
-  return sheetsFromSheetJs(XLSX.read(buffer, { type: 'array', cellDates: true }), true)
-}
+/* .ods читает собственный парсер src/io/ods.ts — значения + формулы
+ * (novagrid-040); odsToSheets реэкспортируется выше. */
 
 /* ── запись .xlsx со стилями ────────────────────────────────────────── */
 

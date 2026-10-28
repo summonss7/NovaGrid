@@ -43,7 +43,7 @@ async function handle(msg: IoRequest): Promise<IoResponse> {
       return { id: msg.id, ok: true, kind: 'read', sheets: xlsToSheets(msg.buffer) }
     }
     if (ext === 'ods') {
-      return { id: msg.id, ok: true, kind: 'read', sheets: odsToSheets(msg.buffer) }
+      return { id: msg.id, ok: true, kind: 'read', sheets: await odsToSheets(msg.buffer) }
     }
     // .xlsx / .xlsm и всё zip-подобное — ExcelJS
     return { id: msg.id, ok: true, kind: 'read', sheets: await xlsxToSheets(msg.buffer) }
