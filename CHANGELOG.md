@@ -1939,3 +1939,13 @@ Deploy to GitHub Pages ран 38018213931 success (шаги деплоя кор�
   applyStyle/toggleStyle/clearStyle, StyleChange в истории, withStyleList
   одним клоном Map); рендер cellFontOf + подчёркивание; .xlsx теперь переносит
   курсив/подчёркивание/шрифт/размер; +16 юнит (331), +2 e2e (109)».
+  - Дополнено (02:20): CI на GitHub и «Deploy to GitHub Pages» на пушах
+    188c193/fe19e8d не выполнены — джобы не стартовали из-за оплаты аккаунта
+    GitHub («recent account payments have failed or your spending limit needs
+    to be increased»; приватный репозиторий — минуты Actions тарифицированы,
+    видимо исчерпан месячный лимит). Код не при чём: локально весь прогон
+    зелёный (lint · tsc · 331 юнит · 109 e2e · build · cargo test). Десктоп-
+    релиз v1.22.0 опубликован в центре обновлений Aila и развёрнут в
+    C:\NovaGrid — не задето; веб-версия на Pages выйдет после починки
+    биллинга (Billing & plans → платежная карта/spending limit, затем
+    Re-run failed jobs). Владельцу отправлено уведомление в «Хаб ИИ» Aila.
