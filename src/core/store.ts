@@ -20,7 +20,7 @@ import {
   visibleIndexOf,
   visibleRowsOf,
 } from './filter'
-import { History, type CellChange, type HistoryEntry } from './history'
+import { History, type CellChange, type HistoryEntry, type StyleChange } from './history'
 import {
   type NormRange,
   type Range,
@@ -36,13 +36,17 @@ import {
   MAX_ROWS,
   MIN_COLS,
   MIN_ROWS,
+  type CellStyle,
   type SheetModel,
   cellKey,
   createSheet,
   getCell,
+  getStyle,
+  mergeCellStyle,
   parseNumber,
   withCellList,
   withSpace,
+  withStyleList,
 } from './sheet'
 import { applyFormulaChanges, cellNumber, recalcSheet } from '../formula/engine'
 import { shiftFormulaRefs } from '../formula/parser'
@@ -251,6 +255,18 @@ export interface GridState {
   dragColTo: (col: number) => void
   /** Delete/Backspace — очистить ячейки выделения (одна транзакция истории) */
   deleteSelection: () => void
+  /**
+   * Применить патч стиля ко всем ячейкам выделения (novagrid-039): ключ
+   * патча замещает поле, undefined снимает. Одна транзакция Ctrl+Z.
+   */
+  applyStyle: (patch: Partial<CellStyle>) => void
+  /**
+   * Ж/К/Ч как в Excel (novagrid-039): если свойство есть во всех ячейках
+   * выделения — снять, иначе — включить.
+   */
+  toggleStyle: (prop: 'bold' | 'italic' | 'underline') => void
+  /** Снять всё форматирование ячеек выделения (novagrid-039). */
+  clearStyle: () => void
   /**
    * Вставка TSV из системного буфера (novagrid-025): блок пишется от активной
    * ячейки, границы листа растут, одна транзакция истории; выделение
@@ -518,6 +534,16 @@ function applyChanges(
   )
 }
 
+/** Глубокое равенство маленьких объектов стиля (оба undefined — равны). */
+function sameStyle(a: CellStyle | undefined, b: CellStyle | undefined): boolean {
+  if (a === b) return true
+  if (!a || !b) return false
+  const ka = Object.keys(a)
+  const kb = Object.keys(b)
+  if (ka.length !== kb.length) return false
+  return ka.every((k) => (a as Record<string, unknown>)[k] === (b as Record<string, unknown>)[k])
+}
+
 /** История правок — по вкладкам (delta-стек экономен: клонируются только изменения). */
 const histories = new Map<string, History>()
 
@@ -590,6 +616,29 @@ export const gridStore = createStore<GridState>((set, get) => {
   const commitSheet = (prev: SheetModel, next: SheetModel, changes: readonly CellChange[]) => {
     applyFormulaChanges(prev, next, changes)
     patchSheet(next)
+  }
+
+  /**
+   * Стилевая правка выделения (novagrid-039): патч ко всем ячейкам, один
+   * клон Map стилей и одна транзакция истории (Ctrl+Z возвращает всё).
+   */
+  const runStylePatch = (patch: Partial<CellStyle>, label: string) => {
+    const st = get()
+    const { sheet, selection, tabs, activeTab } = st
+    // selectedCells дедуплицирует несмежные Ctrl-области
+    const { rows, cols } = selectedCells(selection)
+    const styleChanges: StyleChange[] = []
+    for (let i = 0; i < rows.length; i++) {
+      const before = getStyle(sheet, rows[i], cols[i])
+      const after = mergeCellStyle(before, patch)
+      if (!sameStyle(before, after)) {
+        styleChanges.push({ row: rows[i], col: cols[i], before, after })
+      }
+    }
+    if (styleChanges.length === 0) return
+    historyOf(tabs[activeTab].id).push({ label, changes: [], styleChanges })
+    patchSheet(withStyleList(sheet, styleChanges))
+    set({ dirty: true })
   }
 
   /** Сохранить фильтры и ширины колонок активной вкладки (перед сменой). */
@@ -717,6 +766,7 @@ export const gridStore = createStore<GridState>((set, get) => {
    * Применить записи истории к вкладкам в направлении before/after
    * (undo/redo): пересчёт формул инкрементальный, вкладки могут быть
    * неактивными. Одна сквозная транзакция снимается целиком (Этап 7).
+   * Стилевые правки (novagrid-039) применяются тем же проходом.
    */
   const applyHistoryEntries = (
     targets: readonly { index: number; entry: HistoryEntry }[],
@@ -728,7 +778,17 @@ export const gridStore = createStore<GridState>((set, get) => {
     let activeSheet: SheetModel | null = null
     for (const { index, entry } of targets) {
       const prev = tabsArr[index].sheet
-      const next = applyChanges(prev, entry.changes, direction)
+      let next = applyChanges(prev, entry.changes, direction)
+      if (entry.styleChanges && entry.styleChanges.length > 0) {
+        next = withStyleList(
+          next,
+          entry.styleChanges.map((ch) => ({
+            row: ch.row,
+            col: ch.col,
+            after: direction === 'before' ? ch.before : ch.after,
+          })),
+        )
+      }
       applyFormulaChanges(prev, next, entry.changes)
       tabsArr = tabsArr.map((t, i) => (i === index ? { ...t, sheet: next } : t))
       if (index === activeTab) activeSheet = next
@@ -1190,6 +1250,43 @@ export const gridStore = createStore<GridState>((set, get) => {
       commitSheet(sheet, applyChanges(sheet, changes, 'after'), changes)
       set({ dirty: true })
       refreshSearch()
+    },
+
+    // ── форматирование ячеек (novagrid-039) ─────────────────────────────
+    applyStyle: (patch) => {
+      runStylePatch(patch, 'style')
+    },
+
+    toggleStyle: (prop) => {
+      const st = get()
+      const { sheet, selection } = st
+      const { rows, cols } = selectedCells(selection)
+      let all = true
+      for (let i = 0; i < rows.length; i++) {
+        if (!getStyle(sheet, rows[i], cols[i])?.[prop]) {
+          all = false
+          break
+        }
+      }
+      const patch: Partial<CellStyle> = {}
+      patch[prop] = all ? undefined : true
+      runStylePatch(patch, 'style')
+    },
+
+    clearStyle: () => {
+      runStylePatch(
+        {
+          bold: undefined,
+          italic: undefined,
+          underline: undefined,
+          font: undefined,
+          size: undefined,
+          align: undefined,
+          bg: undefined,
+          fg: undefined,
+        },
+        'style-clear',
+      )
     },
 
     pasteText: (text) => {

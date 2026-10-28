@@ -28,14 +28,35 @@ export const SPACE_COLS = 10
 /**
  * Минимальный стиль ячейки, который честно переносится файл⇄модель (Этап 2):
  * жирность, выравнивание, заливка и цвет текста. Форматы чисел — Этап 4+.
+ * novagrid-039 добавляет начертания и шрифт: курсив, подчёркивание, гарнитура
+ * (две self-hosted гарнитуры приложения) и размер в пунктах (pt) — как в Excel.
  */
 export interface CellStyle {
   bold?: boolean
+  /** курсив (novagrid-039) */
+  italic?: boolean
+  /** подчёркивание (novagrid-039) */
+  underline?: boolean
+  /** гарнитура: 'sans' — Open Sans (по умолчанию), 'display' — Montserrat */
+  font?: 'sans' | 'display'
+  /** размер шрифта в пунктах; undefined — стандартный размер грида */
+  size?: number
   align?: 'left' | 'center' | 'right'
   /** заливка RRGGBB (без альфы и решётки) */
   bg?: string
   /** цвет текста RRGGBB */
   fg?: string
+}
+
+/** Пределы размера шрифта ячейки (pt): высота строки 30px вмещает до ~16pt. */
+export const CELL_SIZE_MIN = 8
+export const CELL_SIZE_MAX = 16
+
+/** Нормализация размера из файла/пикера: кламп и шаг 0.5pt. */
+export function normalizeCellSize(pt: number): number | undefined {
+  if (!Number.isFinite(pt)) return undefined
+  const clamped = Math.min(CELL_SIZE_MAX, Math.max(CELL_SIZE_MIN, pt))
+  return Math.round(clamped * 2) / 2
 }
 
 export interface SheetModel {
@@ -155,6 +176,42 @@ export function withStyle(
   if (!style || Object.keys(style).length === 0) styles.delete(key)
   else styles.set(key, style)
   return { ...sheet, styles }
+}
+
+/**
+ * Массовое применение стилей одним клоном Map (novagrid-039) — как withCellList
+ * для значений: выделение колонки/строки красится за один проход, без O(n²)
+ * клонирований. before/after — полные стили ячейки (undefined — стиля нет);
+ * равные не пишутся, пустой after удаляет ключ.
+ */
+export function withStyleList(
+  sheet: SheetModel,
+  changes: readonly { row: number; col: number; before?: CellStyle; after?: CellStyle }[],
+): SheetModel {
+  if (changes.length === 0) return sheet
+  const styles = new Map(sheet.styles)
+  for (const ch of changes) {
+    const key = cellKey(ch.row, ch.col)
+    if (ch.after && Object.keys(ch.after).length > 0) styles.set(key, ch.after)
+    else styles.delete(key)
+  }
+  return { ...sheet, styles }
+}
+
+/**
+ * Слияние стиля ячейки с патчем (novagrid-039): ключи патча замещают поля,
+ * undefined в патче снимает поле. Пустой итог → undefined (стиля нет).
+ */
+export function mergeCellStyle(
+  base: CellStyle | undefined,
+  patch: Partial<CellStyle>,
+): CellStyle | undefined {
+  const out = { ...base } as Partial<Record<keyof CellStyle, unknown>>
+  for (const k of Object.keys(patch) as (keyof CellStyle)[]) {
+    if (patch[k] === undefined) delete out[k]
+    else out[k] = patch[k]
+  }
+  return Object.keys(out).length > 0 ? (out as CellStyle) : undefined
 }
 
 /**

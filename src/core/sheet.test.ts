@@ -1,16 +1,22 @@
 import { describe, expect, it } from 'vitest'
 import {
+  CELL_SIZE_MAX,
+  CELL_SIZE_MIN,
   MAX_COLS,
   MAX_ROWS,
   SPACE_COLS,
   SPACE_ROWS,
+  cellKey,
   createSheet,
   getCell,
   isNumericCell,
+  mergeCellStyle,
+  normalizeCellSize,
   parseNumber,
   withCell,
   withCellList,
   withSpace,
+  withStyleList,
 } from './sheet'
 
 describe('sheet: модель листа', () => {
@@ -80,6 +86,58 @@ describe('withCellList: массовые правки одним клоном Ma
     expect(next.rows).toBe(21)
     expect(next.cols).toBe(8)
     expect(next.maxRow).toBe(-1) // контента нет — maxRow не растёт
+  })
+})
+
+describe('стили ячеек: mergeCellStyle / withStyleList / normalizeCellSize (novagrid-039)', () => {
+  it('mergeCellStyle: патч замещает поля, undefined снимает, пустой итог — стиля нет', () => {
+    const base = { bold: true, bg: 'FFF2CC', fg: 'C00000' }
+    expect(mergeCellStyle(base, { italic: true })).toEqual({
+      bold: true,
+      bg: 'FFF2CC',
+      fg: 'C00000',
+      italic: true,
+    })
+    expect(mergeCellStyle(base, { bold: undefined })).toEqual({ bg: 'FFF2CC', fg: 'C00000' })
+    expect(mergeCellStyle(base, { bold: undefined, bg: undefined, fg: undefined })).toBeUndefined()
+    expect(mergeCellStyle(undefined, { bold: true })).toEqual({ bold: true })
+  })
+
+  it('withStyleList: пишет, заменяет и удаляет стили одним клоном Map', () => {
+    let sheet = createSheet()
+    sheet = withCell(sheet, 0, 0, 'Шапка')
+    sheet = withCell(sheet, 1, 0, 'Строка')
+    const next = withStyleList(sheet, [
+      { row: 0, col: 0, after: { bold: true } },
+      { row: 1, col: 0, after: { bg: 'E8F8EC' } },
+    ])
+    expect(next.styles.get(cellKey(0, 0))).toEqual({ bold: true })
+    expect(next.styles.get(cellKey(1, 0))).toEqual({ bg: 'E8F8EC' })
+    expect(sheet.styles.size).toBe(0) // исходная модель не тронута
+    // замена целым стилем и удаление пустым after
+    const cleared = withStyleList(next, [
+      { row: 0, col: 0, after: { italic: true } },
+      { row: 1, col: 0, after: undefined },
+    ])
+    expect(cleared.styles.get(cellKey(0, 0))).toEqual({ italic: true })
+    expect(cleared.styles.has(cellKey(1, 0))).toBe(false)
+  })
+
+  it('пустой список — та же модель; before не влияет на результат', () => {
+    const sheet = withCell(createSheet(), 0, 0, 'x')
+    expect(withStyleList(sheet, [])).toBe(sheet)
+    const next = withStyleList(sheet, [{ row: 0, col: 0, before: { bold: true }, after: undefined }])
+    expect(next.styles.has(cellKey(0, 0))).toBe(false)
+  })
+
+  it('normalizeCellSize: кламп в пределы грида и шаг 0,5 pt', () => {
+    expect(CELL_SIZE_MIN).toBe(8)
+    expect(CELL_SIZE_MAX).toBe(16)
+    expect(normalizeCellSize(12)).toBe(12)
+    expect(normalizeCellSize(12.3)).toBe(12.5)
+    expect(normalizeCellSize(4)).toBe(8)
+    expect(normalizeCellSize(40)).toBe(16)
+    expect(normalizeCellSize(Number.NaN)).toBeUndefined()
   })
 })
 

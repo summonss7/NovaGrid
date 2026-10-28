@@ -10,7 +10,7 @@
  */
 
 import { normalize, type Range, type Selection } from '../core/selection'
-import { cellKey, type SheetModel } from '../core/sheet'
+import { cellKey, type CellStyle, type SheetModel } from '../core/sheet'
 import type { EditState } from '../core/store'
 import { cellError, cellIsFrozen, cellNumber, cellText } from '../formula/engine'
 import { colName, type ColLayout, METRICS, type RowLayout, visibleRows } from './geometry'
@@ -32,9 +32,29 @@ export interface GridTheme {
   fontCell: string
   fontCellBold: string
   fontHeader: string
+  /** базовый px шрифта ячейки (без стилевого размера) — для cellFontOf (novagrid-039) */
+  cellPx: number
 }
 
 const FALLBACK_FONT = '"Open Sans", "Segoe UI", system-ui, sans-serif'
+const DISPLAY_FONT = '"Montserrat", "Open Sans", "Segoe UI", system-ui, sans-serif'
+
+/**
+ * Шрифт канваса ячейки из её стиля (novagrid-039): гарнитура, размер (pt → px
+ * как в Excel, 96 dpi), курсив и жирность. Без стиля — стандартный шрифт грида.
+ */
+export function cellFontOf(style: CellStyle | undefined, theme: GridTheme): string {
+  const italic = style?.italic ? 'italic ' : ''
+  const weight = style?.bold ? '600 ' : ''
+  const px = style?.size ? Math.round(((style.size * 4) / 3) * 10) / 10 : theme.cellPx
+  const family = style?.font === 'display' ? DISPLAY_FONT : FALLBACK_FONT
+  return `${italic}${weight}${px}px ${family}`
+}
+
+/** Размер шрифта ячейки в px — для подчёркивания и метки ∛ (novagrid-039). */
+export function cellPxOf(style: CellStyle | undefined, theme: GridTheme): number {
+  return style?.size ? Math.round(((style.size * 4) / 3) * 10) / 10 : theme.cellPx
+}
 
 /** Тема из CSS-токенов; scale = зум таблицы — шрифты масштабируются вместе
  *  с ячейками (Этап 5.3), иначе отдалённые ячейки рваные, а приближённые пустые. */
@@ -59,6 +79,7 @@ export function themeFromCSS(scale = 1): GridTheme {
     fontCell: `${cellPx}px ${FALLBACK_FONT}`,
     fontCellBold: `600 ${cellPx}px ${FALLBACK_FONT}`,
     fontHeader: `600 ${headerPx}px ${FALLBACK_FONT}`,
+    cellPx,
   }
 }
 
@@ -231,27 +252,34 @@ export function drawGrid(input: DrawInput): VisibleRegion {
       const numeric = cellNumber(sheet, r, c) !== null
       const err = isFormula ? cellError(sheet, r, c) : null
       const frozen = isFormula ? cellIsFrozen(sheet, r, c) : false
-      ctx.font = style?.bold ? theme.fontCellBold : theme.fontCell
+      // шрифт собирается из стиля ячейки: гарнитура/размер/Ж/К (novagrid-039)
+      ctx.font = cellFontOf(style, theme)
       ctx.fillStyle = style?.fg ? `#${style.fg}` : err ? theme.errInk : theme.ink
       const shown = ellipsize(ctx, text, w - pad * 2)
       const align = style?.align ?? (numeric ? 'right' : 'left')
+      let textX = x + pad
       if (align === 'right') {
+        textX = x + w - pad
         ctx.textAlign = 'right'
-        ctx.fillText(shown, x + w - pad, cy)
-        ctx.textAlign = 'left'
       } else if (align === 'center') {
+        textX = x + w / 2
         ctx.textAlign = 'center'
-        ctx.fillText(shown, x + w / 2, cy)
-        ctx.textAlign = 'left'
-      } else {
-        ctx.fillText(shown, x + pad, cy)
+      }
+      ctx.fillText(shown, textX, cy)
+      if (align !== 'left') ctx.textAlign = 'left'
+      // подчёркивание (novagrid-039): линия шириной текста под базовой линией
+      if (style?.underline) {
+        const textW = ctx.measureText(shown).width
+        const lineX = align === 'right' ? textX - textW : align === 'center' ? textX - textW / 2 : textX
+        const py = Math.round(cy + cellPxOf(style, theme) * 0.42) + 0.5
+        ctx.fillRect(lineX, py, textW, 1)
       }
       // метка чужой формулы (∛) — маленький знак в правом верхнем углу
       if (frozen) {
         ctx.font = '10px ' + FALLBACK_FONT.slice(FALLBACK_FONT.indexOf('"'))
         ctx.fillStyle = theme.inkSoft
         ctx.fillText('∛', x + w - 10, m.headerH + i * m.rowH - scrollY + 9)
-        ctx.font = theme.fontCell
+        ctx.font = cellFontOf(style, theme)
       }
     }
   }

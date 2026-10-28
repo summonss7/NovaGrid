@@ -977,6 +977,22 @@ export function GridCanvas() {
       e.preventDefault()
       return
     }
+    // начертания выделения (novagrid-039): Ж/К/Ч как в Excel
+    if (mod && !e.shiftKey && e.code === 'KeyB') {
+      st.toggleStyle('bold')
+      e.preventDefault()
+      return
+    }
+    if (mod && !e.shiftKey && e.code === 'KeyI') {
+      st.toggleStyle('italic')
+      e.preventDefault()
+      return
+    }
+    if (mod && !e.shiftKey && e.code === 'KeyU') {
+      st.toggleStyle('underline')
+      e.preventDefault()
+      return
+    }
     if (mod && e.code === 'KeyY') {
       st.redo()
       e.preventDefault()

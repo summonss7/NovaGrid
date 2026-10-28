@@ -55,6 +55,25 @@ describe('excel: чтение .xlsx (значения и кэш формул)', 
     expect(style).toEqual({ bold: true, bg: 'E8F8EC', fg: 'E8481C', align: 'center' })
     expect(sheets[0].sheet.styles.get(cellKey(0, 1))).toBeUndefined()
   })
+
+  it('начертания novagrid-039 читаются: курсив, подчёркивание, размер, Montserrat', async () => {
+    const wb = new ExcelJS.Workbook()
+    const ws = wb.addWorksheet('S')
+    ws.addRow(['Дисплей', 'Кламп', 'Обычная'])
+    const a = ws.getCell(1, 1)
+    a.font = { italic: true, underline: true, size: 14, name: 'Montserrat' }
+    ws.getCell(1, 2).font = { size: 40 } // больше клетки грида — клампится
+
+    const sheets = await xlsxToSheets(await xlsxRoundBuffer(wb))
+    expect(sheets[0].sheet.styles.get(cellKey(0, 0))).toEqual({
+      italic: true,
+      underline: true,
+      size: 14,
+      font: 'display',
+    })
+    expect(sheets[0].sheet.styles.get(cellKey(0, 1))).toEqual({ size: 16 })
+    expect(sheets[0].sheet.styles.get(cellKey(0, 2))).toBeUndefined()
+  })
 })
 
 describe('excel: запись .xlsx со стилями', () => {
@@ -81,6 +100,30 @@ describe('excel: запись .xlsx со стилями', () => {
     expect(getCell(s, 2, 0)).toBe('12.5')
     expect(s.styles.get(cellKey(0, 0))).toEqual({ bold: true, bg: 'E8F8EC' })
     expect(s.styles.get(cellKey(0, 1))).toEqual({ bold: true, align: 'center' })
+  })
+
+  it('roundtrip новых полей стиля: курсив, подчёркивание, шрифт, размер (novagrid-039)', async () => {
+    let sheet = createSheet()
+    sheet = withCell(sheet, 0, 0, 'Заголовок')
+    sheet = withCell(sheet, 1, 0, 'Текст')
+    sheet.styles.set(cellKey(0, 0), {
+      italic: true,
+      underline: true,
+      font: 'display',
+      size: 14,
+      fg: 'C00000',
+    })
+
+    const buffer = await sheetsToXlsx([{ name: 'L', sheet }])
+    const back = await xlsxToSheets(buffer)
+    expect(back[0].sheet.styles.get(cellKey(0, 0))).toEqual({
+      italic: true,
+      underline: true,
+      font: 'display',
+      size: 14,
+      fg: 'C00000',
+    })
+    expect(back[0].sheet.styles.get(cellKey(1, 0))).toBeUndefined()
   })
 
   it('числа остаются числами (Excel распознаёт)', async () => {

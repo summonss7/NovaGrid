@@ -217,6 +217,24 @@ export const ru = {
     'Формула вне списка поддерживаемых: показано последнее значение из файла, сама формула сохранится как есть',
   assistLabel: 'Подсказки формул',
 
+  // форматирование ячеек (novagrid-039)
+  formatBarLabel: 'Форматирование ячеек',
+  formatFontLabel: 'Шрифт',
+  formatFontSans: 'Open Sans',
+  formatFontDisplay: 'Montserrat',
+  formatSizeLabel: 'Размер шрифта',
+  formatSizeAuto: 'Авто',
+  formatBold: 'Жирный (Ctrl+B)',
+  formatItalic: 'Курсив (Ctrl+I)',
+  formatUnderline: 'Подчёркнутый (Ctrl+U)',
+  formatFgColor: 'Цвет текста',
+  formatBgColor: 'Цвет заливки ячейки',
+  formatPaletteLabel: 'Палитра цветов',
+  formatColorAuto: 'Авто (чёрный)',
+  formatNoFill: 'Нет заливки',
+  formatCustomColor: 'Свой цвет…',
+  formatClear: 'Очистить формат',
+
   // справочник «?» (4.5)
   helpTitle: 'Справка NovaGrid',
   helpTabFunctions: 'Формулы',

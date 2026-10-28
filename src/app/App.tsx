@@ -54,6 +54,7 @@ import {
 import { useUpdaterStore } from '../io/updater'
 import { CloseAskDialog } from '../ui/CloseAskDialog'
 import { FilterBar } from '../ui/FilterBar'
+import { FormatBar } from '../ui/FormatBar'
 import { FormulaBar } from '../ui/FormulaBar'
 import { GridCanvas } from '../grid/GridCanvas'
 import { MobileBar } from '../ui/MobileBar'
@@ -803,6 +804,7 @@ export default function App() {
             />
             <FilterBar />
             <FormulaBar />
+            <FormatBar />
             <GridCanvas />
             <SheetsBar />
             <StatusBar />

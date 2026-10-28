@@ -343,6 +343,171 @@
   color: var(--nv-ink-soft);
 }
 
+/* ── Панель форматирования ячеек (novagrid-039, §6) ────────────────────── */
+.format-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 14px;
+  background: var(--nv-bg);
+  border-bottom: 1px solid var(--nv-grid-line);
+}
+
+.fmt-select {
+  border: 1px solid var(--nv-grid-line);
+  border-radius: var(--nv-radius-btn);
+  background: var(--nv-bg);
+  font-family: var(--nv-font-text);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--nv-ink);
+  padding: 3px 6px;
+  cursor: pointer;
+}
+
+.fmt-select:hover {
+  border-color: var(--nv-ink-soft);
+}
+
+.fmt-select-size {
+  width: 64px;
+  font-variant-numeric: tabular-nums;
+}
+
+.fmt-sep {
+  flex: none;
+  width: 1px;
+  height: 18px;
+  margin: 0 2px;
+  background: var(--nv-grid-line);
+}
+
+.fmt-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 26px;
+  padding: 0 4px;
+  border: 1px solid transparent;
+  border-radius: var(--nv-radius-btn);
+  background: transparent;
+  color: var(--nv-ink);
+  cursor: pointer;
+}
+
+.fmt-btn:hover {
+  background: var(--nv-hover);
+}
+
+.fmt-btn.is-on {
+  background: var(--nv-mint);
+  border-color: var(--nv-primary-deep);
+  color: var(--nv-primary-text);
+}
+
+.fmt-color-wrap {
+  position: relative;
+}
+
+.fmt-color-chip {
+  width: 14px;
+  height: 3px;
+  margin-top: 1px;
+  border-radius: 2px;
+  background: var(--nv-ink);
+}
+
+.fmt-color-none {
+  background: repeating-linear-gradient(
+    45deg,
+    var(--nv-ink-soft) 0 2px,
+    transparent 2px 4px
+  );
+}
+
+.fmt-palette {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 45;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 196px;
+  padding: 10px;
+  background: var(--nv-bg);
+  border: 1px solid var(--nv-grid-line);
+  border-radius: var(--nv-radius-panel);
+  box-shadow: var(--nv-shadow-pop);
+}
+
+.fmt-reset {
+  border: none;
+  background: transparent;
+  font-family: var(--nv-font-text);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--nv-primary-text);
+  text-align: left;
+  padding: 2px 4px;
+  cursor: pointer;
+}
+
+.fmt-reset:hover {
+  text-decoration: underline;
+}
+
+.fmt-swatches {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 6px;
+}
+
+.fmt-swatch {
+  position: relative;
+  width: 24px;
+  height: 24px;
+  border: 1px solid rgba(43, 43, 43, 0.18);
+  border-radius: 6px;
+  padding: 0;
+  cursor: pointer;
+}
+
+.fmt-swatch:hover {
+  transform: scale(1.08);
+}
+
+.fmt-swatch-on {
+  position: absolute;
+  inset: 4px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 2px var(--nv-ink);
+}
+
+.fmt-custom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-family: var(--nv-font-text);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--nv-ink);
+  cursor: pointer;
+}
+
+.fmt-custom input[type='color'] {
+  width: 40px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--nv-grid-line);
+  border-radius: 6px;
+  background: var(--nv-bg);
+  cursor: pointer;
+}
+
 /* ── Канвас-грид (Этап 1) ─────────────────────────────────────────────── */
 /* novagrid-027: скроллбары таблицы всегда видимые и классические. Нативные
    полосы Windows 11 оверлейные и автоскрываются — таблица выглядела
@@ -2151,6 +2316,25 @@
 
   .filter-bar::-webkit-scrollbar {
     display: none;
+  }
+
+  /* панель форматирования — та же горизонтальная лента (novagrid-039) */
+  .format-bar {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding: 4px 10px;
+  }
+
+  .format-bar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .format-bar .fmt-select,
+  .format-bar .fmt-sep,
+  .format-bar .fmt-btn {
+    flex: none;
   }
 
   .filter-bar-label {

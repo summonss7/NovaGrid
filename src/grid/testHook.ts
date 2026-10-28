@@ -9,7 +9,7 @@
 import { normalize } from '../core/selection'
 import type { ColumnFilter } from '../core/filter'
 import { visibleRowsOf } from '../core/filter'
-import { getCell } from '../core/sheet'
+import { getCell, getStyle, type CellStyle } from '../core/sheet'
 import { cellText, formulaStateAt } from '../formula/engine'
 import { gridStore, selectionMetrics, type EditState } from '../core/store'
 import { useSettings, type ResolvedTheme, type ThemePref } from '../i18n'
@@ -82,6 +82,8 @@ export interface NvTestApi {
   cellMetrics: () => { rowH: number; colW: number; headerH: number; rowHeaderW: number }
   /** фактическая ширина колонки с учётом переопределений и зума (novagrid-020) */
   colWidth: (col: number) => number
+  /** стиль ячейки активного листа; null — стиля нет (novagrid-039) */
+  style: (row: number, col: number) => CellStyle | null
   /** тема интерфейса (Этап 7.2): настройка и вычисленная тема */
   theme: () => { pref: ThemePref; resolved: ResolvedTheme }
 }
@@ -107,6 +109,7 @@ export function installTestHook(refs: TestHookRefs): void {
   if (!params.has('test') && !params.has('testui')) return
   window.__nv = {
     cell: (row, col) => getCell(gridStore.getState().sheet, row, col),
+    style: (row, col) => getStyle(gridStore.getState().sheet, row, col) ?? null,
     cellText: (row, col) => cellText(gridStore.getState().sheet, row, col),
     formulaInfo: (row, col) => {
       const st = gridStore.getState()

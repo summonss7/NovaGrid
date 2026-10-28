@@ -13,7 +13,7 @@
 
 import ExcelJS from 'exceljs'
 import * as XLSX from 'xlsx'
-import { parseNumber, type CellStyle, type SheetModel, cellKey } from '../core/sheet'
+import { normalizeCellSize, parseNumber, type CellStyle, type SheetModel, cellKey } from '../core/sheet'
 import { MIN_COLS, MIN_ROWS } from '../core/sheet'
 import { formulaResultForSave, isFormulaRaw } from '../formula/engine'
 import { sanitizeSheetName, uniqueTabName } from '../core/workbook'
@@ -63,6 +63,15 @@ function argbToHex(color: { argb?: string } | undefined): string | undefined {
 function cellStyleOf(cell: ExcelJS.Cell): CellStyle | undefined {
   const style: CellStyle = {}
   if (cell.font?.bold) style.bold = true
+  // начертания и шрифт (novagrid-039): размер берём только явный — ячейки
+  // без своего размера наследуют стандарт грида, а не «11 по умолчанию»
+  if (cell.font?.italic) style.italic = true
+  if (cell.font?.underline) style.underline = true
+  if (typeof cell.font?.size === 'number') {
+    const pt = normalizeCellSize(cell.font.size)
+    if (pt !== undefined) style.size = pt
+  }
+  if (cell.font?.name === 'Montserrat') style.font = 'display'
   const h = cell.alignment?.horizontal
   if (h === 'left' || h === 'center' || h === 'right') style.align = h
   if (cell.fill && (cell.fill as { type?: string }).type === 'pattern') {
@@ -278,9 +287,20 @@ export async function sheetsToXlsx(sheets: readonly SheetWire[]): Promise<ArrayB
       const [r, c] = key.split(':').map(Number)
       if (!(r >= 0 && r <= lastRow && c >= 0 && c <= lastCol)) continue
       const cell = ws.getCell(r + 1, c + 1)
-      if (style.bold || style.fg) {
+      if (
+        style.bold ||
+        style.italic ||
+        style.underline ||
+        style.fg ||
+        style.size !== undefined ||
+        style.font !== undefined
+      ) {
         cell.font = {
           ...(style.bold ? { bold: true } : {}),
+          ...(style.italic ? { italic: true } : {}),
+          ...(style.underline ? { underline: true } : {}),
+          ...(style.size !== undefined ? { size: style.size } : {}),
+          ...(style.font === 'display' ? { name: 'Montserrat' } : {}),
           ...(style.fg ? { color: { argb: `FF${style.fg}` } } : {}),
         }
       }

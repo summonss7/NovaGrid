@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { visibleRowsOf } from './filter'
-import { createSheet, getCell, withCell } from './sheet'
+import { createSheet, getCell, getStyle, withCell } from './sheet'
 import { cellNumber } from '../formula/engine'
 import { gridStore, selectionMetrics } from './store'
 import { normalize } from './selection'
@@ -783,5 +783,81 @@ describe('store: протяжка от шапки (novagrid-038)', () => {
     expect(getCell(s().sheet, 3, 1)).toBe('Продажи')
     expect(getCell(s().sheet, 4, 0)).toBe('Иванов')
     expect(getCell(s().sheet, 4, 1)).toBe('Продажи')
+  })
+})
+
+
+describe('store: форматирование ячеек (novagrid-039)', () => {
+  it('applyStyle красит всё выделение и откатывается одним Ctrl+Z', () => {
+    s().clickCell(0, 0)
+    s().clickCell(0, 2, { shift: true }) // A1:C1
+    s().applyStyle({ bold: true, bg: 'FFF2CC' })
+    expect(getStyle(s().sheet, 0, 0)).toEqual({ bold: true, bg: 'FFF2CC' })
+    expect(getStyle(s().sheet, 0, 2)).toEqual({ bold: true, bg: 'FFF2CC' })
+    expect(getStyle(s().sheet, 1, 0)).toBeUndefined() // вне выделения не тронуто
+    s().undo()
+    expect(getStyle(s().sheet, 0, 0)).toBeUndefined()
+    expect(getStyle(s().sheet, 0, 2)).toBeUndefined()
+    s().redo()
+    expect(getStyle(s().sheet, 0, 1)).toEqual({ bold: true, bg: 'FFF2CC' })
+  })
+
+  it('правка без изменений не пишет историю', () => {
+    s().clickCell(0, 0)
+    s().applyStyle({ bold: true })
+    s().applyStyle({ bold: true }) // стиль уже стоит — транзакции нет
+    s().undo()
+    expect(getStyle(s().sheet, 0, 0)).toBeUndefined() // откатилась первая правка
+  })
+
+  it('toggleStyle: включить, повторно — снять (как Ж в Excel)', () => {
+    s().clickCell(1, 0)
+    s().clickCell(1, 2, { shift: true })
+    s().toggleStyle('italic')
+    expect(getStyle(s().sheet, 1, 0)?.italic).toBe(true)
+    expect(getStyle(s().sheet, 1, 2)?.italic).toBe(true)
+    s().toggleStyle('italic') // все ячейки выделения курсивные — выключаем
+    expect(getStyle(s().sheet, 1, 0)).toBeUndefined()
+    expect(getStyle(s().sheet, 1, 2)).toBeUndefined()
+  })
+
+  it('toggleStyle снимает свойство, только если оно есть во всём выделении', () => {
+    s().applyStyle({ bold: true }) // жирная только активная A1
+    s().clickCell(0, 0)
+    s().clickCell(1, 0, { shift: true }) // A1:A2 — A2 не жирная
+    s().toggleStyle('bold')
+    expect(getStyle(s().sheet, 1, 0)?.bold).toBe(true) // докрасили хвост
+    s().toggleStyle('bold') // теперь всё выделение жирное — снимаем
+    expect(getStyle(s().sheet, 0, 0)).toBeUndefined()
+    expect(getStyle(s().sheet, 1, 0)).toBeUndefined()
+  })
+
+  it('clearStyle снимает всё форматирование одной транзакцией', () => {
+    s().clickCell(0, 0)
+    s().applyStyle({
+      bold: true,
+      italic: true,
+      underline: true,
+      font: 'display',
+      size: 14,
+      fg: 'C00000',
+      bg: 'FFF2CC',
+      align: 'center',
+    })
+    expect(Object.keys(getStyle(s().sheet, 0, 0)!)).toHaveLength(8)
+    s().clearStyle()
+    expect(getStyle(s().sheet, 0, 0)).toBeUndefined()
+    s().undo()
+    expect(getStyle(s().sheet, 0, 0)?.bg).toBe('FFF2CC') // всё вернулось
+  })
+
+  it('стиль переживает смену значений ячеек (правки не затирают формат)', () => {
+    s().clickCell(0, 0)
+    s().applyStyle({ fg: 'C00000' })
+    s().beginEdit()
+    s().setEditValue('Новая шапка')
+    s().commitEdit('none')
+    expect(getCell(s().sheet, 0, 0)).toBe('Новая шапка')
+    expect(getStyle(s().sheet, 0, 0)).toEqual({ fg: 'C00000' })
   })
 })

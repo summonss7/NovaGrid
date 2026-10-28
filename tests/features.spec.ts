@@ -500,3 +500,117 @@ test.describe('novagrid-037: заголовок окна, память пози�
       .toBe('11')
   })
 })
+
+
+/* ── novagrid-039: панель форматирования ячеек ────────────────────────── */
+
+/** RGB-пиксель канваса внутри ячейки (CSS-координаты канваса, dpr учтён). */
+function cellPixel(page: Page, row: number, col: number, dx: number) {
+  return page.evaluate(
+    ({ row, col, dx }) => {
+      const canvas = document.querySelector('.grid-canvas') as HTMLCanvasElement
+      const ctx = canvas.getContext('2d')!
+      const dpr = window.devicePixelRatio || 1
+      const m = window.__nv!.cellMetrics()
+      const x = Math.round((m.rowHeaderW + col * m.colW + dx) * dpr)
+      const y = Math.round((m.headerH + row * m.rowH + m.rowH / 2) * dpr)
+      const d = ctx.getImageData(x, y, 1, 1).data
+      return [d[0], d[1], d[2]] as const
+    },
+    { row, col, dx },
+  )
+}
+
+test.describe('novagrid-039: панель форматирования ячеек', () => {
+  test.beforeEach(async ({ page }) => {
+    await openDemoBook(page)
+  })
+
+  test('Ж/К/Ч и заливка применяются к выделению, канвас перекрашивается, Ctrl+Z откатывает', async ({
+    page,
+  }) => {
+    // выделяем A2:B2 кликом и Shift-кликом
+    const a2 = await nv(page).cellCenter(1, 0)
+    const b2 = await nv(page).cellCenter(1, 1)
+    await page.mouse.click(a2.x, a2.y)
+    await page.keyboard.down('Shift')
+    await page.mouse.click(b2.x, b2.y)
+    await page.keyboard.up('Shift')
+
+    // Ctrl+B — вся пара жирная, кнопка Ж в панели показана нажатой
+    await page.keyboard.press('Control+b')
+    await expect
+      .poll(() => page.evaluate(() => JSON.stringify(window.__nv!.style(1, 0))))
+      .toBe(JSON.stringify({ bold: true }))
+    await expect
+      .poll(() => page.evaluate(() => JSON.stringify(window.__nv!.style(1, 1))))
+      .toBe(JSON.stringify({ bold: true }))
+    await expect(page.locator('.fmt-btn[aria-label="Жирный (Ctrl+B)"]')).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+    // повторный Ctrl+B снимает жирность со всего выделения
+    await page.keyboard.press('Control+b')
+    await expect
+      .poll(() => page.evaluate(() => window.__nv!.style(1, 0) === null))
+      .toBe(true)
+
+    // шрифт Montserrat и размер 14 из панели
+    await page.locator('.fmt-select[aria-label="Шрифт"]').selectOption('display')
+    await page.locator('.fmt-select-size').selectOption('14')
+    await expect
+      .poll(() => page.evaluate(() => JSON.stringify(window.__nv!.style(1, 0))))
+      .toBe(JSON.stringify({ font: 'display', size: 14 }))
+
+    // заливка оранжевым из палитры — канвас реально перекрашивается;
+    // перед пиксельной проверкой уводим выделение в сторону — иначе его
+    // полупрозрачная зелёная подсветка ляжет поверх заливки
+    await page.locator('.fmt-btn[aria-label="Цвет заливки ячейки"]').click()
+    await page.locator('.fmt-swatch[aria-label="#FFC000"]').click()
+    await expect
+      .poll(() => page.evaluate(() => JSON.stringify(window.__nv!.style(1, 0))))
+      .toBe(JSON.stringify({ font: 'display', size: 14, bg: 'FFC000' }))
+    const d2 = await nv(page).cellCenter(1, 3)
+    await page.mouse.click(d2.x, d2.y)
+    await expect
+      .poll(() => cellPixel(page, 1, 0, 80))
+      .toEqual([255, 192, 0])
+    await expect.poll(() => cellPixel(page, 1, 1, 80)).toEqual([255, 192, 0])
+
+    // три стилевые транзакции откатываются тремя Ctrl+Z, канвас снова белый
+    for (let i = 0; i < 3; i++) await page.keyboard.press('Control+z')
+    await expect
+      .poll(() => page.evaluate(() => window.__nv!.style(1, 0) === null))
+      .toBe(true)
+    await expect.poll(() => cellPixel(page, 1, 0, 80)).toEqual([255, 255, 255])
+  })
+
+  test('цвет текста из палитры и «Очистить формат» — ластик снимает всё, значения целы', async ({
+    page,
+  }) => {
+    const a2 = await nv(page).cellCenter(1, 0)
+    await page.mouse.click(a2.x, a2.y)
+
+    // жирность + красный текст + жёлтая заливка
+    await page.keyboard.press('Control+b')
+    await page.locator('.fmt-btn[aria-label="Цвет текста"]').click()
+    await page.locator('.fmt-swatch[aria-label="#C00000"]').click()
+    await page.locator('.fmt-btn[aria-label="Цвет заливки ячейки"]').click()
+    await page.locator('.fmt-swatch[aria-label="#FFFF00"]').click()
+    await expect
+      .poll(() => page.evaluate(() => JSON.stringify(window.__nv!.style(1, 0))))
+      .toBe(JSON.stringify({ bold: true, fg: 'C00000', bg: 'FFFF00' }))
+
+    // ластик: одной транзакцией всё форматирование снято, значение живо
+    await page.locator('.fmt-btn[aria-label="Очистить формат"]').click()
+    await expect
+      .poll(() => page.evaluate(() => window.__nv!.style(1, 0) === null))
+      .toBe(true)
+    expect(await nv(page).cell(1, 0)).toBe('Иванов')
+    // Ctrl+Z возвращает формат
+    await page.keyboard.press('Control+z')
+    await expect
+      .poll(() => page.evaluate(() => JSON.stringify(window.__nv!.style(1, 0))))
+      .toBe(JSON.stringify({ bold: true, fg: 'C00000', bg: 'FFFF00' }))
+  })
+})

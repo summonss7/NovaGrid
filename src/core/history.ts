@@ -5,11 +5,24 @@
  * ячейки — на листе 100k×30 шаг истории весит байты, а не копию всей Map.
  */
 
+import type { CellStyle } from './sheet'
+
 export interface CellChange {
   row: number
   col: number
   before: string
   after: string
+}
+
+/**
+ * Правка стиля ячейки (novagrid-039): before/after — полные стили;
+ * undefined — стиля нет. Запись истории может нести и значения, и стили.
+ */
+export interface StyleChange {
+  row: number
+  col: number
+  before?: CellStyle
+  after?: CellStyle
 }
 
 export interface HistoryEntry {
@@ -21,6 +34,8 @@ export interface HistoryEntry {
    * их со всех вкладок разом, одним Ctrl+Z.
    */
   group?: string
+  /** стилевые правки той же транзакции (novagrid-039); может быть пустым */
+  styleChanges?: StyleChange[]
 }
 
 const DEFAULT_LIMIT = 100
