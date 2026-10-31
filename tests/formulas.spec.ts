@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { EDIT_REF_COLORS } from '../src/grid/renderer'
 
 /*
  * Этап 4 «Формулы и помощь» (КТ): e2e повторяет главное — «ввёл формулу —
@@ -462,5 +463,71 @@ test.describe('дата-арифметика «+»/«−» (novagrid-038)', () =
     // YEAR понимает дату, собранную формулой
     await typeFormula(page, 2, 5, '=YEAR(F1+1)')
     expect((await api.formulaInfo(2, 5))?.display).toBe('2026')
+  })
+})
+
+/* ── novagrid-041: подсветка ссылок при правке формулы (F2) ──────────── */
+
+test.describe('novagrid-041: F2 подсвечивает ячейки-источники формулы', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/?test=1')
+    await nv(page).ready()
+  })
+
+  /** Пиксель правой границы ячейки (row 8, col) — CSS-координаты канваса. */
+  const refBorder = (page: Page, col: number) =>
+    page.evaluate(
+      ({ col }) => {
+        const canvas = document.querySelector('.grid-canvas') as HTMLCanvasElement
+        const ctx = canvas.getContext('2d')!
+        const dpr = window.devicePixelRatio || 1
+        const m = window.__nv!.cellMetrics()
+        const x0 = m.rowHeaderW + (col > 0 ? window.__nv!.colWidth(0) : 0)
+        const x = x0 + window.__nv!.colWidth(col) - 2
+        const y = m.headerH + 8 * m.rowH + m.rowH / 2
+        const d = ctx.getImageData(Math.round(x * dpr), Math.round(y * dpr), 1, 1).data
+        return [d[0], d[1], d[2]] as const
+      },
+      { col },
+    )
+
+  const near = (px: readonly number[], hex: string) => {
+    const v = parseInt(hex.slice(1), 16)
+    return (
+      Math.abs(px[0] - (v >> 16)) <= 40 &&
+      Math.abs(px[1] - ((v >> 8) & 255)) <= 40 &&
+      Math.abs(px[2] - (v & 255)) <= 40
+    )
+  }
+
+  test('ссылки обводятся цветами палитры, Esc гасит подсветку', async ({ page }) => {
+    const api = nv(page)
+    // A9=10, B9=20, C9==A9+B9 — формула ссылается на две ячейки-источника
+    const a9 = await api.cellCenter(8, 0)
+    await page.mouse.click(a9.x, a9.y)
+    await page.keyboard.type('10')
+    await page.keyboard.press('Tab')
+    await page.keyboard.type('20')
+    await page.keyboard.press('Tab')
+    await page.keyboard.type('=A9+B9')
+    await page.keyboard.press('Enter')
+    await expect.poll(() => api.cellText(8, 2)).toBe('30')
+
+    const first = EDIT_REF_COLORS[0]
+    const second = EDIT_REF_COLORS[1]
+    // до правки формулы ссылки не подсвечены
+    expect(near(await refBorder(page, 0), first)).toBe(false)
+
+    // F2 на ячейке с формулой: каждая ссылка — рамка своего цвета палитры
+    const c9 = await api.cellCenter(8, 2)
+    await page.mouse.click(c9.x, c9.y)
+    await page.keyboard.press('F2')
+    await expect.poll(() => page.evaluate(() => window.__nv!.editor()?.value)).toBe('=A9+B9')
+    await expect.poll(async () => near(await refBorder(page, 0), first)).toBe(true)
+    expect(near(await refBorder(page, 1), second)).toBe(true)
+
+    // Esc отменяет правку — подсветка гаснет
+    await page.keyboard.press('Escape')
+    await expect.poll(async () => near(await refBorder(page, 0), first)).toBe(false)
   })
 })

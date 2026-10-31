@@ -502,6 +502,70 @@ export function shiftFormulaRefs(src: string, dr: number, dc: number): string {
   return out
 }
 
+/* ── подсветка ссылок при правке формулы (novagrid-041) ──────────────── */
+
+/** Колонки целиком «A:A» / «$A:$B» — от первой строки до края контента. */
+const COL_RANGE_AT_RE = /^(\$?)([A-Za-z]{1,3}):(\$?)([A-Za-z]{1,3})/
+
+/**
+ * Ссылки формулы для цветной подсветки при правке (F2): A1, $B$2, A1:B3 и
+ * колонки A:A (r2 = −1 — до края контента). Сканирование толерантное, как у
+ * shiftFormulaRefs: строки в кавычках пропускаются, имена функций (LOG10()
+ * и хвосты имён A1Б) ссылками не считаются, недописанная формула «=SUM(A1:»
+ * не бросает исключений — что распозналось, то и подсветится. Перевёрнутые
+ * диапазоны (B2:A1) нормализуются.
+ */
+export function extractEditRefs(src: string): DepRect[] {
+  if (!src.startsWith('=')) return []
+  const rects: DepRect[] = []
+  const n = src.length
+  let i = 1
+  const afterOk = (len: number) =>
+    !SHIFT_NAME_CHAR.test(src[i + len] ?? '') && src[i + len] !== '('
+  while (i < n) {
+    const ch = src[i]
+    if (ch === '"') {
+      let j = i + 1
+      while (j < n) {
+        if (src[j] === '"') {
+          if (src[j + 1] === '"') {
+            j += 2
+            continue
+          }
+          j++
+          break
+        }
+        j++
+      }
+      i = j
+      continue
+    }
+    if ((i === 0 || !SHIFT_NAME_CHAR.test(src[i - 1])) && /[A-Za-z$]/.test(ch)) {
+      const ref = refAt(src.slice(i))
+      if (ref && afterOk(ref.len)) {
+        rects.push({
+          r1: Math.min(ref.row1, ref.row2 ?? ref.row1),
+          c1: Math.min(ref.col1, ref.col2 ?? ref.col1),
+          r2: Math.max(ref.row1, ref.row2 ?? ref.row1),
+          c2: Math.max(ref.col1, ref.col2 ?? ref.col1),
+        })
+        i += ref.len
+        continue
+      }
+      const cols = COL_RANGE_AT_RE.exec(src.slice(i))
+      const c1 = cols ? columnIndexOf(cols[2]) : -1
+      const c2 = cols ? columnIndexOf(cols[4]) : -1
+      if (cols && c1 >= 0 && c2 >= 0 && c1 <= c2 && afterOk(cols[0].length)) {
+        rects.push({ r1: 0, c1, r2: -1, c2 })
+        i += cols[0].length
+        continue
+      }
+    }
+    i++
+  }
+  return rects
+}
+
 /** Компиляция: AST + список прямоугольников зависимостей. */
 export function compileFormula(src: string): CompiledFormula {
   const ast = new Parser(tokenize(src)).parse()

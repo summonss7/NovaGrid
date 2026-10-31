@@ -30,6 +30,7 @@ import { SPACE_COLS, SPACE_ROWS, type SheetModel } from '../core/sheet'
 import { useSettings, useT } from '../i18n'
 import { rememberCopy, selectionText } from '../core/copy'
 import { copyText } from '../ui/clipboard'
+import { extractEditRefs, type DepRect } from '../formula/parser'
 import { AssistPopup } from '../ui/AssistPopup'
 import { useFormulaAssist } from '../ui/useFormulaAssist'
 import { ContextMenu } from '../ui/ContextMenu'
@@ -189,6 +190,19 @@ export function GridCanvas() {
     const lay = layoutFor(state.sheet, state.filters)
     const colLay = colsLayoutFor(state.sheet.cols, state.colWidths)
     const hit = state.search.hits[state.search.index]
+    // подсветка ссылок редактируемой формулы (novagrid-041): прямоугольники
+    // ссылок в границах листа; колонки A:A (r2 = −1) — до края листа
+    const editRefs: DepRect[] = []
+    if (state.edit && state.edit.value.trimStart().startsWith('=')) {
+      const maxRow = state.sheet.rows - 1
+      const maxCol = state.sheet.cols - 1
+      for (const d of extractEditRefs(state.edit.value)) {
+        const r1 = Math.min(Math.max(0, d.r1), maxRow)
+        const r2 = d.r2 < 0 ? maxRow : Math.min(d.r2, maxRow)
+        if (r2 < r1 || d.c1 > maxCol) continue
+        editRefs.push({ r1, c1: d.c1, r2, c2: Math.min(d.c2, maxCol) })
+      }
+    }
     regionRef.current = drawGrid({
       ctx,
       width: w,
@@ -206,6 +220,7 @@ export function GridCanvas() {
         currentKey: hit && hit.tab === state.activeTab ? `${hit.row}:${hit.col}` : null,
       },
       filteredCols: new Set(state.filters.map((f) => f.col)),
+      editRefs: editRefs.length > 0 ? editRefs : undefined,
       theme,
     })
   }

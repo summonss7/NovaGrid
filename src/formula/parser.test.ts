@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { FormulaError } from './types'
-import { compileFormula, formatAst, parseCellRef, refName, shiftFormulaRefs } from './parser'
+import { compileFormula, extractEditRefs, formatAst, parseCellRef, refName, shiftFormulaRefs } from './parser'
 
 /*
  * Парсер формул (Этап 4.1): структура, приоритеты, локали разделителей,
@@ -188,5 +188,44 @@ describe('shiftFormulaRefs — сдвиг ссылок при копирован
   it('не формула и нулевой сдвиг — текст без изменений', () => {
     expect(shiftFormulaRefs('A1', 1, 1)).toBe('A1')
     expect(shiftFormulaRefs('=A1', 0, 0)).toBe('=A1')
+  })
+})
+
+describe('extractEditRefs — подсветка ссылок при правке (novagrid-041)', () => {
+  it('одиночные ссылки, абсолютные и диапазоны', () => {
+    expect(extractEditRefs('=A1+B2')).toEqual([
+      { r1: 0, c1: 0, r2: 0, c2: 0 },
+      { r1: 1, c1: 1, r2: 1, c2: 1 },
+    ])
+    expect(extractEditRefs('=$B$2*C4')).toEqual([
+      { r1: 1, c1: 1, r2: 1, c2: 1 },
+      { r1: 3, c1: 2, r2: 3, c2: 2 },
+    ])
+    expect(extractEditRefs('=СУММ(B2:C4)')).toEqual([{ r1: 1, c1: 1, r2: 3, c2: 2 }])
+  })
+
+  it('колонки целиком — r2 = −1 (до края контента)', () => {
+    expect(extractEditRefs('=SUM(A:A)+B:C')).toEqual([
+      { r1: 0, c1: 0, r2: -1, c2: 0 },
+      { r1: 0, c1: 1, r2: -1, c2: 2 },
+    ])
+  })
+
+  it('строки в кавычках, имена функций и хвосты имён — не ссылки', () => {
+    expect(extractEditRefs('="A1"&"B2"')).toEqual([])
+    expect(extractEditRefs('=LOG10(100)+A1')).toEqual([{ r1: 0, c1: 0, r2: 0, c2: 0 }])
+    expect(extractEditRefs('=A1Б+1')).toEqual([])
+  })
+
+  it('недописанная формула не бросает — подсвечивается что распозналось', () => {
+    expect(extractEditRefs('=SUM(A1:')).toEqual([{ r1: 0, c1: 0, r2: 0, c2: 0 }])
+    expect(extractEditRefs('=A1+')).toEqual([{ r1: 0, c1: 0, r2: 0, c2: 0 }])
+    expect(extractEditRefs('=СУММ(')).toEqual([])
+  })
+
+  it('перевёрнутый диапазон нормализуется, не-формула даёт пусто', () => {
+    expect(extractEditRefs('=B2:A1')).toEqual([{ r1: 0, c1: 0, r2: 1, c2: 1 }])
+    expect(extractEditRefs('A1')).toEqual([])
+    expect(extractEditRefs('=')).toEqual([])
   })
 })

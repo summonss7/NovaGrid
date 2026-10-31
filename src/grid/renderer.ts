@@ -13,6 +13,7 @@ import { normalize, type Range, type Selection } from '../core/selection'
 import { cellKey, type CellStyle, type SheetModel } from '../core/sheet'
 import type { EditState } from '../core/store'
 import { cellError, cellIsFrozen, cellNumber, cellText } from '../formula/engine'
+import type { DepRect } from '../formula/parser'
 import { colName, type ColLayout, METRICS, type RowLayout, visibleRows } from './geometry'
 
 export interface GridTheme {
@@ -98,6 +99,26 @@ export interface SearchHighlight {
   currentKey: string | null
 }
 
+/**
+ * Палитра рамок ссылок редактируемой формулы (novagrid-041): как в Excel,
+ * каждая ссылка — свой цвет, по кругу. Зелёный исключён — он занят
+ * выделением/активной ячейкой.
+ */
+export const EDIT_REF_COLORS = [
+  '#2f6bdf', // синий
+  '#9c4ad1', // фиолетовый
+  '#e07b24', // оранжевый
+  '#12958c', // бирюзовый
+  '#d5457d', // розовый
+  '#6f7bd6', // лавандовый
+] as const
+
+/** «#rrggbb» → «rgba(r, g, b, a)» — лёгкая заливка под рамкой ссылки. */
+function withAlpha(hex: string, a: number): string {
+  const v = parseInt(hex.slice(1), 16)
+  return `rgba(${(v >> 16) & 255}, ${(v >> 8) & 255}, ${v & 255}, ${a})`
+}
+
 export interface DrawInput {
   ctx: CanvasRenderingContext2D
   width: number
@@ -114,6 +135,8 @@ export interface DrawInput {
   search: SearchHighlight
   /** колонки с активным фильтром — воронка в заголовке (Ф3.6) */
   filteredCols: ReadonlySet<number>
+  /** ссылки редактируемой формулы — цветные рамки ячеек-источников (novagrid-041) */
+  editRefs?: readonly DepRect[]
   theme: GridTheme
 }
 
@@ -140,6 +163,7 @@ export function drawGrid(input: DrawInput): VisibleRegion {
     altRange,
     search,
     filteredCols,
+    editRefs,
     theme,
   } = input
   const m = METRICS
@@ -316,6 +340,28 @@ export function drawGrid(input: DrawInput): VisibleRegion {
       ctx.lineWidth = 2
       ctx.strokeRect(x + 1, y + 1, w - 2, m.rowH - 2)
     }
+  }
+  // ссылки редактируемой формулы — цветные рамки с лёгкой заливкой поверх
+  // выделения (novagrid-041): видно, из каких ячеек формула берёт значения
+  if (editRefs && editRefs.length > 0) {
+    editRefs.forEach((d, k) => {
+      const color = EDIT_REF_COLORS[k % EDIT_REF_COLORS.length]
+      paintRange(
+        ctx,
+        d.r1,
+        d.c1,
+        d.r2,
+        d.c2,
+        layout,
+        cols,
+        scrollX,
+        scrollY,
+        withAlpha(color, 0.1),
+        color,
+        width,
+        height,
+      )
+    })
   }
   // Alt-лассо — оранжевая рамка быстрой суммы (Ф4)
   if (altRange) {
