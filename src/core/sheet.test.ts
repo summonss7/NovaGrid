@@ -7,6 +7,7 @@ import {
   SPACE_COLS,
   SPACE_ROWS,
   cellKey,
+  formatCellDisplay,
   createSheet,
   getCell,
   isNumericCell,
@@ -194,5 +195,28 @@ describe('parseNumber: честный разбор Этапа 1', () => {
     sheet = withCell(sheet, 1, 0, 'Иванов')
     expect(isNumericCell(sheet, 0, 0)).toBe(true)
     expect(isNumericCell(sheet, 1, 0)).toBe(false)
+  })
+})
+
+describe('формат числа (novagrid-045)', () => {
+  const flat = (s: string) => s.replace(/[\s\u00A0\u202F]/g, '')
+
+  it('числовой: разделители тысяч, до 2 знаков', () => {
+    expect(flat(formatCellDisplay('1234567.5', 'number', 'ru-RU'))).toBe('1234567,5')
+    expect(flat(formatCellDisplay('1234567', 'number', 'ru-RU'))).toBe('1234567')
+  })
+
+  it('валютный: ₽ в конце', () => {
+    expect(flat(formatCellDisplay('1234.5', 'money', 'ru-RU'))).toBe('1234,50₽')
+  })
+
+  it('процентный: значение ×100 (семантика Excel)', () => {
+    expect(flat(formatCellDisplay('0.25', 'percent', 'ru-RU'))).toBe('25%')
+    expect(flat(formatCellDisplay('5', 'percent', 'en-US'))).toBe('500%')
+  })
+
+  it('нечисловое значение и отсутствие формата — без изменений', () => {
+    expect(formatCellDisplay('Анна', 'money', 'ru-RU')).toBe('Анна')
+    expect(formatCellDisplay('12.3', undefined, 'ru-RU')).toBe('12.3')
   })
 })

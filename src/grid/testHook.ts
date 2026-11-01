@@ -67,6 +67,8 @@ export interface NvTestApi {
   resetDrawStats: () => void
   scrollTo: (x: number, y: number) => void
   cellCenter: (row: number, col: number) => { x: number; y: number }
+  /** закрепление областей активной вкладки (novagrid-044) */
+  freeze: () => { rows: number; cols: number }
   editor: () => EditState | null
   book: () => NvBookInfo
   /** фильтры активной вкладки (КТ-3) */
@@ -162,6 +164,7 @@ export function installTestHook(refs: TestHookRefs): void {
       const main = refs.main()
       const el = refs.scroll()
       if (!main || !el) return { x: 0, y: 0 }
+      const st = gridStore.getState()
       const layout = refs.layout()
       const colLay = refs.cols()
       // row = -1 — центр заголовка колонки (как до Этапа 3); скрытая строка —
@@ -169,9 +172,14 @@ export function installTestHook(refs: TestHookRefs): void {
       const i = layout.indexOf(row)
       const vi = i >= 0 ? i : row
       const mainRect = main.getBoundingClientRect()
-      const r = cellRect(vi, col, el.scrollLeft, el.scrollTop, undefined, colLay)
+      const r = cellRect(vi, col, el.scrollLeft, el.scrollTop, undefined, colLay, {
+        rows: Math.min(st.freeze.rows, st.sheet.rows),
+        cols: Math.min(st.freeze.cols, st.sheet.cols),
+      })
       return { x: mainRect.left + r.x + r.w / 2, y: mainRect.top + r.y + r.h / 2 }
     },
+    /** закрепление областей активной вкладки (novagrid-044) */
+    freeze: () => ({ ...gridStore.getState().freeze }),
     editor: () => gridStore.getState().edit,
     book: () => {
       const st = gridStore.getState()

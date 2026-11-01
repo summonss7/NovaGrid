@@ -5,7 +5,7 @@
  * ячейки — на листе 100k×30 шаг истории весит байты, а не копию всей Map.
  */
 
-import type { CellStyle } from './sheet'
+import type { CellStyle, SheetModel } from './sheet'
 
 export interface CellChange {
   row: number
@@ -36,6 +36,12 @@ export interface HistoryEntry {
   group?: string
   /** стилевые правки той же транзакции (novagrid-039); может быть пустым */
   styleChanges?: StyleChange[]
+  /**
+   * Операция вставки/удаления строк/колонок (novagrid-045): дифф тысяч ячеек
+   * неэкономен, поэтому запись несёт снимки листа до/после — Maps иммутабельны,
+   * хранятся по ссылке. undo/redo подставляет снимок целиком; changes пуст.
+   */
+  layout?: { before: SheetModel; after: SheetModel }
 }
 
 const DEFAULT_LIMIT = 100

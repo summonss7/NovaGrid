@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  freezeRowLayout,
   cellAtPoint,
   cellRect,
   cellRefName,
@@ -146,5 +147,71 @@ describe('geometry: переменные ширины колонок (novagrid-0
     const v = lay.visible(192, 200)
     expect(v.first).toBe(1)
     expect(v.last).toBe(3)
+  })
+})
+
+describe('geometry: закрепление областей (novagrid-044)', () => {
+  it('freezeRowLayout: без фильтров прокрутка начинается после закрепа', () => {
+    const lay = freezeRowLayout(100, null, 2)
+    expect(lay.count).toBe(100)
+    expect(lay.rowAt(0)).toBe(0)
+    expect(lay.rowAt(2)).toBe(2)
+    expect(lay.indexOf(1)).toBe(1)
+    expect(lay.indexOf(5)).toBe(5)
+  })
+
+  it('freezeRowLayout: закреплённые строки фильтром не скрываются', () => {
+    // видимые модельные 0, 2, 5; закреп 2 → в прокрутке только 2 и 5
+    const lay = freezeRowLayout(10, [0, 2, 5], 2)
+    expect(lay.count).toBe(4)
+    expect(lay.rowAt(2)).toBe(2)
+    expect(lay.rowAt(3)).toBe(5)
+    expect(lay.indexOf(0)).toBe(0)
+    expect(lay.indexOf(1)).toBe(1)
+    expect(lay.indexOf(3)).toBe(-1)
+    expect(lay.indexOf(5)).toBe(3)
+  })
+
+  it('cellAtPoint в закрепе не зависит от прокрутки', () => {
+    const cols = colLayoutOf(26, null)
+    const f = { rows: 1, cols: 1 }
+    const a = cellAtPoint(60, 45, 500, 500, undefined, cols, f)
+    expect(a).toMatchObject({ row: 0, col: 0, kind: 'cell' })
+    // та же точка закрепа при другой прокрутке — тот же результат
+    expect(cellAtPoint(60, 45, 5000, 5000, undefined, cols, f)).toMatchObject({ row: 0, col: 0 })
+    // прокручиваемая колонка на закреплённой строке
+    const b = cellAtPoint(200, 45, 500, 500, undefined, cols, f)
+    expect(b).toMatchObject({ row: 0, col: 6, kind: 'cell' })
+    // ниже закрепа — визуальный индекс с учётом прокрутки и закрепа
+    const c = cellAtPoint(200, 100, 500, 500, undefined, cols, f)
+    expect(c?.row).toBe(1 + Math.floor((100 - 30 - 30 + 500) / 30))
+    expect(c?.col).toBe(6)
+  })
+
+  it('cellRect: закреп стоит на месте, остальное прокручивается', () => {
+    const cols = colLayoutOf(26, null)
+    const f = { rows: 1, cols: 1 }
+    expect(cellRect(0, 0, 300, 300, undefined, cols, f)).toMatchObject({ x: 44, y: 30 })
+    // закреплённая колонка не прокручивается по X, строка — по Y
+    expect(cellRect(3, 0, 300, 300, undefined, cols, f).x).toBe(44)
+    expect(cellRect(0, 3, 300, 300, undefined, cols, f).y).toBe(30)
+    // прокручиваемые — со сдвигом области закрепа и прокрутки
+    expect(cellRect(1, 1, 300, 300, undefined, cols, f)).toMatchObject({
+      x: 44 + 96 - 300,
+      y: 30 + 30 - 300,
+    })
+  })
+
+  it('scrollIntoView: закреплённая ячейка не требует прокрутки', () => {
+    const cols = colLayoutOf(26, null)
+    const f = { rows: 1, cols: 1 }
+    expect(scrollIntoView(0, 0, 700, 700, 800, 600, undefined, cols, f)).toEqual({
+      scrollX: 700,
+      scrollY: 700,
+    })
+    // строка далеко внизу: прокрутка от начала прокручиваемой зоны
+    const t = scrollIntoView(30, 0, 0, 0, 800, 600, undefined, cols, f)
+    expect(t.scrollY).toBe((30 - 1) * 30 + 30 + 60 - 600)
+    expect(t.scrollX).toBe(0)
   })
 })

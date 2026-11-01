@@ -30,6 +30,7 @@ export const SPACE_COLS = 10
  * жирность, выравнивание, заливка и цвет текста. Форматы чисел — Этап 4+.
  * novagrid-039 добавляет начертания и шрифт: курсив, подчёркивание, гарнитура
  * (две self-hosted гарнитуры приложения) и размер в пунктах (pt) — как в Excel.
+ * novagrid-045 добавляет формат числа (отображение значения ячейки).
  */
 export interface CellStyle {
   bold?: boolean
@@ -46,6 +47,34 @@ export interface CellStyle {
   bg?: string
   /** цвет текста RRGGBB */
   fg?: string
+  /** формат числа (novagrid-045): отображение в гриде, сырые данные не меняются */
+  fmt?: CellFormat
+}
+
+/**
+ * Формат числа (novagrid-045): «числовой» — разделители тысяч; «валютный» —
+ * ₽; «процентный» — значение ×100 с % (семантика Excel). Общий — без поля.
+ */
+export type CellFormat = 'number' | 'money' | 'percent'
+
+/**
+ * Отображаемое значение ячейки с учётом формата числа (novagrid-045): нечисловой
+ * raw показывается как есть; формат применяется только к распознаваемым числам.
+ * locale — BCP-47 тег словаря (ru-RU: пробелы-тысячи и запятая).
+ */
+export function formatCellDisplay(raw: CellRaw, fmt: CellFormat | undefined, locale: string): string {
+  if (!fmt) return raw
+  const n = parseNumber(raw)
+  if (n === null) return raw
+  if (fmt === 'percent')
+    return new Intl.NumberFormat(locale, { style: 'percent', maximumFractionDigits: 2 }).format(n)
+  if (fmt === 'money')
+    return new Intl.NumberFormat(locale, {
+      style: 'currency',
+      currency: 'RUB',
+      maximumFractionDigits: 2,
+    }).format(n)
+  return new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(n)
 }
 
 /** Пределы размера шрифта ячейки (pt): высота строки 30px вмещает до ~16pt. */

@@ -6,6 +6,7 @@ import { cellRefName } from '../grid/geometry'
 import { zoomStore } from '../grid/zoom'
 import { useT } from '../i18n'
 import { useMemo } from 'react'
+import { APP_VERSION } from '../app/titleSync'
 
 /**
  * Статус-бар метрик (§6, Ф4): Σ · n · x̄ по выделению — живьём при любом
@@ -41,7 +42,9 @@ export function StatusBar() {
           {t.sumPickHint(cellRefName(sumPick.row, sumPick.col))}
         </span>
       ) : (
-        <span className="status-phase">{t.statusPhase}</span>
+        // версия программы (novagrid-043): тот же источник, что у заголовка
+        // окна — package.json; раньше здесь был захардкоженный «v1.0»
+        <span className="status-phase">NovaGrid v{APP_VERSION}</span>
       )}
       <span className="sr-only" aria-live="polite">
         {activeText !== '' ? `${activeRef} · ${activeText}` : activeRef}

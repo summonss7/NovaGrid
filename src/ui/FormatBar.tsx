@@ -1,7 +1,17 @@
-import { Baseline, Bold, Eraser, Italic, PaintBucket, Underline } from 'lucide-react'
+import {
+  AlignCenter,
+  AlignLeft,
+  AlignRight,
+  Baseline,
+  Bold,
+  Eraser,
+  Italic,
+  PaintBucket,
+  Underline,
+} from 'lucide-react'
 import { useState } from 'react'
 import { useStore } from 'zustand'
-import { CELL_SIZE_MAX, CELL_SIZE_MIN, cellKey } from '../core/sheet'
+import { CELL_SIZE_MAX, CELL_SIZE_MIN, cellKey, type CellFormat } from '../core/sheet'
 import { gridStore } from '../core/store'
 import { useT } from '../i18n'
 
@@ -50,6 +60,16 @@ export function FormatBar() {
         : { size: Math.min(CELL_SIZE_MAX, Math.max(CELL_SIZE_MIN, pt)) },
     )
 
+  // выравнивание (novagrid-045): повторный клик по нажатой — авто (числа справа)
+  const setAlign = (a: 'left' | 'center' | 'right') =>
+    gridStore.getState().applyStyle(style?.align === a ? { align: undefined } : { align: a })
+
+  // формат числа (novagrid-045): отображение значения, данные не меняются
+  const setFmt = (fmt: string) =>
+    gridStore.getState().applyStyle(
+      fmt === 'general' ? { fmt: undefined } : { fmt: fmt as CellFormat },
+    )
+
   const pickColor = (hex: string) => {
     gridStore.getState().applyStyle(palette === 'fg' ? { fg: hex } : { bg: hex })
     setPalette(null)
@@ -92,6 +112,22 @@ export function FormatBar() {
         ))}
       </select>
 
+      <select
+        className="fmt-select"
+        aria-label={t.formatNumberLabel}
+        title={t.formatNumberLabel}
+        value={style?.fmt ?? 'general'}
+        onChange={(e) => {
+          setFmt(e.target.value)
+          focusGrid()
+        }}
+      >
+        <option value="general">{t.formatNumGeneral}</option>
+        <option value="number">{t.formatNumNumber}</option>
+        <option value="money">{t.formatNumMoney}</option>
+        <option value="percent">{t.formatNumPercent}</option>
+      </select>
+
       <span className="fmt-sep" aria-hidden />
 
       <button
@@ -123,6 +159,37 @@ export function FormatBar() {
         onClick={apply(() => gridStore.getState().toggleStyle('underline'))}
       >
         <Underline size={15} strokeWidth={2} aria-hidden />
+      </button>
+
+      <button
+        type="button"
+        className={`fmt-btn fmt-toggle${style?.align === 'left' ? ' is-on' : ''}`}
+        aria-label={t.formatAlignLeft}
+        title={t.formatAlignLeft}
+        aria-pressed={style?.align === 'left'}
+        onClick={apply(() => setAlign('left'))}
+      >
+        <AlignLeft size={15} strokeWidth={2} aria-hidden />
+      </button>
+      <button
+        type="button"
+        className={`fmt-btn fmt-toggle${style?.align === 'center' ? ' is-on' : ''}`}
+        aria-label={t.formatAlignCenter}
+        title={t.formatAlignCenter}
+        aria-pressed={style?.align === 'center'}
+        onClick={apply(() => setAlign('center'))}
+      >
+        <AlignCenter size={15} strokeWidth={2} aria-hidden />
+      </button>
+      <button
+        type="button"
+        className={`fmt-btn fmt-toggle${style?.align === 'right' ? ' is-on' : ''}`}
+        aria-label={t.formatAlignRight}
+        title={t.formatAlignRight}
+        aria-pressed={style?.align === 'right'}
+        onClick={apply(() => setAlign('right'))}
+      >
+        <AlignRight size={15} strokeWidth={2} aria-hidden />
       </button>
 
       <span className="fmt-sep" aria-hidden />

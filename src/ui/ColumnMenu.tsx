@@ -1,4 +1,4 @@
-import { ArrowDownAZ, ArrowUpAZ, Search } from 'lucide-react'
+import { ArrowDownAZ, ArrowUpAZ, Columns3, Pin, PinOff, Search, Trash2 } from 'lucide-react'
 import { useMemo, useRef, useState } from 'react'
 import { useStore } from 'zustand'
 import { columnValueCounts, type ColumnFilter } from '../core/filter'
@@ -22,6 +22,7 @@ export function ColumnMenu(props: { x: number; y: number; col: number; onClose: 
   const t = useT()
   const sheet = useStore(gridStore, (s) => s.sheet)
   const filters = useStore(gridStore, (s) => s.filters)
+  const freeze = useStore(gridStore, (s) => s.freeze)
   const [needle, setNeedle] = useState('')
   const { col, onClose } = props
   const menuRef = useRef<HTMLDivElement>(null)
@@ -103,6 +104,73 @@ export function ColumnMenu(props: { x: number; y: number; col: number; onClose: 
             {t.sortDesc}
           </button>
         </div>
+
+        {/* вставка/удаление колонок и закрепление (novagrid-045/044) */}
+        <div className="ctx-sep" aria-hidden />
+        <button
+          type="button"
+          role="menuitem"
+          className="ctx-item"
+          onClick={() => {
+            gridStore.getState().insertCols(col, 1)
+            onClose()
+          }}
+        >
+          <Columns3 size={14} strokeWidth={1.5} aria-hidden />
+          {t.insertColLeft}
+        </button>
+        <button
+          type="button"
+          role="menuitem"
+          className="ctx-item"
+          onClick={() => {
+            gridStore.getState().insertCols(col + 1, 1)
+            onClose()
+          }}
+        >
+          <Columns3 size={14} strokeWidth={1.5} aria-hidden />
+          {t.insertColRight}
+        </button>
+        <button
+          type="button"
+          role="menuitem"
+          className="ctx-item"
+          onClick={() => {
+            gridStore.getState().deleteCols(col, 1)
+            onClose()
+          }}
+        >
+          <Trash2 size={14} strokeWidth={1.5} aria-hidden />
+          {t.deleteCols(1)}
+        </button>
+        {freeze.cols > 0 ? (
+          <button
+            type="button"
+            role="menuitem"
+            className="ctx-item"
+            onClick={() => {
+              gridStore.getState().setFreeze(freeze.rows, 0)
+              onClose()
+            }}
+          >
+            <PinOff size={14} strokeWidth={1.5} aria-hidden />
+            {t.freezeNone}
+          </button>
+        ) : (
+          <button
+            type="button"
+            role="menuitem"
+            className="ctx-item"
+            onClick={() => {
+              gridStore.getState().setFreeze(freeze.rows, col + 1)
+              onClose()
+            }}
+          >
+            <Pin size={14} strokeWidth={1.5} aria-hidden />
+            {t.freezeColsTo(letter)}
+          </button>
+        )}
+        <div className="ctx-sep" aria-hidden />
 
         <div className="col-menu-search">
           <Search size={13} strokeWidth={1.5} aria-hidden />

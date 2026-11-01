@@ -44,6 +44,43 @@ export function rowLayoutOf(totalRows: number, visible: readonly number[] | null
   }
 }
 
+/* ── закрепление областей (novagrid-044) ──────────────────────────────── */
+
+/** Закрепление первых строк/колонок (0 — закреп нет). */
+export interface FreezeView {
+  rows: number
+  cols: number
+}
+
+export const NO_FREEZE: FreezeView = { rows: 0, cols: 0 }
+
+/**
+ * Раскладка строк с закреплёнными (novagrid-044): визуальный индекс
+ * унифицирован — 0..fr−1 закреплённые модельные строки (фильтром не
+ * скрываются: это шапки, фильтры по ним не строят), дальше — прокручиваемые
+ * видимые строки начиная с fr. Без фильтров нижняя часть тождественна.
+ */
+export function freezeRowLayout(
+  totalRows: number,
+  visible: readonly number[] | null,
+  fr: number,
+): RowLayout {
+  if (fr <= 0) return rowLayoutOf(totalRows, visible)
+  // без фильтров унифицированный индекс тождествен модельной строке
+  if (!visible) return { count: totalRows, rowAt: (i) => i, indexOf: (r) => r }
+  const base = rowLayoutOf(visible.length, visible.filter((r) => r >= fr))
+  const count = fr + base.count
+  return {
+    count,
+    rowAt: (i) => (i < fr ? i : base.rowAt(i - fr)),
+    indexOf: (r) => {
+      if (r < fr) return r
+      const i = base.indexOf(r)
+      return i < 0 ? -1 : fr + i
+    },
+  }
+}
+
 /* ── переменные ширины колонок (карточка novagrid-020) ────────────────── */
 
 /** Минимальная и максимальная ширина колонки в базовых единицах (зум 100 %).
@@ -226,10 +263,24 @@ export function visibleCols(
   return { first, last }
 }
 
+/** Ширина закреплённых колонок в пикселях контента (0 — закрепа нет).
+ *  Без раскладки — равномерная ось (fc · colW). */
+export function frozenColsW(cols: ColAxis | undefined, fc: number, m = METRICS): number {
+  return fc > 0 ? (cols ? cols.x0(fc) : fc * m.colW) : 0
+}
+
+/** Высота закреплённых строк в пикселях (0 — закрепа нет). */
+export function frozenRowsH(fr: number, m = METRICS): number {
+  return fr > 0 ? fr * m.rowH : 0
+}
+
 /**
  * Ячейка под точкой вьюпорта (координаты события мыши). null — точка за
  * пределами таблицы; kind различает область контента и шапки.
  * cols — раскладка ширин колонок (по умолчанию равномерная).
+ * frozen — закреплённые строки/колонки (novagrid-044): возвращаемый row —
+ * унифицированный визуальный индекс (0..fr−1 — закреп), col — модельная
+ * колонка; прокручиваемая область считается от края закрепа.
  */
 export function cellAtPoint(
   x: number,
@@ -238,25 +289,38 @@ export function cellAtPoint(
   scrollY = 0,
   m = METRICS,
   cols?: ColAxis,
+  frozen?: FreezeView,
 ): { row: number; col: number; kind: 'cell' | 'colHeader' | 'rowHeader' | 'corner' } | null {
   if (x < 0 || y < 0) return null
   const axis = cols ?? uniformAxis(m)
+  const fr = frozen?.rows ?? 0
+  const fc = frozen?.cols ?? 0
+  const fx = frozenColsW(cols, fc, m)
+  const fy = frozenRowsH(fr, m)
   if (x < m.rowHeaderW && y < m.headerH) return { row: -1, col: -1, kind: 'corner' }
   if (y < m.headerH) {
-    const col = colAtAxis(axis, x - m.rowHeaderW + scrollX, m)
+    const inFrozen = x - m.rowHeaderW < fx
+    const col = colAtAxis(axis, x - m.rowHeaderW + (inFrozen ? 0 : scrollX), m)
     return col >= 0 ? { row: -1, col, kind: 'colHeader' } : null
   }
+  const row =
+    y < m.headerH + fy
+      ? Math.floor((y - m.headerH) / m.rowH)
+      : fr + Math.floor((y - m.headerH - fy + scrollY) / m.rowH)
   if (x < m.rowHeaderW) {
-    const row = Math.floor((y - m.headerH + scrollY) / m.rowH)
     return row >= 0 ? { row, col: -1, kind: 'rowHeader' } : null
   }
-  const row = Math.floor((y - m.headerH + scrollY) / m.rowH)
-  const col = colAtAxis(axis, x - m.rowHeaderW + scrollX, m)
+  const inFrozenX = x - m.rowHeaderW < fx
+  const col = colAtAxis(axis, x - m.rowHeaderW + (inFrozenX ? 0 : scrollX), m)
   if (row < 0 || col < 0) return null
   return { row, col, kind: 'cell' }
 }
 
-/** Прямоугольник ячейки во вьюпорте (с учётом прокрутки). */
+/**
+ * Прямоугольник ячейки во вьюпорте (с учётом прокрутки). row — визуальный
+ * индекс унифицированной раскладки (novagrid-044), frozen — закреп области:
+ * закреплённые строки/колонки стоят на месте, остальные прокручиваются.
+ */
 export function cellRect(
   row: number,
   col: number,
@@ -264,6 +328,7 @@ export function cellRect(
   scrollY: number,
   m = METRICS,
   cols?: ColAxis,
+  frozen?: FreezeView,
 ): {
   x: number
   y: number
@@ -271,9 +336,17 @@ export function cellRect(
   h: number
 } {
   const axis = cols ?? uniformAxis(m)
+  const fr = frozen?.rows ?? 0
+  const fc = frozen?.cols ?? 0
+  const fy = frozenRowsH(fr, m)
   return {
-    x: m.rowHeaderW + axis.x0(col) - scrollX,
-    y: m.headerH + row * m.rowH - scrollY,
+    // закреплённые колонки стоят на месте; для прокручиваемых fx-сдвиг
+    // прокручиваемой зоны и сдвиг scrollX от её начала взаимно сокращаются
+    x: m.rowHeaderW + axis.x0(col) - (col < fc ? 0 : scrollX),
+    y:
+      row < fr
+        ? m.headerH + row * m.rowH
+        : m.headerH + fy + (row - fr) * m.rowH - scrollY,
     w: axis.width(col),
     h: m.rowH,
   }
@@ -293,7 +366,12 @@ export function totalSize(
   return { w, h: m.headerH + rows * m.rowH }
 }
 
-/** Строка/колонка, которую нужно показать в левом верхнем углу, чтобы ячейка попала во вьюпорт. */
+/**
+ * Строка/колонка, которую нужно показать в левом верхнем углу, чтобы ячейка попала во вьюпорт.
+ * row — унифицированный визуальный индекс, frozen — закреп (novagrid-044):
+ * закреплённая ячейка всегда видна (скролл не нужен), иначе область показа
+ * начинается правее/ниже закрепа.
+ */
 export function scrollIntoView(
   row: number,
   col: number,
@@ -303,14 +381,29 @@ export function scrollIntoView(
   viewportH: number,
   m = METRICS,
   axis?: ColAxis,
+  frozen?: FreezeView,
 ): { scrollX: number; scrollY: number } {
-  const rect = cellRect(row, col, scrollX, scrollY, m, axis)
   const ax = axis ?? uniformAxis(m)
+  const fr = frozen?.rows ?? 0
+  const fc = frozen?.cols ?? 0
+  const fx = frozenColsW(axis, fc, m)
+  const fy = frozenRowsH(fr, m)
+  const rect = cellRect(row, col, scrollX, scrollY, m, ax, frozen)
   let nx = scrollX
   let ny = scrollY
-  if (rect.x < m.rowHeaderW) nx = ax.x0(col)
-  else if (rect.x + rect.w > viewportW) nx = ax.x0(col) + rect.w + m.rowHeaderW - viewportW
-  if (rect.y < m.headerH) ny = row * m.rowH
-  else if (rect.y + rect.h > viewportH) ny = (row + 1) * m.rowH + m.headerH - viewportH
+  if (col < fc) {
+    // закреплённая колонка всегда в кадре
+  } else {
+    const relX = ax.x0(col) - fx // позиция в прокручиваемой зоне
+    if (rect.x < m.rowHeaderW + fx) nx = relX
+    else if (rect.x + rect.w > viewportW) nx = relX + m.rowHeaderW + fx + rect.w - viewportW
+  }
+  if (row < fr) {
+    // закреплённая строка всегда в кадре
+  } else {
+    const relY = (row - fr) * m.rowH
+    if (rect.y < m.headerH + fy) ny = relY
+    else if (rect.y + rect.h > viewportH) ny = relY + m.rowH + m.headerH + fy - viewportH
+  }
   return { scrollX: Math.max(0, nx), scrollY: Math.max(0, ny) }
 }

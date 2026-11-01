@@ -50,6 +50,13 @@ import {
 } from './sheet'
 import { applyFormulaChanges, cellNumber, recalcSheet } from '../formula/engine'
 import { shiftFormulaRefs } from '../formula/parser'
+import {
+  shiftColWidths,
+  shiftFilterCols,
+  shiftFreeze,
+  shiftSheetCols,
+  shiftSheetRows,
+} from './layout'
 import { parseClipboardTsv, takeInternalCopy, tileRect } from './copy'
 import { BASE_COL_W, COL_W_MAX, COL_W_MIN, cellRefName } from '../grid/geometry'
 // метрики выделения (6.1) агрегируются потоком; sum/average из ./stats
@@ -193,6 +200,11 @@ export interface GridState {
    * в базовых единицах (зум 100 %). null — все колонки стандартные.
    */
   colWidths: ReadonlyMap<number, number> | null
+  /**
+   * Закрепление областей активной вкладки (novagrid-044): первые rows строк
+   * держатся сверху, cols колонок — слева; по вкладкам, как ширины.
+   */
+  freeze: { rows: number; cols: number }
   /** автосумма: ячейка-приёмник =SUM, ожидает выбор диапазона; null — выключена */
   sumPick: SumPickState | null
 
@@ -302,6 +314,22 @@ export interface GridState {
   // ── ширины колонок / автосумма (novagrid-020) ─────────────────────────
   /** ширина колонки в базовых единицах; стандартная — сброс переопределения */
   setColWidth: (col: number, width: number) => void
+  /**
+   * Закрепление областей (novagrid-044): первые rows строк / cols колонок;
+   * 0 — снять. Взгляд-настройка: без истории и флага dirty, по вкладкам.
+   */
+  setFreeze: (rows: number, cols: number) => void
+
+  // ── вставка/удаление строк и колонок (novagrid-045) ───────────────────
+  /** Вставить n пустых строк перед модельной строкой at. */
+  insertRows: (at: number, n?: number) => void
+  /** Удалить n строк начиная с модельной строки at. */
+  deleteRows: (at: number, n?: number) => void
+  /** Вставить n пустых колонок перед колонкой at. */
+  insertCols: (at: number, n?: number) => void
+  /** Удалить n колонок начиная с at. */
+  deleteCols: (at: number, n?: number) => void
+
   /** Σ: запомнить активную ячейку-приёмник и ждать выбора диапазона */
   startSumPick: () => void
   /** Σ: собрать =SUM из текущего выделения и записать в ячейку-приёмник */
@@ -556,6 +584,11 @@ const tabFilterAnchors = new Map<string, { row: number; col: number } | null>()
 /** Ширины колонок — по вкладкам (id), как фильтры (novagrid-020). */
 const tabColWidths = new Map<string, ReadonlyMap<number, number>>()
 
+/** Закрепление областей — по вкладкам (id), как ширины (novagrid-044). */
+const tabFreeze = new Map<string, { rows: number; cols: number }>()
+
+const NO_FREEZE = { rows: 0, cols: 0 }
+
 function historyOf(tabId: string): History {
   let h = histories.get(tabId)
   if (!h) {
@@ -570,6 +603,7 @@ function clearHistories(): void {
   tabFilters.clear()
   tabFilterAnchors.clear()
   tabColWidths.clear()
+  tabFreeze.clear()
 }
 
 const initialTab = createTab(DEFAULT_SHEET_NAME)
@@ -641,12 +675,62 @@ export const gridStore = createStore<GridState>((set, get) => {
     set({ dirty: true })
   }
 
-  /** Сохранить фильтры и ширины колонок активной вкладки (перед сменой). */
+  /**
+   * Вставка/удаление строк/колонок (novagrid-045): одна транзакция истории —
+   * снимок листа до/после (дифф тысяч ячеек неэкономен); ширины, фильтры и
+   * закрепление сдвигаются вместе с колонками, курсор — вместе с данными.
+   */
+  const runLayoutShift = (axis: 'row' | 'col', at: number, delta: number) => {
+    const st0 = get()
+    if (st0.edit) st0.commitEdit('none')
+    const { sheet, selection, tabs, activeTab, filters } = get()
+    const limit = axis === 'row' ? sheet.rows : sheet.cols
+    const count = Math.abs(delta)
+    if (at < 0 || at >= limit || at + count > limit) return
+    const next = axis === 'row' ? shiftSheetRows(sheet, at, delta) : shiftSheetCols(sheet, at, delta)
+    if (next === sheet) return
+    historyOf(tabs[activeTab].id).push({
+      label: delta > 0 ? `insert-${axis}` : `delete-${axis}`,
+      changes: [],
+      layout: { before: sheet, after: next },
+    })
+    applyFormulaChanges(sheet, next, [])
+    patchSheet(next)
+    // координата выделения едет вместе с данными; удалённая зона — к её краю
+    const shiftRef = (v: number): number => {
+      if (delta > 0) return v >= at ? v + delta : v
+      if (v >= at && v < at + count) return at
+      return v >= at + count ? v + delta : v
+    }
+    const active = {
+      row: axis === 'row' ? shiftRef(selection.active.row) : selection.active.row,
+      col: axis === 'col' ? shiftRef(selection.active.col) : selection.active.col,
+    }
+    set({
+      dirty: true,
+      selection: selectionOf(
+        Math.min(active.row, Math.max(next.rows - 1, 0)),
+        Math.min(active.col, Math.max(next.cols - 1, 0)),
+      ),
+      ...(axis === 'col'
+        ? {
+            colWidths: shiftColWidths(get().colWidths, at, delta),
+            filters: shiftFilterCols(filters, at, delta),
+          }
+        : {}),
+      freeze: shiftFreeze(get().freeze, axis, at, delta),
+    })
+    refreshSearch()
+    refreshReplace()
+  }
+
+  /** Сохранить фильтры, ширины и закрепление активной вкладки (перед сменой). */
   const saveFilters = () => {
-    const { tabs, activeTab, filters, colWidths, filterAnchor } = get()
+    const { tabs, activeTab, filters, colWidths, filterAnchor, freeze } = get()
     tabFilters.set(tabs[activeTab].id, filters)
     tabFilterAnchors.set(tabs[activeTab].id, filterAnchor)
     tabColWidths.set(tabs[activeTab].id, colWidths ?? new Map())
+    tabFreeze.set(tabs[activeTab].id, freeze)
   }
 
   /**
@@ -778,16 +862,23 @@ export const gridStore = createStore<GridState>((set, get) => {
     let activeSheet: SheetModel | null = null
     for (const { index, entry } of targets) {
       const prev = tabsArr[index].sheet
-      let next = applyChanges(prev, entry.changes, direction)
-      if (entry.styleChanges && entry.styleChanges.length > 0) {
-        next = withStyleList(
-          next,
-          entry.styleChanges.map((ch) => ({
-            row: ch.row,
-            col: ch.col,
-            after: direction === 'before' ? ch.before : ch.after,
-          })),
-        )
+      // вставка/удаление строк/колонок (novagrid-045): снимок целиком; пустой
+      // список правок уводит движок в полный пересчёт формул
+      let next: SheetModel
+      if (entry.layout) {
+        next = direction === 'before' ? entry.layout.before : entry.layout.after
+      } else {
+        next = applyChanges(prev, entry.changes, direction)
+        if (entry.styleChanges && entry.styleChanges.length > 0) {
+          next = withStyleList(
+            next,
+            entry.styleChanges.map((ch) => ({
+              row: ch.row,
+              col: ch.col,
+              after: direction === 'before' ? ch.before : ch.after,
+            })),
+          )
+        }
       }
       applyFormulaChanges(prev, next, entry.changes)
       tabsArr = tabsArr.map((t, i) => (i === index ? { ...t, sheet: next } : t))
@@ -885,6 +976,7 @@ export const gridStore = createStore<GridState>((set, get) => {
     filters: [],
     filterAnchor: null,
     colWidths: null,
+    freeze: NO_FREEZE,
     sumPick: null,
     search: EMPTY_SEARCH,
     replace: EMPTY_REPLACE,
@@ -915,6 +1007,7 @@ export const gridStore = createStore<GridState>((set, get) => {
         filters: [],
         filterAnchor: null,
         colWidths: null,
+        freeze: NO_FREEZE,
         sumPick: null,
         search: EMPTY_SEARCH,
         replace: EMPTY_REPLACE,
@@ -959,6 +1052,7 @@ export const gridStore = createStore<GridState>((set, get) => {
         filters: tabFilters.get(tabs[i].id) ?? [],
         filterAnchor: tabFilterAnchors.get(tabs[i].id) ?? null,
         colWidths: savedWidths && savedWidths.size > 0 ? savedWidths : null,
+        freeze: tabFreeze.get(tabs[i].id) ?? NO_FREEZE,
         sumPick: null,
       })
       refreshSearch()
@@ -983,6 +1077,7 @@ export const gridStore = createStore<GridState>((set, get) => {
         filters: [],
         filterAnchor: null,
         colWidths: null,
+        freeze: NO_FREEZE,
         sumPick: null,
         dirty: true,
       })
@@ -1007,6 +1102,7 @@ export const gridStore = createStore<GridState>((set, get) => {
       tabFilters.delete(removed.id)
       tabFilterAnchors.delete(removed.id)
       tabColWidths.delete(removed.id)
+      tabFreeze.delete(removed.id)
       const nextActive = index < activeTab ? activeTab - 1 : Math.min(activeTab, next.length - 1)
       if (get().edit) get().cancelEdit()
       const savedWidths = tabColWidths.get(next[nextActive].id)
@@ -1020,6 +1116,7 @@ export const gridStore = createStore<GridState>((set, get) => {
         filters: tabFilters.get(next[nextActive].id) ?? [],
         filterAnchor: tabFilterAnchors.get(next[nextActive].id) ?? null,
         colWidths: savedWidths && savedWidths.size > 0 ? savedWidths : null,
+        freeze: tabFreeze.get(next[nextActive].id) ?? NO_FREEZE,
         sumPick: null,
         dirty: true,
       })
@@ -1053,6 +1150,8 @@ export const gridStore = createStore<GridState>((set, get) => {
       saveFilters()
       const copyWidths = new Map(tabColWidths.get(src.id) ?? [])
       tabColWidths.set(copy.id, copyWidths)
+      const copyFreeze = tabFreeze.get(src.id) ?? get().freeze
+      tabFreeze.set(copy.id, copyFreeze)
       set({
         tabs: [...tabs.slice(0, index + 1), copy, ...tabs.slice(index + 1)],
         activeTab: index + 1,
@@ -1063,6 +1162,7 @@ export const gridStore = createStore<GridState>((set, get) => {
         filters: [],
         filterAnchor: null,
         colWidths: copyWidths.size > 0 ? copyWidths : null,
+        freeze: copyFreeze,
         sumPick: null,
         dirty: true,
       })
@@ -1284,6 +1384,7 @@ export const gridStore = createStore<GridState>((set, get) => {
           align: undefined,
           bg: undefined,
           fg: undefined,
+          fmt: undefined,
         },
         'style-clear',
       )
@@ -1521,6 +1622,22 @@ export const gridStore = createStore<GridState>((set, get) => {
       else next.set(col, clamped)
       set({ colWidths: next.size > 0 ? next : null })
     },
+
+    setFreeze: (rows, cols) => {
+      const st = get()
+      const clamped = {
+        rows: Math.max(0, Math.min(Math.round(rows), Math.max(st.sheet.rows - 1, 0))),
+        cols: Math.max(0, Math.min(Math.round(cols), Math.max(st.sheet.cols - 1, 0))),
+      }
+      if (clamped.rows === st.freeze.rows && clamped.cols === st.freeze.cols) return
+      set({ freeze: clamped })
+    },
+
+    // ── вставка/удаление строк и колонок (novagrid-045) ─────────────────
+    insertRows: (at, n = 1) => runLayoutShift('row', at, Math.max(1, n)),
+    deleteRows: (at, n = 1) => runLayoutShift('row', at, -Math.max(1, n)),
+    insertCols: (at, n = 1) => runLayoutShift('col', at, Math.max(1, n)),
+    deleteCols: (at, n = 1) => runLayoutShift('col', at, -Math.max(1, n)),
 
     startSumPick: () => {
       if (get().edit) get().commitEdit('none')

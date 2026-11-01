@@ -43,7 +43,6 @@ const en: RuDict = {
   sheet: 'Sheet 1',
   addSheetLabel: 'Add sheet',
   sheetsEmpty: '.xlsx/.xls/.ods/.csv files open here',
-  statusPhase: 'v1.0',
   num: (n: number) => n.toLocaleString('en-US'),
   localeTag: 'en-US',
 
@@ -97,6 +96,23 @@ const en: RuDict = {
   ctxCopyCell: 'Copy cell',
   ctxCopyRow: 'Copy row',
   copiedToast: 'Copied',
+
+  // freeze panes (novagrid-044), like Excel "Freeze Panes"
+  freezeAt: 'Freeze panes (above and left of the active cell)',
+  freezeFirstRow: 'Freeze first row',
+  freezeFirstCol: 'Freeze first column',
+  freezeNone: 'Unfreeze panes',
+  freezeColsTo: (col: string) => `Freeze columns up to ${col}`,
+  freezeRowsTo: (row: number) => `Freeze rows up to ${row.toLocaleString('en-US')}`,
+
+  // insert/delete rows and columns (novagrid-045)
+  rowMenuLabel: (row: number) => `Row ${row.toLocaleString('en-US')} menu`,
+  insertRowAbove: 'Insert row above',
+  insertRowBelow: 'Insert row below',
+  deleteRows: (n: number) => `Delete row${n > 1 ? 's' : ''}`,
+  insertColLeft: 'Insert column left',
+  insertColRight: 'Insert column right',
+  deleteCols: (n: number) => `Delete column${n > 1 ? 's' : ''}`,
 
   columnMenuLabel: (col: string) => `Column ${col} menu`,
   sortGroupLabel: 'Sort',
@@ -240,6 +256,14 @@ const en: RuDict = {
   formatNoFill: 'No fill',
   formatCustomColor: 'Custom color…',
   formatClear: 'Clear formatting',
+  formatAlignLeft: 'Align left',
+  formatAlignCenter: 'Align center',
+  formatAlignRight: 'Align right',
+  formatNumberLabel: 'Number format',
+  formatNumGeneral: 'General',
+  formatNumNumber: 'Number',
+  formatNumMoney: 'Currency ₽',
+  formatNumPercent: 'Percent',
 
   helpTitle: 'NovaGrid Help',
   helpTabFunctions: 'Functions',

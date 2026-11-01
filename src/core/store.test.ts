@@ -861,3 +861,99 @@ describe('store: форматирование ячеек (novagrid-039)', () => 
     expect(getStyle(s().sheet, 0, 0)).toEqual({ fg: 'C00000' })
   })
 })
+
+describe('store: закрепление областей (novagrid-044)', () => {
+  it('setFreeze держит закреп по вкладкам и сбрасывается новой книгой', () => {
+    s().setFreeze(2, 1)
+    expect(s().freeze).toEqual({ rows: 2, cols: 1 })
+    s().addTab()
+    expect(s().freeze).toEqual({ rows: 0, cols: 0 })
+    s().activateTab(0)
+    expect(s().freeze).toEqual({ rows: 2, cols: 1 })
+    s().newBook()
+    expect(s().freeze).toEqual({ rows: 0, cols: 0 })
+  })
+
+  it('setFreeze клампится к границам листа и игнорирует пустые изменения', () => {
+    s().setFreeze(999, 0)
+    expect(s().freeze.rows).toBeLessThan(100)
+    const before = s().freeze
+    s().setFreeze(before.rows, before.cols)
+    expect(s().freeze).toBe(before)
+  })
+})
+
+describe('store: вставка/удаление строк и колонок (novagrid-045)', () => {
+  beforeEach(() => {
+    s().newBook()
+    // столбец с шапкой, данными и формулой, ссылающейся на строку ниже
+    s().clickCell(0, 0)
+    s().beginEdit('Сумма')
+    s().commitEdit('none')
+    s().goTo(1, 0)
+    s().beginEdit('10')
+    s().commitEdit('none')
+    s().goTo(2, 0)
+    s().beginEdit('=A2*2')
+    s().commitEdit('none')
+  })
+
+  it('вставка строки опускает данные и сдвигает ссылки, Ctrl+Z откатывает', () => {
+    s().insertRows(1, 1)
+    expect(getCell(s().sheet, 1, 0)).toBe('')
+    expect(getCell(s().sheet, 2, 0)).toBe('10')
+    expect(getCell(s().sheet, 3, 0)).toBe('=A3*2')
+    expect(s().dirty).toBe(true)
+    s().undo()
+    expect(getCell(s().sheet, 1, 0)).toBe('10')
+    expect(getCell(s().sheet, 2, 0)).toBe('=A2*2')
+  })
+
+  it('удаление строки: формулы на удалённую строку дают #REF!, откат работает', () => {
+    s().deleteRows(1, 1)
+    expect(getCell(s().sheet, 1, 0)).toBe('=#REF!*2')
+    s().undo()
+    expect(getCell(s().sheet, 1, 0)).toBe('10')
+    expect(getCell(s().sheet, 2, 0)).toBe('=A2*2')
+  })
+
+  it('вставка колонки сдвигает ширины и закрепление, откат возвращает данные', () => {
+    s().setColWidth(1, 200)
+    s().setFreeze(0, 1)
+    s().insertCols(0, 1)
+    // данные уехали вправо, ссылка формулы тоже
+    expect(getCell(s().sheet, 0, 1)).toBe('Сумма')
+    expect(getCell(s().sheet, 1, 1)).toBe('10')
+    expect(getCell(s().sheet, 2, 1)).toBe('=B2*2')
+    // ширина и закреп (вставка внутри зоны закрепа) едут вместе с колонками
+    expect(s().colWidths?.get(2)).toBe(200)
+    expect(s().freeze.cols).toBe(2)
+    s().undo()
+    expect(getCell(s().sheet, 1, 0)).toBe('10')
+    expect(getCell(s().sheet, 2, 0)).toBe('=A2*2')
+    // ширины и закреп — настройки вида: откат листа их не двигает обратно
+    expect(s().colWidths?.get(2)).toBe(200)
+    expect(s().freeze.cols).toBe(2)
+  })
+
+  it('удаление колонки с фильтром снимает фильтр этой колонки', () => {
+    s().goTo(1, 0)
+    s().filterByValue(0, '10')
+    expect(s().filters.length).toBe(1)
+    s().deleteCols(0, 1)
+    expect(s().filters).toEqual([])
+    // откат возвращает данные; фильтры — настройка вида, историей не ходят
+    s().undo()
+    expect(getCell(s().sheet, 1, 0)).toBe('10')
+  })
+
+  it('стили переезжают при вставке строки и возвращаются откатом', () => {
+    s().clickCell(1, 0)
+    s().applyStyle({ bg: 'FFEE00' })
+    expect(getStyle(s().sheet, 1, 0)?.bg).toBe('FFEE00')
+    s().insertRows(1, 1)
+    expect(getStyle(s().sheet, 2, 0)?.bg).toBe('FFEE00')
+    s().undo()
+    expect(getStyle(s().sheet, 1, 0)?.bg).toBe('FFEE00')
+  })
+})

@@ -39,8 +39,8 @@ import {
   cellAtPoint,
   cellRect,
   colLayoutOf,
+  freezeRowLayout,
   METRICS,
-  rowLayoutOf,
   scrollIntoView,
   totalSize,
   zoomOf,
@@ -50,6 +50,7 @@ import {
 import { zoomStore } from './zoom'
 import { drawGrid, themeFromCSS, type GridTheme, type VisibleRegion } from './renderer'
 import { installTestHook } from './testHook'
+import { RowMenu } from '../ui/RowMenu'
 
 type DragMode = 'select' | 'alt' | 'point' | 'colresize' | 'rowselect' | 'colselect' | null
 
@@ -79,6 +80,12 @@ interface ColMenuState {
   x: number
   y: number
   col: number
+}
+
+interface RowMenuState {
+  x: number
+  y: number
+  row: number
 }
 
 const LONG_PRESS_MS = 500
@@ -113,10 +120,13 @@ export function GridCanvas() {
   const [altLabel, setAltLabel] = useState<AltLabel | null>(null)
   const [ctxMenu, setCtxMenu] = useState<CtxMenuState | null>(null)
   const [colMenu, setColMenu] = useState<ColMenuState | null>(null)
+  const [rowMenu, setRowMenu] = useState<RowMenuState | null>(null)
 
   const edit = useStore(gridStore, (s) => s.edit)
   const sheet = useStore(gridStore, (s) => s.sheet)
   const zoom = useStore(zoomStore, (s) => s.zoom)
+  // закрепление областей (novagrid-044): унифицированная раскладка строк
+  const freeze = useStore(gridStore, (s) => s.freeze)
   // правка ячейки (не из строки формул) с «=» — подсказки функций (4.4)
   const cellEdit = edit !== null && edit.source !== 'bar' ? edit : null
   const assistApply = (next: { value: string; caret: number }) => {
@@ -130,22 +140,24 @@ export function GridCanvas() {
   const cols = useStore(gridStore, (s) => s.sheet.cols)
   const colWidths = useStore(gridStore, (s) => s.colWidths)
 
-  // ── раскладка строк (фильтры) ─────────────────────────────────────────
+  // ── раскладка строк (фильтры + закрепление, novagrid-044) ─────────────
   // sheet и filters иммутабельны по ссылке — кэш пересчитывается только
   // при их смене, кадр скролла платит O(1)
   const layoutRef = useRef<{
     sheet: SheetModel
     filters: readonly ColumnFilter[]
+    freezeRows: number
     layout: RowLayout
   } | null>(null)
-  const layoutFor = (sh: SheetModel, fl: readonly ColumnFilter[]): RowLayout => {
+  const layoutFor = (sh: SheetModel, fl: readonly ColumnFilter[], freezeRows: number): RowLayout => {
+    const fr = Math.min(freezeRows, sh.rows)
     const cur = layoutRef.current
-    if (cur && cur.sheet === sh && cur.filters === fl) return cur.layout
-    const layout = rowLayoutOf(sh.rows, visibleRowsOf(sh, fl))
-    layoutRef.current = { sheet: sh, filters: fl, layout }
+    if (cur && cur.sheet === sh && cur.filters === fl && cur.freezeRows === fr) return cur.layout
+    const layout = freezeRowLayout(sh.rows, visibleRowsOf(sh, fl), fr)
+    layoutRef.current = { sheet: sh, filters: fl, freezeRows: fr, layout }
     return layout
   }
-  const layout = layoutFor(sheet, filters)
+  const layout = layoutFor(sheet, filters, freeze.rows)
 
   // ── раскладка колонок (переменные ширины, novagrid-020) ───────────────
   // cache key включает METRICS.colW — он меняется вместе с зумом
@@ -187,7 +199,7 @@ export function GridCanvas() {
     }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     const state = gridStore.getState()
-    const lay = layoutFor(state.sheet, state.filters)
+    const lay = layoutFor(state.sheet, state.filters, state.freeze.rows)
     const colLay = colsLayoutFor(state.sheet.cols, state.colWidths)
     const hit = state.search.hits[state.search.index]
     // подсветка ссылок редактируемой формулы (novagrid-041): прямоугольники
@@ -212,6 +224,8 @@ export function GridCanvas() {
       sheet: state.sheet,
       layout: lay,
       cols: colLay,
+      frozen: { rows: Math.min(state.freeze.rows, state.sheet.rows), cols: Math.min(state.freeze.cols, state.sheet.cols) },
+      locale: t.localeTag,
       selection: state.selection,
       edit: state.edit,
       altRange: state.altRange,
@@ -238,7 +252,7 @@ export function GridCanvas() {
     if (!spacer) return
     const st = gridStore.getState()
     const size = totalSize(
-      layoutFor(st.sheet, st.filters).count,
+      layoutFor(st.sheet, st.filters, st.freeze.rows).count,
       st.sheet.cols,
       undefined,
       colsLayoutFor(st.sheet.cols, st.colWidths),
@@ -322,7 +336,7 @@ export function GridCanvas() {
     const el = scrollRef.current
     if (!el) return
     const st = gridStore.getState()
-    const lay = layoutFor(st.sheet, st.filters)
+    const lay = layoutFor(st.sheet, st.filters, st.freeze.rows)
     const i = lay.indexOf(row)
     if (i < 0) return // ячейка скрыта фильтром
     const target = scrollIntoView(
@@ -334,6 +348,10 @@ export function GridCanvas() {
       el.clientHeight,
       undefined,
       colsLayoutFor(st.sheet.cols, st.colWidths),
+      {
+        rows: Math.min(st.freeze.rows, st.sheet.rows),
+        cols: Math.min(st.freeze.cols, st.sheet.cols),
+      },
     )
     if (target.scrollX !== el.scrollLeft) el.scrollLeft = target.scrollX
     if (target.scrollY !== el.scrollTop) el.scrollTop = target.scrollY
@@ -350,7 +368,7 @@ export function GridCanvas() {
     const editState = gridStore.getState().edit
     if (!input || !el || !editState) return
     const st = gridStore.getState()
-    const lay = layoutFor(st.sheet, st.filters)
+    const lay = layoutFor(st.sheet, st.filters, st.freeze.rows)
     const i = Math.max(0, lay.indexOf(editState.row))
     const r = cellRect(
       i,
@@ -359,6 +377,10 @@ export function GridCanvas() {
       el.scrollTop,
       undefined,
       colsLayoutFor(st.sheet.cols, st.colWidths),
+      {
+        rows: Math.min(st.freeze.rows, st.sheet.rows),
+        cols: Math.min(st.freeze.cols, st.sheet.cols),
+      },
     )
     input.style.left = `${r.x - 1}px`
     input.style.top = `${r.y - 1}px`
@@ -374,7 +396,7 @@ export function GridCanvas() {
       region: () => regionRef.current,
       layout: () => {
         const st = gridStore.getState()
-        return layoutFor(st.sheet, st.filters)
+        return layoutFor(st.sheet, st.filters, st.freeze.rows)
       },
       cols: () => {
         const st = gridStore.getState()
@@ -463,7 +485,7 @@ export function GridCanvas() {
     const el = scrollRef.current
     if (!el) return null
     const st = gridStore.getState()
-    const lay = layoutFor(st.sheet, st.filters)
+    const lay = layoutFor(st.sheet, st.filters, st.freeze.rows)
     if (lay.count === 0) return null
     const hit = cellAtPoint(
       x,
@@ -472,6 +494,10 @@ export function GridCanvas() {
       el.scrollTop,
       undefined,
       colsLayoutFor(st.sheet.cols, st.colWidths),
+      {
+        rows: Math.min(st.freeze.rows, st.sheet.rows),
+        cols: Math.min(st.freeze.cols, st.sheet.cols),
+      },
     )
     if (!hit) return null
     const visualRow = Math.min(hit.row, lay.count - 1)
@@ -493,7 +519,10 @@ export function GridCanvas() {
     if (!el) return null
     const st = gridStore.getState()
     const colLay = colsLayoutFor(st.sheet.cols, st.colWidths)
-    const contentX = x - METRICS.rowHeaderW + el.scrollLeft
+    const fc = Math.min(st.freeze.cols, st.sheet.cols)
+    const fx = fc > 0 ? colLay.x0(fc) : 0
+    // закреплённые колонки не прокручиваются — scrollX только правее закрепа
+    const contentX = x - METRICS.rowHeaderW + (x - METRICS.rowHeaderW < fx ? 0 : el.scrollLeft)
     const c = colLay.colAt(contentX)
     if (c < 0) return null
     const left = colLay.x0(c)
@@ -520,8 +549,12 @@ export function GridCanvas() {
   const autoScrollDuringDrag = (x: number, y: number) => {
     const el = scrollRef.current
     if (!el) return
+    const st = gridStore.getState()
+    const fy = Math.min(st.freeze.rows, st.sheet.rows) * METRICS.rowH
     const zone = METRICS.rowH * 2
-    if (y < METRICS.headerH + zone) el.scrollTop -= METRICS.rowH
+    // автопрокрутка — у краёв прокручиваемой области (над закрепом данных нет)
+    const nearTop = y < METRICS.headerH + zone || (y >= METRICS.headerH + fy && y < METRICS.headerH + fy + zone)
+    if (nearTop) el.scrollTop -= METRICS.rowH
     else if (y > el.clientHeight - zone) el.scrollTop += METRICS.rowH
     if (x < METRICS.rowHeaderW + METRICS.colW) el.scrollLeft -= METRICS.colW
     else if (x > el.clientWidth - METRICS.colW) el.scrollLeft += METRICS.colW
@@ -539,7 +572,7 @@ export function GridCanvas() {
     if (!el) return
     const st = gridStore.getState()
     const size = totalSize(
-      layoutFor(st.sheet, st.filters).count,
+      layoutFor(st.sheet, st.filters, st.freeze.rows).count,
       st.sheet.cols,
       undefined,
       colsLayoutFor(st.sheet.cols, st.colWidths),
@@ -561,8 +594,9 @@ export function GridCanvas() {
   const startLongPress = (
     clientX: number,
     clientY: number,
-    kind: 'cell' | 'colHeader',
+    kind: 'cell' | 'colHeader' | 'rowHeader',
     col = 0,
+    row = 0,
   ) => {
     clearLongPress()
     lpOriginRef.current = { x: clientX, y: clientY }
@@ -572,6 +606,9 @@ export function GridCanvas() {
       dragModeRef.current = null // меню важнее недотянутого выделения
       if (kind === 'colHeader') {
         setColMenu({ col, x: clientX, y: clientY })
+        ctxGuardRef.current = { x: clientX, y: clientY, t: performance.now() }
+      } else if (kind === 'rowHeader') {
+        setRowMenu({ row, x: clientX, y: clientY })
         ctxGuardRef.current = { x: clientX, y: clientY, t: performance.now() }
       } else {
         openCtxAt(clientX, clientY)
@@ -587,6 +624,12 @@ export function GridCanvas() {
     ctxGuardRef.current = { x: clientX, y: clientY, t: performance.now() }
     if (hit.kind === 'colHeader') {
       setColMenu({ col: hit.col, x: clientX, y: clientY })
+      return
+    }
+    // ПКМ по номеру строки — меню строки: вставка/удаление, закрепление
+    // (novagrid-045/044); раньше правый клик по номеру ничего не делал
+    if (hit.kind === 'rowHeader') {
+      setRowMenu({ row: hit.row, x: clientX, y: clientY })
       return
     }
     if (hit.kind !== 'cell') return
@@ -628,11 +671,15 @@ export function GridCanvas() {
         if (mainRef.current) mainRef.current.style.cursor = 'col-resize'
         return
       }
-      // зона кнопки меню в правой части заголовка (▾ / воронка) — Ф3.7
+      // зона кнопки меню в правой части заголовка (▾ / воронка) — Ф3.7;
+      // закреплённая колонка не прокручивается — scrollX только правее закрепа
       const scrollEl = scrollRef.current
       const scrollX = scrollEl?.scrollLeft ?? 0
       const colLay = colsLayoutFor(st.sheet.cols, st.colWidths)
-      const headerRight = METRICS.rowHeaderW + colLay.x0(hit.col) + colLay.width(hit.col) - scrollX
+      const fcHeader = Math.min(st.freeze.cols, st.sheet.cols)
+      const scrollOfs = hit.col < fcHeader ? 0 : scrollX
+      const headerRight =
+        METRICS.rowHeaderW + colLay.x0(hit.col) + colLay.width(hit.col) - scrollOfs
       if (x > headerRight - 26) {
         setColMenu({ col: hit.col, x: e.clientX, y: e.clientY })
         return
@@ -657,6 +704,7 @@ export function GridCanvas() {
         mainRef.current?.setPointerCapture(e.pointerId)
         dragModeRef.current = 'rowselect'
       }
+      if (isTouch) startLongPress(e.clientX, e.clientY, 'rowHeader', 0, hit.row)
       return
     }
 
@@ -919,17 +967,21 @@ export function GridCanvas() {
           const main = mainRef.current
           const el = scrollRef.current
           if (main && el) {
-            const lay = layoutFor(st.sheet, st.filters)
-            const i = lay.indexOf(active.row)
-            if (i >= 0) {
-              const r = cellRect(
-                i,
-                active.col,
-                el.scrollLeft,
-                el.scrollTop,
-                undefined,
-                colsLayoutFor(st.sheet.cols, st.colWidths),
-              )
+          const lay = layoutFor(st.sheet, st.filters, st.freeze.rows)
+          const i = lay.indexOf(active.row)
+          if (i >= 0) {
+            const r = cellRect(
+              i,
+              active.col,
+              el.scrollLeft,
+              el.scrollTop,
+              undefined,
+              colsLayoutFor(st.sheet.cols, st.colWidths),
+              {
+                rows: Math.min(st.freeze.rows, st.sheet.rows),
+                cols: Math.min(st.freeze.cols, st.sheet.cols),
+              },
+            )
               const rect = main.getBoundingClientRect()
               setCtxMenu({
                 row: active.row,
@@ -1110,6 +1162,7 @@ export function GridCanvas() {
   const editorStyle = (() => {
     const el = scrollRef.current
     if (!edit || !el) return undefined
+    const st = gridStore.getState()
     const i = Math.max(0, layout.indexOf(edit.row))
     const r = cellRect(
       i,
@@ -1118,6 +1171,10 @@ export function GridCanvas() {
       el.scrollTop,
       undefined,
       colsLayoutFor(cols, colWidths),
+      {
+        rows: Math.min(st.freeze.rows, st.sheet.rows),
+        cols: Math.min(st.freeze.cols, st.sheet.cols),
+      },
     )
     return { left: r.x - 1, top: r.y - 1, width: r.w + 1, height: r.h + 1 }
   })()
@@ -1211,6 +1268,19 @@ export function GridCanvas() {
           onClose={() => {
             mainRef.current?.focus({ preventScroll: true })
             setColMenu(null)
+            requestAnimationFrame(() => mainRef.current?.focus({ preventScroll: true }))
+          }}
+        />
+      )}
+      {rowMenu && (
+        <RowMenu
+          key={rowMenu.row}
+          row={rowMenu.row}
+          x={rowMenu.x}
+          y={rowMenu.y}
+          onClose={() => {
+            mainRef.current?.focus({ preventScroll: true })
+            setRowMenu(null)
             requestAnimationFrame(() => mainRef.current?.focus({ preventScroll: true }))
           }}
         />

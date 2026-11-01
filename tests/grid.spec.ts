@@ -29,6 +29,10 @@ function nv(page: Page) {
     resetDrawStats: () => page.evaluate(() => window.__nv!.resetDrawStats()),
     scrollTo: (x: number, y: number) =>
       page.evaluate(({ x, y }) => window.__nv!.scrollTo(x, y), { x, y }),
+    freeze: () => page.evaluate(() => window.__nv!.freeze()),
+    cellCenter: (row: number, col: number) =>
+      page.evaluate(({ row, col }) => window.__nv!.cellCenter(row, col), { row, col }),
+    cellMetrics: () => page.evaluate(() => window.__nv!.cellMetrics()),
     editor: () => page.evaluate(() => window.__nv!.editor()),
   }
 }
@@ -680,5 +684,123 @@ test.describe('протяжка выделения от шапки (novagrid-038
     await page.mouse.move(d.colHeader.x, d.colHeader.y, { steps: 5 })
     await page.mouse.up()
     expect(await api.ranges()).toEqual(['B1:D100'])
+  })
+})
+
+test.describe('закрепление областей (novagrid-044)', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/?test=1')
+    await nv(page).ready()
+  })
+
+  test('«Закрепить области» до B2: шапка стоит при прокрутке, клик честный, «Снять» возвращает', async ({
+    page,
+  }) => {
+    const api = nv(page)
+
+    // закреп выше и левее активной B2: первая строка и колонка A
+    await clickCell(page, 1, 1, { button: 'right' })
+    await page
+      .getByRole('menuitem', { name: 'Закрепить области (выше и левее активной ячейки)' })
+      .click()
+    expect(await api.freeze()).toEqual({ rows: 1, cols: 1 })
+
+    // закреплённая A1 не едет при прокрутке и остаётся в отрисовке
+    const a1 = await api.cellCenter(0, 0)
+    await api.scrollTo(0, 2000)
+    expect((await api.cellCenter(0, 0)).y).toBe(a1.y)
+    // кадр по rAF: прокручиваемая область уехала (firstRow > закрепа),
+    // а закреплённая A1 осталась на месте и кликабельна
+    await page.waitForTimeout(100)
+    expect((await api.visible())?.firstRow).toBeGreaterThan(1)
+
+    // клик в экранную точку закрепа выбирает A1, а не прокрученную ячейку
+    await page.mouse.click(a1.x, a1.y)
+    expect(await api.activeRef()).toBe('A1')
+
+    // снятие: тот же экранный клик теперь попадает в прокрученные данные
+    await page.mouse.click(a1.x, a1.y, { button: 'right' })
+    await page.getByRole('menuitem', { name: 'Снять закрепление' }).click()
+    expect(await api.freeze()).toEqual({ rows: 0, cols: 0 })
+    await page.mouse.click(a1.x, a1.y)
+    expect(await api.activeRef()).not.toBe('A1')
+  })
+
+  test('клавиатура не теряет закреп: стрелки из глубины листа доходят до шапки', async ({
+    page,
+  }) => {
+    const api = nv(page)
+    await clickCell(page, 1, 1, { button: 'right' })
+    await page
+      .getByRole('menuitem', { name: 'Закрепить области (выше и левее активной ячейки)' })
+      .click()
+    expect(await api.freeze()).toEqual({ rows: 1, cols: 1 })
+
+    // из глубины листа стрелки доводят выделение до закрепа; закреп видим всегда
+    await clickCell(page, 2, 2)
+    for (let i = 0; i < 80; i++) await page.keyboard.press('ArrowDown')
+    expect(await api.activeRef()).toBe('C83')
+    for (let i = 0; i < 90; i++) await page.keyboard.press('ArrowUp')
+    expect(await api.activeRef()).toBe('C1')
+    // закреплённая строка 1 на экране: центр C1 внутри канваса, у второй строки ниже
+    const box = await page.locator('.grid-area').boundingBox()
+    const c1 = await api.cellCenter(0, 2)
+    const c2 = await api.cellCenter(1, 2)
+    expect(c1.y).toBeGreaterThan(box!.y)
+    expect(c2.y).toBeGreaterThan(c1.y)
+  })
+})
+
+test.describe('вставка/удаление строк и колонок (novagrid-045)', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/?test=1')
+    await nv(page).ready()
+  })
+
+  /** ПКМ по номеру строки row (центр шапки строки, как headerPoints выше). */
+  async function rightClickRowHeader(page: Page, row: number) {
+    const api = nv(page)
+    const box = await page.locator('.grid-area').boundingBox()
+    const m = await api.cellMetrics()
+    const cell = await api.cellCenter(row, 0)
+    await page.mouse.click(box!.x + m.rowHeaderW / 2, cell.y, { button: 'right' })
+  }
+
+  test('ПКМ по шапке строки: вставить выше, Ctrl+Z откатывает, удалить строку', async ({
+    page,
+  }) => {
+    const api = nv(page)
+    expect(await api.cell(2, 0)).toBe('Петров')
+
+    await rightClickRowHeader(page, 2)
+    await page.getByRole('menuitem', { name: 'Вставить строку выше' }).click()
+    expect(await api.cell(2, 0)).toBe('')
+    expect(await api.cell(3, 0)).toBe('Петров')
+
+    await page.keyboard.press('Control+z')
+    expect(await api.cell(2, 0)).toBe('Петров')
+    expect(await api.cell(3, 0)).toBe('Сидоров')
+
+    // грид дедуплицирует ПКМ в одной точке короче 400 мс (Android long-press):
+    // ждём, чтобы второй вызов меню строки не был съеден guard-ом
+    await page.waitForTimeout(450)
+
+    await rightClickRowHeader(page, 2)
+    await page.getByRole('menuitem', { name: 'Удалить строку' }).click()
+    expect(await api.cell(2, 0)).toBe('Сидоров')
+  })
+
+  test('ПКМ по шапке колонки: вставить слева, формулы едут с данными, Ctrl+Z возвращает', async ({
+    page,
+  }) => {
+    const api = nv(page)
+
+    await clickCell(page, -1, 2, { button: 'right' })
+    await page.getByRole('menuitem', { name: 'Вставить колонку слева' }).click()
+    expect(await api.cell(1, 3)).toBe('10000') // C уехала в D
+    expect(await api.cell(1, 2)).toBe('')
+
+    await page.keyboard.press('Control+z')
+    expect(await api.cell(1, 2)).toBe('10000')
   })
 })

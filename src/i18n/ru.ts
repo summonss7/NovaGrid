@@ -25,7 +25,6 @@ export const ru = {
   sheet: 'Лист 1',
   addSheetLabel: 'Добавить лист',
   sheetsEmpty: 'Файлы .xlsx/.xls/.ods/.csv откроются здесь',
-  statusPhase: 'v1.0',
   /** число в текущей локали словаря (Этап 6.3) */
   num: (n: number) => n.toLocaleString('ru-RU'),
   /** BCP-47 тег локали словаря — печать чисел/дат (Этап 7.4) */
@@ -84,6 +83,23 @@ export const ru = {
   ctxCopyCell: 'Копировать ячейку',
   ctxCopyRow: 'Копировать строку',
   copiedToast: 'Скопировано',
+
+  // закрепление областей (novagrid-044): как «Закрепить области» в Excel
+  freezeAt: 'Закрепить области (выше и левее активной ячейки)',
+  freezeFirstRow: 'Закрепить первую строку',
+  freezeFirstCol: 'Закрепить первый столбец',
+  freezeNone: 'Снять закрепление',
+  freezeColsTo: (col: string) => `Закрепить колонки до ${col} включительно`,
+  freezeRowsTo: (row: number) => `Закрепить строки до ${row.toLocaleString('ru-RU')} включительно`,
+
+  // вставка/удаление строк и колонок (novagrid-045)
+  rowMenuLabel: (row: number) => `Меню строки ${row.toLocaleString('ru-RU')}`,
+  insertRowAbove: 'Вставить строку выше',
+  insertRowBelow: 'Вставить строку ниже',
+  deleteRows: (n: number) => `Удалить строк${n > 1 ? 'и' : 'у'}`,
+  insertColLeft: 'Вставить колонку слева',
+  insertColRight: 'Вставить колонку справа',
+  deleteCols: (n: number) => `Удалить колонк${n > 1 ? 'и' : 'у'}`,
 
   // меню колонки (Ф3.7 + Ф8)
   columnMenuLabel: (col: string) => `Меню колонки ${col}`,
@@ -234,6 +250,16 @@ export const ru = {
   formatNoFill: 'Нет заливки',
   formatCustomColor: 'Свой цвет…',
   formatClear: 'Очистить формат',
+  /** выравнивание (novagrid-045): модель стиля align существовала и раньше */
+  formatAlignLeft: 'Выравнивание по левому краю',
+  formatAlignCenter: 'Выравнивание по центру',
+  formatAlignRight: 'Выравнивание по правому краю',
+  /** формат числа (novagrid-045): отображение значения ячейки */
+  formatNumberLabel: 'Формат числа',
+  formatNumGeneral: 'Общий',
+  formatNumNumber: 'Числовой',
+  formatNumMoney: 'Валютный ₽',
+  formatNumPercent: 'Процентный',
 
   // справочник «?» (4.5)
   helpTitle: 'Справка NovaGrid',

@@ -1,4 +1,14 @@
-import { ClipboardPaste, Copy, Eraser, Filter, FilterX, ListPlus, Scissors } from 'lucide-react'
+import {
+  ClipboardPaste,
+  Copy,
+  Eraser,
+  Filter,
+  FilterX,
+  ListPlus,
+  Pin,
+  PinOff,
+  Scissors,
+} from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useStore } from 'zustand'
 import { selectionText, rememberCopy } from '../core/copy'
@@ -26,6 +36,7 @@ export function ContextMenu(props: {
 }) {
   const t = useT()
   const filters = useStore(gridStore, (s) => s.filters)
+  const freeze = useStore(gridStore, (s) => s.freeze)
   const menuRef = useRef<HTMLDivElement>(null)
   const [pasteHint, setPasteHint] = useState(false)
   useMenuKeys(menuRef, props.onClose)
@@ -211,6 +222,49 @@ export function ContextMenu(props: {
             <span className="ctx-item-text">{t.ctxClearAll}</span>
           </button>
         )}
+        <div className="ctx-sep" aria-hidden />
+        {/* Закрепление областей (novagrid-044): как лента «Вид → Закрепить
+            области» в Excel — до активной ячейки, первая строка/колонка, снять */}
+        {(freeze.rows > 0 || freeze.cols > 0) && (
+          <button
+            type="button"
+            role="menuitem"
+            className="ctx-item"
+            onClick={act(() => gridStore.getState().setFreeze(0, 0))}
+          >
+            <PinOff size={14} strokeWidth={1.5} aria-hidden />
+            <span className="ctx-item-text">{t.freezeNone}</span>
+          </button>
+        )}
+        {(props.row > 0 || props.col > 0) && (
+          <button
+            type="button"
+            role="menuitem"
+            className="ctx-item"
+            onClick={act(() => gridStore.getState().setFreeze(props.row, props.col))}
+          >
+            <Pin size={14} strokeWidth={1.5} aria-hidden />
+            <span className="ctx-item-text">{t.freezeAt}</span>
+          </button>
+        )}
+        <button
+          type="button"
+          role="menuitem"
+          className="ctx-item"
+          onClick={act(() => gridStore.getState().setFreeze(1, freeze.cols))}
+        >
+          <Pin size={14} strokeWidth={1.5} aria-hidden />
+          <span className="ctx-item-text">{t.freezeFirstRow}</span>
+        </button>
+        <button
+          type="button"
+          role="menuitem"
+          className="ctx-item"
+          onClick={act(() => gridStore.getState().setFreeze(freeze.rows, 1))}
+        >
+          <Pin size={14} strokeWidth={1.5} aria-hidden />
+          <span className="ctx-item-text">{t.freezeFirstCol}</span>
+        </button>
         <div className="ctx-sep" aria-hidden />
         <button
           type="button"

@@ -10,11 +10,18 @@
  */
 
 import { normalize, type Range, type Selection } from '../core/selection'
-import { cellKey, type CellStyle, type SheetModel } from '../core/sheet'
+import { cellKey, formatCellDisplay, type CellStyle, type SheetModel } from '../core/sheet'
 import type { EditState } from '../core/store'
 import { cellError, cellIsFrozen, cellNumber, cellText } from '../formula/engine'
 import type { DepRect } from '../formula/parser'
-import { colName, type ColLayout, METRICS, type RowLayout, visibleRows } from './geometry'
+import {
+  colName,
+  type ColLayout,
+  type FreezeView,
+  METRICS,
+  type RowLayout,
+  visibleRows,
+} from './geometry'
 
 export interface GridTheme {
   ink: string
@@ -126,9 +133,14 @@ export interface DrawInput {
   scrollX: number
   scrollY: number
   sheet: SheetModel
+  /** унифицированная раскладка строк: 0..fr−1 — закреплённые (novagrid-044) */
   layout: RowLayout
   /** раскладка ширин колонок — переменные ширины после перетаскивания (novagrid-020) */
   cols: ColLayout
+  /** закреплённые строки/колонки (novagrid-044); отсутствие — как {0,0} */
+  frozen?: FreezeView
+  /** тег локали словаря — формат числа (novagrid-045) */
+  locale: string
   selection: Selection
   edit: EditState | null
   altRange: Range | null
@@ -147,6 +159,24 @@ export interface VisibleRegion {
   lastCol: number
 }
 
+/**
+ * Прямоугольная область отрисовки (novagrid-044): закреп дробит кадр на
+ * до четырёх прямоугольников (закреп×закреп, закреп×скролл, …); без закрепа
+ * область одна и код идентичен прежнему одному проходу.
+ */
+interface Region {
+  x: number
+  y: number
+  w: number
+  h: number
+  /** диапазон унифицированных визуальных строк (включительно) */
+  rowFrom: number
+  rowTo: number
+  /** диапазон колонок (включительно) */
+  colFrom: number
+  colTo: number
+}
+
 export function drawGrid(input: DrawInput): VisibleRegion {
   const t0 = performance.now()
   const {
@@ -158,6 +188,8 @@ export function drawGrid(input: DrawInput): VisibleRegion {
     sheet,
     layout,
     cols,
+    frozen,
+    locale,
     selection,
     edit,
     altRange,
@@ -168,18 +200,82 @@ export function drawGrid(input: DrawInput): VisibleRegion {
   } = input
   const m = METRICS
 
-  const rows = visibleRows(scrollY, height - m.headerH)
-  const colRange = cols.visible(width - m.rowHeaderW, scrollX)
-  const lastRow = Math.min(rows.last, layout.count - 1)
-  const lastCol = Math.min(colRange.last, sheet.cols - 1)
+  const fr = frozen?.rows ?? 0
+  const fc = frozen?.cols ?? 0
+  const fy = fr * m.rowH
+  const fx = fc > 0 ? cols.x0(fc) : 0
+  // закреп не шире листа
+  const frOk = Math.min(fr, layout.count)
+  const fcOk = Math.min(fc, cols.count)
 
-  // «пустое место» за границей листа (novagrid-035): сетка и заголовки
-  // рисуются до края окна — узкий лист не выглядит «закончившимся» на
-  // полпути (как в Excel, грид всегда заполняет окно). Колонки/строки
-  // заполнителя виртуальные: клики и навигация до них не доходят.
+  // y унифицированной строки: закреп стоит под шапкой, дальше — прокрутка
+  const rowY = (i: number) =>
+    i < frOk ? m.headerH + i * m.rowH : m.headerH + fy + (i - frOk) * m.rowH - scrollY
+  // x колонки: закреплённые не прокручиваются
+  const colX = (c: number) => m.rowHeaderW + cols.x0(c) - (c < fcOk ? 0 : scrollX)
+
+  const svRows = visibleRows(scrollY, height - m.headerH - fy)
+  const scrollRowFrom = Math.min(frOk + svRows.first, layout.count - 1)
+  const scrollRowTo = Math.min(frOk + svRows.last, layout.count - 1)
+  const svCols = cols.visible(width - m.rowHeaderW - fx, scrollX + fx)
+  const scrollColTo = Math.min(svCols.last, sheet.cols - 1)
+  const lastRow = scrollRowTo
+  const lastCol = scrollColTo
+
+  // области кадра: закреп×закреп, закреп×скролл, скролл×закреп, скролл×скролл
+  const regions: Region[] = []
+  if (frOk > 0 && fcOk > 0)
+    regions.push({
+      x: m.rowHeaderW,
+      y: m.headerH,
+      w: fx,
+      h: fy,
+      rowFrom: 0,
+      rowTo: frOk - 1,
+      colFrom: 0,
+      colTo: fcOk - 1,
+    })
+  if (frOk > 0)
+    regions.push({
+      x: m.rowHeaderW + fx,
+      y: m.headerH,
+      w: width - m.rowHeaderW - fx,
+      h: fy,
+      rowFrom: 0,
+      rowTo: frOk - 1,
+      colFrom: Math.max(svCols.first, fcOk),
+      colTo: scrollColTo,
+    })
+  if (fcOk > 0)
+    regions.push({
+      x: m.rowHeaderW,
+      y: m.headerH + fy,
+      w: fx,
+      h: height - m.headerH - fy,
+      rowFrom: scrollRowFrom,
+      rowTo: scrollRowTo,
+      colFrom: 0,
+      colTo: fcOk - 1,
+    })
+  regions.push({
+    x: m.rowHeaderW + fx,
+    y: m.headerH + fy,
+    w: width - m.rowHeaderW - fx,
+    h: height - m.headerH - fy,
+    rowFrom: frOk > 0 || fcOk > 0 ? scrollRowFrom : Math.min(svRows.first, layout.count - 1),
+    rowTo: scrollRowTo,
+    colFrom: Math.max(svCols.first, fcOk),
+    colTo: scrollColTo,
+  })
+
+  // «пустое место» за границей листа (novagrid-035) — только в прокручиваемой
+  // области: сетка и заголовки рисуются до края окна (как в Excel)
   const contentRight =
     m.rowHeaderW + (sheet.cols > 0 ? cols.x0(sheet.cols - 1) + cols.width(sheet.cols - 1) : 0)
-  const fillerCols = Math.max(0, Math.ceil((width - (contentRight - scrollX)) / m.colW))
+  const fillerCols = Math.max(
+    0,
+    Math.ceil((width - (contentRight - scrollX)) / m.colW),
+  )
   const contentBottom = m.headerH + layout.count * m.rowH
   const fillerRows = Math.max(0, Math.ceil((height - (contentBottom - scrollY)) / m.rowH))
 
@@ -188,214 +284,186 @@ export function drawGrid(input: DrawInput): VisibleRegion {
   ctx.fillStyle = theme.bg
   ctx.fillRect(0, 0, width, height)
 
-  // контент обрезается областью таблицы — прокручиваясь, уходит под шапки
-  ctx.beginPath()
-  ctx.rect(m.rowHeaderW, m.headerH, width - m.rowHeaderW, height - m.headerH)
-  ctx.clip()
+  for (const reg of regions) {
+    if (reg.w <= 0 || reg.h <= 0 || reg.rowFrom > reg.rowTo || reg.colFrom > reg.colTo) continue
+    ctx.save()
+    // контент обрезается областью — прокручиваясь, уходит под шапки и закреп
+    ctx.beginPath()
+    ctx.rect(reg.x, reg.y, reg.w, reg.h)
+    ctx.clip()
 
-  // ── заливки стилей из .xlsx (Этап 2): до сетки — линии остаются поверх ──
-  for (let i = rows.first; i <= lastRow; i++) {
-    const r = layout.rowAt(i)
-    const y = m.headerH + i * m.rowH - scrollY
-    if (y + m.rowH <= m.headerH || y >= height) continue
-    for (let c = colRange.first; c <= lastCol; c++) {
-      const bg = sheet.styles.get(cellKey(r, c))?.bg
-      if (!bg) continue
-      const x = m.rowHeaderW + cols.x0(c) - scrollX
-      const w = cols.width(c)
-      if (x + w <= m.rowHeaderW || x >= width) continue
-      ctx.fillStyle = `#${bg}`
-      ctx.fillRect(x, y, w, m.rowH)
-    }
-  }
-
-  // ── линии сетки ──
-  ctx.strokeStyle = theme.gridLine
-  ctx.lineWidth = 1
-  ctx.beginPath()
-  for (let i = rows.first; i <= lastRow + 1; i++) {
-    const y = m.headerH + i * m.rowH - scrollY + 0.5
-    ctx.moveTo(m.rowHeaderW, y)
-    ctx.lineTo(width, y)
-  }
-  for (let c = colRange.first; c <= lastCol + 1; c++) {
-    const x = m.rowHeaderW + cols.x0(c) - scrollX + 0.5
-    ctx.moveTo(x, m.headerH)
-    ctx.lineTo(x, height)
-  }
-  for (let k = 1; k <= fillerCols; k++) {
-    const x = contentRight - scrollX + k * m.colW + 0.5
-    if (x > width) break
-    ctx.moveTo(x, m.headerH)
-    ctx.lineTo(x, height)
-  }
-  for (let k = 1; k <= fillerRows; k++) {
-    const y = contentBottom - scrollY + k * m.rowH + 0.5
-    if (y > height) break
-    ctx.moveTo(m.rowHeaderW, y)
-    ctx.lineTo(width, y)
-  }
-  ctx.stroke()
-
-  // ── подсветка совпадений поиска (Ф2): мятный фон под текстом ──
-  if (search.hitSet.size > 0) {
-    ctx.fillStyle = theme.mintFill
-    for (let i = rows.first; i <= lastRow; i++) {
+    // ── заливки стилей: до сетки — линии остаются поверх ──
+    for (let i = reg.rowFrom; i <= reg.rowTo; i++) {
       const r = layout.rowAt(i)
-      const y = m.headerH + i * m.rowH - scrollY
-      if (y + m.rowH <= m.headerH || y >= height) continue
-      for (let c = colRange.first; c <= lastCol; c++) {
-        if (!search.hitSet.has(`${r}:${c}`)) continue
-        const x = m.rowHeaderW + cols.x0(c) - scrollX
+      const y = rowY(i)
+      if (y + m.rowH <= reg.y || y >= reg.y + reg.h) continue
+      for (let c = reg.colFrom; c <= reg.colTo; c++) {
+        const bg = sheet.styles.get(cellKey(r, c))?.bg
+        if (!bg) continue
+        const x = colX(c)
         const w = cols.width(c)
-        if (x + w <= m.rowHeaderW || x >= width) continue
-        ctx.fillRect(x + 1, y + 1, w - 2, m.rowH - 2)
+        if (x + w <= reg.x || x >= reg.x + reg.w) continue
+        ctx.fillStyle = `#${bg}`
+        ctx.fillRect(x, y, w, m.rowH)
       }
     }
-  }
 
-  // ── текст ячеек: формулы показывают вычисленное значение (Этап 4),
-  // ошибки — тёплым цветом, чужие формулы — с меткой «∛ не пересчитывается» ──
-  ctx.textBaseline = 'middle'
-  ctx.textAlign = 'left'
-  const pad = 6
-  for (let i = rows.first; i <= lastRow; i++) {
-    const r = layout.rowAt(i)
-    const cy = m.headerH + i * m.rowH - scrollY + m.rowH / 2
-    for (let c = colRange.first; c <= lastCol; c++) {
-      const raw = sheet.cells.get(cellKey(r, c))
-      if (raw === undefined) continue
-      // правка ячейки рисуется редактором; правка из строки формул — нет
-      if (edit && edit.row === r && edit.col === c && edit.source !== 'bar') continue
-      const x = m.rowHeaderW + cols.x0(c) - scrollX
-      const w = cols.width(c)
-      const style = sheet.styles.get(cellKey(r, c))
-      const isFormula = raw.startsWith('=') && raw.trim().length > 1
-      const text = isFormula ? cellText(sheet, r, c) : raw
-      if (text === '') continue
-      const numeric = cellNumber(sheet, r, c) !== null
-      const err = isFormula ? cellError(sheet, r, c) : null
-      const frozen = isFormula ? cellIsFrozen(sheet, r, c) : false
-      // шрифт собирается из стиля ячейки: гарнитура/размер/Ж/К (novagrid-039)
-      ctx.font = cellFontOf(style, theme)
-      ctx.fillStyle = style?.fg ? `#${style.fg}` : err ? theme.errInk : theme.ink
-      const shown = ellipsize(ctx, text, w - pad * 2)
-      const align = style?.align ?? (numeric ? 'right' : 'left')
-      let textX = x + pad
-      if (align === 'right') {
-        textX = x + w - pad
-        ctx.textAlign = 'right'
-      } else if (align === 'center') {
-        textX = x + w / 2
-        ctx.textAlign = 'center'
+    // ── линии сетки ──
+    ctx.strokeStyle = theme.gridLine
+    ctx.lineWidth = 1
+    ctx.beginPath()
+    for (let i = reg.rowFrom; i <= reg.rowTo + 1; i++) {
+      const y = rowY(i) + 0.5
+      if (y < reg.y || y > reg.y + reg.h) continue
+      ctx.moveTo(Math.max(reg.x, m.rowHeaderW), y)
+      ctx.lineTo(reg.x + reg.w, y)
+    }
+    for (let c = reg.colFrom; c <= reg.colTo + 1; c++) {
+      const x = colX(c) + 0.5
+      if (x < reg.x || x > reg.x + reg.w) continue
+      ctx.moveTo(x, Math.max(reg.y, m.headerH))
+      ctx.lineTo(x, reg.y + reg.h)
+    }
+    // заполнитель до края окна — только прокручиваемая область
+    if (reg.rowFrom >= frOk && reg.colFrom >= fcOk) {
+      for (let k = 1; k <= fillerCols; k++) {
+        const x = contentRight - scrollX + k * m.colW + 0.5
+        if (x > width) break
+        ctx.moveTo(x, Math.max(reg.y, m.headerH))
+        ctx.lineTo(x, reg.y + reg.h)
       }
-      ctx.fillText(shown, textX, cy)
-      if (align !== 'left') ctx.textAlign = 'left'
-      // подчёркивание (novagrid-039): линия шириной текста под базовой линией
-      if (style?.underline) {
-        const textW = ctx.measureText(shown).width
-        const lineX = align === 'right' ? textX - textW : align === 'center' ? textX - textW / 2 : textX
-        const py = Math.round(cy + cellPxOf(style, theme) * 0.42) + 0.5
-        ctx.fillRect(lineX, py, textW, 1)
+      for (let k = 1; k <= fillerRows; k++) {
+        const y = contentBottom - scrollY + k * m.rowH + 0.5
+        if (y > height) break
+        ctx.moveTo(Math.max(reg.x, m.rowHeaderW), y)
+        ctx.lineTo(reg.x + reg.w, y)
       }
-      // метка чужой формулы (∛) — маленький знак в правом верхнем углу
-      if (frozen) {
-        ctx.font = '10px ' + FALLBACK_FONT.slice(FALLBACK_FONT.indexOf('"'))
-        ctx.fillStyle = theme.inkSoft
-        ctx.fillText('∛', x + w - 10, m.headerH + i * m.rowH - scrollY + 9)
+    }
+    ctx.stroke()
+
+    // ── подсветка совпадений поиска (Ф2): мятный фон под текстом ──
+    if (search.hitSet.size > 0) {
+      ctx.fillStyle = theme.mintFill
+      for (let i = reg.rowFrom; i <= reg.rowTo; i++) {
+        const r = layout.rowAt(i)
+        const y = rowY(i)
+        if (y + m.rowH <= reg.y || y >= reg.y + reg.h) continue
+        for (let c = reg.colFrom; c <= reg.colTo; c++) {
+          if (!search.hitSet.has(`${r}:${c}`)) continue
+          const x = colX(c)
+          const w = cols.width(c)
+          if (x + w <= reg.x || x >= reg.x + reg.w) continue
+          ctx.fillRect(x + 1, y + 1, w - 2, m.rowH - 2)
+        }
+      }
+    }
+
+    // ── текст ячеек: формулы показывают вычисленное значение (Этап 4),
+    // ошибки — тёплым цветом, чужие формулы — с меткой «∛ не пересчитывается»
+    // формат числа (novagrid-045) применяется к отображению ──
+    ctx.textBaseline = 'middle'
+    ctx.textAlign = 'left'
+    const pad = 6
+    for (let i = reg.rowFrom; i <= reg.rowTo; i++) {
+      const r = layout.rowAt(i)
+      const y = rowY(i)
+      const cy = y + m.rowH / 2
+      if (y + m.rowH <= reg.y || y >= reg.y + reg.h) continue
+      for (let c = reg.colFrom; c <= reg.colTo; c++) {
+        const raw = sheet.cells.get(cellKey(r, c))
+        if (raw === undefined) continue
+        // правка ячейки рисуется редактором; правка из строки формул — нет
+        if (edit && edit.row === r && edit.col === c && edit.source !== 'bar') continue
+        const x = colX(c)
+        const w = cols.width(c)
+        const style = sheet.styles.get(cellKey(r, c))
+        const isFormula = raw.startsWith('=') && raw.trim().length > 1
+        const computed = isFormula ? cellText(sheet, r, c) : raw
+        const text = style?.fmt ? formatCellDisplay(computed, style.fmt, locale) : computed
+        if (text === '') continue
+        const numeric = cellNumber(sheet, r, c) !== null
+        const err = isFormula ? cellError(sheet, r, c) : null
+        const frozenCell = isFormula ? cellIsFrozen(sheet, r, c) : false
+        // шрифт собирается из стиля ячейки: гарнитура/размер/Ж/К (novagrid-039)
         ctx.font = cellFontOf(style, theme)
+        ctx.fillStyle = style?.fg ? `#${style.fg}` : err ? theme.errInk : theme.ink
+        const shown = ellipsize(ctx, text, w - pad * 2)
+        const align = style?.align ?? (numeric ? 'right' : 'left')
+        let textX = x + pad
+        if (align === 'right') {
+          textX = x + w - pad
+          ctx.textAlign = 'right'
+        } else if (align === 'center') {
+          textX = x + w / 2
+          ctx.textAlign = 'center'
+        }
+        ctx.fillText(shown, textX, cy)
+        if (align !== 'left') ctx.textAlign = 'left'
+        // подчёркивание (novagrid-039): линия шириной текста под базовой линией
+        if (style?.underline) {
+          const textW = ctx.measureText(shown).width
+          const lineX =
+            align === 'right' ? textX - textW : align === 'center' ? textX - textW / 2 : textX
+          const py = Math.round(cy + cellPxOf(style, theme) * 0.42) + 0.5
+          ctx.fillRect(lineX, py, textW, 1)
+        }
+        // метка чужой формулы (∛) — маленький знак в правом верхнем углу
+        if (frozenCell) {
+          ctx.font = '10px ' + FALLBACK_FONT.slice(FALLBACK_FONT.indexOf('"'))
+          ctx.fillStyle = theme.inkSoft
+          ctx.fillText('∛', x + w - 10, y + 9)
+          ctx.font = cellFontOf(style, theme)
+        }
       }
     }
-  }
-  ctx.font = theme.fontCell
+    ctx.font = theme.fontCell
 
-  // ── заливки и рамки выделения (Ф5: каждая область со своей рамкой) ──
-  for (const rg of selection.ranges) {
-    const n = normalize(rg)
-    paintRange(
-      ctx,
-      n.r1,
-      n.c1,
-      n.r2,
-      n.c2,
-      layout,
-      cols,
-      scrollX,
-      scrollY,
-      theme.limeFill,
-      theme.limeBorder,
-      width,
-      height,
-    )
-  }
-  // активная ячейка — толстая зелёная рамка поверх заливки
-  {
-    const { row, col } = selection.active
-    const i = layout.indexOf(row)
-    const x = m.rowHeaderW + cols.x0(col) - scrollX
-    const w = cols.width(col)
-    const y = m.headerH + i * m.rowH - scrollY
-    if (i >= 0 && x + w > m.rowHeaderW && y + m.rowH > m.headerH && x < width && y < height) {
-      ctx.strokeStyle = theme.greenBorder
-      ctx.lineWidth = 2
-      ctx.strokeRect(x + 1, y + 1, w - 2, m.rowH - 2)
+    // ── заливки и рамки выделения (Ф5: каждая область со своей рамкой) ──
+    for (const rg of selection.ranges) {
+      const n = normalize(rg)
+      paintRange(ctx, reg, n.r1, n.c1, n.r2, n.c2, layout, cols, rowY, colX, theme.limeFill, theme.limeBorder)
     }
-  }
-  // ссылки редактируемой формулы — цветные рамки с лёгкой заливкой поверх
-  // выделения (novagrid-041): видно, из каких ячеек формула берёт значения
-  if (editRefs && editRefs.length > 0) {
-    editRefs.forEach((d, k) => {
-      const color = EDIT_REF_COLORS[k % EDIT_REF_COLORS.length]
-      paintRange(
-        ctx,
-        d.r1,
-        d.c1,
-        d.r2,
-        d.c2,
-        layout,
-        cols,
-        scrollX,
-        scrollY,
-        withAlpha(color, 0.1),
-        color,
-        width,
-        height,
-      )
-    })
-  }
-  // Alt-лассо — оранжевая рамка быстрой суммы (Ф4)
-  if (altRange) {
-    const n = normalize(altRange)
-    paintRange(
-      ctx,
-      n.r1,
-      n.c1,
-      n.r2,
-      n.c2,
-      layout,
-      cols,
-      scrollX,
-      scrollY,
-      theme.altFill,
-      theme.altBorder,
-      width,
-      height,
-    )
-  }
-  // текущее совпадение поиска — оранжевая рамка поверх всего (Ф2)
-  if (search.currentKey) {
-    const csep = search.currentKey.indexOf(':')
-    const hitRow = Number(search.currentKey.slice(0, csep))
-    const hitCol = Number(search.currentKey.slice(csep + 1))
-    const i = layout.indexOf(hitRow)
-    const x = m.rowHeaderW + cols.x0(hitCol) - scrollX
-    const w = cols.width(hitCol)
-    const y = m.headerH + i * m.rowH - scrollY
-    if (i >= 0 && x + w > m.rowHeaderW && y + m.rowH > m.headerH && x < width && y < height) {
-      ctx.strokeStyle = theme.altBorder
-      ctx.lineWidth = 2
-      ctx.strokeRect(x + 1, y + 1, w - 2, m.rowH - 2)
+    // активная ячейка — толстая зелёная рамка поверх заливки
+    {
+      const { row, col } = selection.active
+      const i = layout.indexOf(row)
+      if (i >= reg.rowFrom && i <= reg.rowTo && col >= reg.colFrom && col <= reg.colTo) {
+        const x = colX(col)
+        const w = cols.width(col)
+        const y = rowY(i)
+        ctx.strokeStyle = theme.greenBorder
+        ctx.lineWidth = 2
+        ctx.strokeRect(x + 1, y + 1, w - 2, m.rowH - 2)
+      }
     }
+    // ссылки редактируемой формулы — цветные рамки с лёгкой заливкой поверх
+    if (editRefs && editRefs.length > 0) {
+      editRefs.forEach((d, k) => {
+        const color = EDIT_REF_COLORS[k % EDIT_REF_COLORS.length]
+        paintRange(ctx, reg, d.r1, d.c1, d.r2, d.c2, layout, cols, rowY, colX, withAlpha(color, 0.1), color)
+      })
+    }
+    // Alt-лассо — оранжевая рамка быстрой суммы (Ф4)
+    if (altRange) {
+      const n = normalize(altRange)
+      paintRange(ctx, reg, n.r1, n.c1, n.r2, n.c2, layout, cols, rowY, colX, theme.altFill, theme.altBorder)
+    }
+    // текущее совпадение поиска — оранжевая рамка поверх всего (Ф2)
+    if (search.currentKey) {
+      const csep = search.currentKey.indexOf(':')
+      const hitRow = Number(search.currentKey.slice(0, csep))
+      const hitCol = Number(search.currentKey.slice(csep + 1))
+      const i = layout.indexOf(hitRow)
+      if (i >= reg.rowFrom && i <= reg.rowTo && hitCol >= reg.colFrom && hitCol <= reg.colTo) {
+        const x = colX(hitCol)
+        const w = cols.width(hitCol)
+        const y = rowY(i)
+        ctx.strokeStyle = theme.altBorder
+        ctx.lineWidth = 2
+        ctx.strokeRect(x + 1, y + 1, w - 2, m.rowH - 2)
+      }
+    }
+    ctx.restore()
   }
   ctx.restore()
 
@@ -404,11 +472,13 @@ export function drawGrid(input: DrawInput): VisibleRegion {
     ctx,
     width,
     height,
-    scrollX,
-    scrollY,
-    colRange.first,
+    colX,
+    rowY,
+    frOk,
+    fcOk,
+    fcOk > 0 ? 0 : regions[regions.length - 1].colFrom,
     lastCol,
-    rows.first,
+    frOk > 0 ? 0 : regions[regions.length - 1].rowFrom,
     lastRow,
     layout,
     cols,
@@ -424,38 +494,48 @@ export function drawGrid(input: DrawInput): VisibleRegion {
   drawStats.frames++
   drawStats.totalMs += ms
   drawStats.lastMs = ms
-  return { firstRow: rows.first, lastRow, firstCol: colRange.first, lastCol }
+  return {
+    firstRow: regions[regions.length - 1].rowFrom,
+    lastRow,
+    firstCol: regions[regions.length - 1].colFrom,
+    lastCol,
+  }
 }
 
+/** Край диапазона модели в визуальных индексах (скрытые фильтром — мимо). */
 function paintRange(
   ctx: CanvasRenderingContext2D,
+  reg: Region,
   r1: number,
   c1: number,
   r2: number,
   c2: number,
   layout: RowLayout,
   cols: ColLayout,
-  scrollX: number,
-  scrollY: number,
+  rowY: (i: number) => number,
+  colX: (c: number) => number,
   fill: string,
   border: string,
-  width: number,
-  height: number,
 ): void {
   // края диапазона могут попасть на скрытые строки — тогда берём ближайшие
   // видимые внутри диапазона; в визуальных индексах блок всегда сплошной
-  // (скрытые строки не занимают места), как выглядит выделение в Excel
-  const m = METRICS
   const i1 = layout.indexOf(r1)
   const i2 = layout.indexOf(r2)
   if (i1 < 0 && i2 < 0) return
   const from = i1 >= 0 ? i1 : Math.max(0, firstVisibleFrom(layout, r1, r2))
   const to = i2 >= 0 ? i2 : lastVisibleTill(layout, r1, r2)
-  const x = m.rowHeaderW + cols.x0(c1) - scrollX
-  const w = cols.x0(c2) + cols.width(c2) - cols.x0(c1)
-  const y = m.headerH + from * m.rowH - scrollY
-  const h = (to - from + 1) * m.rowH
-  if (x + w <= m.rowHeaderW || y + h <= m.headerH || x >= width || y >= height) return
+  // диапазон режется областью кадра (закреп рисуется своей областью)
+  const vi1 = Math.max(from, reg.rowFrom)
+  const vi2 = Math.min(to, reg.rowTo)
+  const cc1 = Math.max(c1, reg.colFrom)
+  const cc2 = Math.min(c2, reg.colTo)
+  if (vi1 > vi2 || cc1 > cc2) return
+  const m = METRICS
+  const x = colX(cc1)
+  const w = colX(cc2) + cols.width(cc2) - x
+  const y = rowY(vi1)
+  const h = rowY(vi2) + m.rowH - y
+  if (x + w <= reg.x || y + h <= reg.y || x >= reg.x + reg.w || y >= reg.y + reg.h) return
   ctx.fillStyle = fill
   ctx.fillRect(x, y, w, h)
   ctx.strokeStyle = border
@@ -501,8 +581,10 @@ function drawHeaders(
   ctx: CanvasRenderingContext2D,
   width: number,
   height: number,
-  scrollX: number,
-  scrollY: number,
+  colX: (c: number) => number,
+  rowY: (i: number) => number,
+  fr: number,
+  fc: number,
   firstCol: number,
   lastCol: number,
   firstRow: number,
@@ -518,6 +600,8 @@ function drawHeaders(
 ): void {
   const m = METRICS
   const selected = selection.ranges.map(normalize)
+  const fy = fr * m.rowH
+  const fx = fc > 0 ? cols.x0(fc) : 0
 
   // полоса заголовков колонок + заголовок строк + уголок — surface
   ctx.fillStyle = theme.surface
@@ -536,9 +620,10 @@ function drawHeaders(
   ctx.font = theme.fontHeader
   ctx.textBaseline = 'middle'
 
-  // буквы колонок + кнопка меню (▾ / воронка при фильтре)
+  // буквы колонок + кнопка меню (▾ / воронка при фильтре); при закрепе
+  // (novagrid-044) колонки от 0 — закреплённые всегда в кадре
   for (let c = firstCol; c <= lastCol; c++) {
-    const x = m.rowHeaderW + cols.x0(c) - scrollX
+    const x = colX(c)
     const w = cols.width(c)
     if (x + w <= m.rowHeaderW || x >= width) continue
     const isSel = selected.some((n) => c >= n.c1 && c <= n.c2)
@@ -559,8 +644,7 @@ function drawHeaders(
   // буквы виртуальных колонок заполнителя (novagrid-035): без меню-кнопки —
   // колонки ненастоящие, только продолжение сетки до края окна
   if (fillerCols > 0 && cols.count > 0) {
-    const right =
-      m.rowHeaderW + cols.x0(cols.count - 1) + cols.width(cols.count - 1) - scrollX
+    const right = colX(cols.count - 1) + cols.width(cols.count - 1)
     ctx.fillStyle = theme.inkSoft
     ctx.textAlign = 'center'
     for (let k = 0; k < fillerCols; k++) {
@@ -570,11 +654,12 @@ function drawHeaders(
     }
   }
 
-  // номера строк (модельные — скрытые не сдвигают нумерацию)
+  // номера строк (модельные — скрытые не сдвигают нумерацию); при закрепе
+  // строки от 0 — закреплённые всегда в кадре (novagrid-044)
   ctx.textAlign = 'center'
   for (let i = firstRow; i <= lastRow; i++) {
     const r = layout.rowAt(i)
-    const y = m.headerH + i * m.rowH - scrollY
+    const y = rowY(i)
     if (y + m.rowH <= m.headerH || y >= height) continue
     const isSel = selected.some((n) => r >= n.r1 && r <= n.r2)
     if (isSel) {
@@ -590,10 +675,26 @@ function drawHeaders(
   if (fillerRows > 0 && fillerRowsNumbered) {
     ctx.fillStyle = theme.inkSoft
     for (let k = 0; k < fillerRows; k++) {
-      const y = m.headerH + (layout.count + k) * m.rowH - scrollY
+      const y = rowY(layout.count + k)
       if (y >= height) break
       ctx.fillText(String(layout.count + k + 1), m.rowHeaderW / 2, y + m.rowH / 2)
     }
+  }
+
+  // линии закрепления (novagrid-044): заметнее сетки, как в Excel
+  if (fr > 0 || fc > 0) {
+    ctx.strokeStyle = theme.inkSoft
+    ctx.lineWidth = 1
+    ctx.beginPath()
+    if (fr > 0) {
+      ctx.moveTo(0, m.headerH + fy + 0.5)
+      ctx.lineTo(width, m.headerH + fy + 0.5)
+    }
+    if (fc > 0) {
+      ctx.moveTo(m.rowHeaderW + fx + 0.5, 0)
+      ctx.lineTo(m.rowHeaderW + fx + 0.5, height)
+    }
+    ctx.stroke()
   }
 }
 

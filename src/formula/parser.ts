@@ -502,6 +502,93 @@ export function shiftFormulaRefs(src: string, dr: number, dc: number): string {
   return out
 }
 
+/* ── вставка/удаление строк и колонок (novagrid-045) ──────────────────── */
+
+const REF_ERR = '#REF!'
+
+/**
+ * Перестройка A1-ссылок при вставке/удалении строк/колонок (novagrid-045),
+ * как в Excel: ссылки на то, что ниже/правее места вставки, сдвигаются;
+ * ссылки на удалённые строки/колонки становятся #REF! (диапазон, задевший
+ * удалённую зону, — целиком #REF!). В отличие от сдвига при копировании
+ * двигаются и абсолютные ($A$5) — Excel подстраивает их тоже. Строки в
+ * кавычках не трогаются, сканирование как у shiftFormulaRefs.
+ *
+ * axis 'row': at — номер строки (0-based), delta > 0 — вставка delta строк
+ * перед ней, delta < 0 — удаление −delta строк начиная с неё. Для 'col'
+ * аналогично с колонками.
+ */
+export function remapRefsOnShift(
+  src: string,
+  axis: 'row' | 'col',
+  at: number,
+  delta: number,
+): string {
+  if (!src.startsWith('=') || delta === 0) return src
+  const removed = delta < 0 ? -delta : 0
+  /** null — координата попала в удалённую зону (#REF!). */
+  const map = (v: number): number | null => {
+    if (delta > 0) return v >= at ? v + delta : v
+    if (v >= at && v < at + removed) return null
+    return v >= at + removed ? v + delta : v
+  }
+  const n = src.length
+  let out = ''
+  let i = 0
+  const part = (absCol: boolean, col: number, absRow: boolean, row: number) =>
+    `${absCol ? '$' : ''}${colLetters(col)}${absRow ? '$' : ''}${row + 1}`
+  const refText = (
+    absCol1: boolean, col1: number, absRow1: boolean, row1: number,
+    col2: number | null, row2: number | null,
+    absCol2: boolean | null, absRow2: boolean | null,
+  ): string => {
+    const c1 = axis === 'col' ? map(col1) : col1
+    const r1 = axis === 'row' ? map(row1) : row1
+    if (c1 === null || r1 === null) return REF_ERR
+    let text = part(absCol1, c1, absRow1, r1)
+    if (col2 !== null && row2 !== null && absCol2 !== null && absRow2 !== null) {
+      const c2 = axis === 'col' ? map(col2) : col2
+      const r2 = axis === 'row' ? map(row2) : row2
+      if (c2 === null || r2 === null) return REF_ERR
+      text += `:${part(absCol2, c2, absRow2, r2)}`
+    }
+    return text
+  }
+  while (i < n) {
+    const ch = src[i]
+    if (ch === '"') {
+      let j = i + 1
+      while (j < n) {
+        if (src[j] === '"') {
+          if (src[j + 1] === '"') {
+            j += 2
+            continue
+          }
+          j++
+          break
+        }
+        j++
+      }
+      out += src.slice(i, j)
+      i = j
+      continue
+    }
+    const leftOk = i === 0 || !SHIFT_NAME_CHAR.test(src[i - 1])
+    const ref = leftOk && /[A-Za-z$]/.test(ch) ? refAt(src.slice(i)) : null
+    if (ref && !SHIFT_NAME_CHAR.test(src[i + ref.len] ?? '') && src[i + ref.len] !== '(') {
+      out += refText(
+        ref.absCol1, ref.col1, ref.absRow1, ref.row1,
+        ref.col2, ref.row2, ref.absCol2, ref.absRow2,
+      )
+      i += ref.len
+      continue
+    }
+    out += ch
+    i++
+  }
+  return out
+}
+
 /* ── подсветка ссылок при правке формулы (novagrid-041) ──────────────── */
 
 /** Колонки целиком «A:A» / «$A:$B» — от первой строки до края контента. */
