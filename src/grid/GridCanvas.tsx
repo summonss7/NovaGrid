@@ -24,6 +24,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useStore } from 'zustand'
 import { visibleRowsOf, type ColumnFilter } from '../core/filter'
+import { mergeAt } from '../core/merges'
 import { normalize, inSelection } from '../core/selection'
 import { gridStore, rangeMetrics } from '../core/store'
 import { SPACE_COLS, SPACE_ROWS, type SheetModel } from '../core/sheet'
@@ -331,30 +332,28 @@ export function GridCanvas() {
 
   /** Прокрутить ячейку в поле зрения: навигация — активную, Shift-растяжение — движущийся конец.
    *  Вьюпорт — клиентская область скролл-контейнера: классические скроллбары
-   *  (novagrid-027) занимают место, и упущенные 12px прятали ячейку под полосой. */
+   *  (novagrid-027) занимают место, и упущенные 12px прятали ячейку под полосой.
+   *  Объединённая ячейка тащит в кадр и свой дальний край (novagrid-047). */
   const ensureCellVisible = (row: number, col: number) => {
     const el = scrollRef.current
     if (!el) return
     const st = gridStore.getState()
     const lay = layoutFor(st.sheet, st.filters, st.freeze.rows)
+    const colLay = colsLayoutFor(st.sheet.cols, st.colWidths)
+    const fz = {
+      rows: Math.min(st.freeze.rows, st.sheet.rows),
+      cols: Math.min(st.freeze.cols, st.sheet.cols),
+    }
+    const apply = (vr: number, c: number) => {
+      if (vr < 0) return // строка скрыта фильтром
+      const target = scrollIntoView(vr, c, el.scrollLeft, el.scrollTop, el.clientWidth, el.clientHeight, undefined, colLay, fz)
+      if (target.scrollX !== el.scrollLeft) el.scrollLeft = target.scrollX
+      if (target.scrollY !== el.scrollTop) el.scrollTop = target.scrollY
+    }
     const i = lay.indexOf(row)
-    if (i < 0) return // ячейка скрыта фильтром
-    const target = scrollIntoView(
-      i,
-      col,
-      el.scrollLeft,
-      el.scrollTop,
-      el.clientWidth,
-      el.clientHeight,
-      undefined,
-      colsLayoutFor(st.sheet.cols, st.colWidths),
-      {
-        rows: Math.min(st.freeze.rows, st.sheet.rows),
-        cols: Math.min(st.freeze.cols, st.sheet.cols),
-      },
-    )
-    if (target.scrollX !== el.scrollLeft) el.scrollLeft = target.scrollX
-    if (target.scrollY !== el.scrollTop) el.scrollTop = target.scrollY
+    apply(i, col)
+    const m = mergeAt(st.sheet, row, col)
+    if (m && (m.r2 !== row || m.c2 !== col)) apply(lay.indexOf(m.r2), m.c2)
   }
 
   const ensureActiveVisible = () => {
@@ -362,26 +361,41 @@ export function GridCanvas() {
     ensureCellVisible(active.row, active.col)
   }
 
+  /** Прямоугольник ячейки; объединённая тянется на всю свою площадь (novagrid-047). */
+  const cellRectMerged = (row: number, col: number) => {
+    const el = scrollRef.current
+    const base = { x: 0, y: 0, w: 0, h: 0 }
+    if (!el) return base
+    const st = gridStore.getState()
+    const lay = layoutFor(st.sheet, st.filters, st.freeze.rows)
+    const colLay = colsLayoutFor(st.sheet.cols, st.colWidths)
+    const fz = {
+      rows: Math.min(st.freeze.rows, st.sheet.rows),
+      cols: Math.min(st.freeze.cols, st.sheet.cols),
+    }
+    const i = Math.max(0, lay.indexOf(row))
+    const r = cellRect(i, col, el.scrollLeft, el.scrollTop, undefined, colLay, fz)
+    const m = mergeAt(st.sheet, row, col)
+    if (!m) return r
+    const right = cellRect(i, m.c2, el.scrollLeft, el.scrollTop, undefined, colLay, fz)
+    let bottom = r.y + r.h
+    for (let rr = m.r2; rr > m.r1; rr--) {
+      const ir = lay.indexOf(rr)
+      if (ir >= 0) {
+        const cr = cellRect(ir, m.c2, el.scrollLeft, el.scrollTop, undefined, colLay, fz)
+        bottom = cr.y + cr.h
+        break
+      }
+    }
+    return { x: r.x, y: r.y, w: right.x + right.w - r.x, h: bottom - r.y }
+  }
+
   const positionEditor = () => {
     const input = editorRef.current
     const el = scrollRef.current
     const editState = gridStore.getState().edit
     if (!input || !el || !editState) return
-    const st = gridStore.getState()
-    const lay = layoutFor(st.sheet, st.filters, st.freeze.rows)
-    const i = Math.max(0, lay.indexOf(editState.row))
-    const r = cellRect(
-      i,
-      editState.col,
-      el.scrollLeft,
-      el.scrollTop,
-      undefined,
-      colsLayoutFor(st.sheet.cols, st.colWidths),
-      {
-        rows: Math.min(st.freeze.rows, st.sheet.rows),
-        cols: Math.min(st.freeze.cols, st.sheet.cols),
-      },
-    )
+    const r = cellRectMerged(editState.row, editState.col)
     input.style.left = `${r.x - 1}px`
     input.style.top = `${r.y - 1}px`
   }
@@ -1162,20 +1176,7 @@ export function GridCanvas() {
   const editorStyle = (() => {
     const el = scrollRef.current
     if (!edit || !el) return undefined
-    const st = gridStore.getState()
-    const i = Math.max(0, layout.indexOf(edit.row))
-    const r = cellRect(
-      i,
-      edit.col,
-      el.scrollLeft,
-      el.scrollTop,
-      undefined,
-      colsLayoutFor(cols, colWidths),
-      {
-        rows: Math.min(st.freeze.rows, st.sheet.rows),
-        cols: Math.min(st.freeze.cols, st.sheet.cols),
-      },
-    )
+    const r = cellRectMerged(edit.row, edit.col)
     return { left: r.x - 1, top: r.y - 1, width: r.w + 1, height: r.h + 1 }
   })()
 

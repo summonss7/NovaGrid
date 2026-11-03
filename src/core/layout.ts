@@ -7,6 +7,7 @@
  */
 
 import { remapRefsOnShift } from '../formula/parser'
+import { shiftMerges } from './merges'
 import { cellKey, MAX_COLS, MAX_ROWS, type SheetModel } from './sheet'
 
 /** Сдвиг листа по строкам: delta > 0 — вставка, delta < 0 — удаление −delta. */
@@ -28,6 +29,7 @@ export function shiftSheetRows(sheet: SheetModel, at: number, delta: number): Sh
     ...sheet,
     cells,
     styles,
+    merges: shiftMerges(sheet.merges, 'row', at, delta),
     formulaCache: undefined,
     rows: delta > 0 ? Math.min(MAX_ROWS, sheet.rows + delta) : sheet.rows,
     maxRow: delta > 0 ? Math.min(MAX_ROWS - 1, Math.max(-1, sheet.maxRow + delta)) : sheet.maxRow,
@@ -53,6 +55,7 @@ export function shiftSheetCols(sheet: SheetModel, at: number, delta: number): Sh
     ...sheet,
     cells,
     styles,
+    merges: shiftMerges(sheet.merges, 'col', at, delta),
     formulaCache: undefined,
     cols: delta > 0 ? Math.min(MAX_COLS, sheet.cols + delta) : sheet.cols,
     maxCol: delta > 0 ? Math.min(MAX_COLS - 1, Math.max(-1, sheet.maxCol + delta)) : sheet.maxCol,

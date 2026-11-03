@@ -8,10 +8,14 @@ import {
   Pin,
   PinOff,
   Scissors,
+  TableCellsMerge,
+  TableCellsSplit,
 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useStore } from 'zustand'
 import { selectionText, rememberCopy } from '../core/copy'
+import { mergeAt, mergeLosesData } from '../core/merges'
+import { normalize } from '../core/selection'
 import { colName } from '../grid/geometry'
 import { gridStore } from '../core/store'
 import { cellText } from '../formula/engine'
@@ -67,6 +71,28 @@ export function ContextMenu(props: {
   const act = (fn: () => void) => () => {
     fn()
     props.onClose()
+  }
+
+  // объединение ячеек (novagrid-047): одна область ≥2 ячеек; разъединение —
+  // когда выделение пересекается с существующим объединением
+  const selRange = st.selection.ranges.length === 1 ? normalize(st.selection.ranges[0]) : null
+  const canMerge = selRange !== null && (selRange.r1 !== selRange.r2 || selRange.c1 !== selRange.c2)
+  const canUnmerge =
+    (st.sheet.merges ?? []).some((m) =>
+      st.selection.ranges.some((rg) => {
+        const n = normalize(rg)
+        return m.r1 <= n.r2 && m.r2 >= n.r1 && m.c1 <= n.c2 && m.c2 >= n.c1
+      }),
+    ) || mergeAt(st.sheet, props.row, props.col) !== null
+  const mergeNow = () => {
+    const s2 = gridStore.getState()
+    if (s2.selection.ranges.length !== 1) return
+    if (
+      mergeLosesData(s2.sheet, normalize(s2.selection.ranges[0])) &&
+      !window.confirm(t.mergeLossWarning)
+    )
+      return
+    s2.mergeSelection()
   }
 
   const copyValue = async (text: string) => {
@@ -172,6 +198,28 @@ export function ContextMenu(props: {
           </button>
         </div>
         {pasteHint && <div className="ctx-note">{t.ctxPasteUnavailable}</div>}
+        <div className="ctx-sep" aria-hidden />
+        {/* Объединение ячеек выделенного блока (novagrid-047) */}
+        <button
+          type="button"
+          role="menuitem"
+          className="ctx-item"
+          disabled={!canMerge}
+          onClick={act(mergeNow)}
+        >
+          <TableCellsMerge size={14} strokeWidth={1.5} aria-hidden />
+          <span className="ctx-item-text">{t.ctxMerge}</span>
+        </button>
+        <button
+          type="button"
+          role="menuitem"
+          className="ctx-item"
+          disabled={!canUnmerge}
+          onClick={act(() => gridStore.getState().unmergeSelection())}
+        >
+          <TableCellsSplit size={14} strokeWidth={1.5} aria-hidden />
+          <span className="ctx-item-text">{t.ctxUnmerge}</span>
+        </button>
         <div className="ctx-sep" aria-hidden />
         <button
           type="button"

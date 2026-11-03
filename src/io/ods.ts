@@ -19,6 +19,7 @@
  */
 
 import JSZip from 'jszip'
+import type { MergeRect } from '../core/merges'
 import { MIN_COLS, MIN_ROWS, cellKey, type SheetModel } from '../core/sheet'
 import { sanitizeSheetName, uniqueTabName } from '../core/workbook'
 import type { SheetWire } from './excel'
@@ -161,6 +162,8 @@ interface SheetAcc {
   name: string
   cells: Map<string, string>
   formulaCache: Map<string, string>
+  /** объединённые ячейки (novagrid-047): master-ячейка с span-атрибутами */
+  merges: MergeRect[]
   maxRow: number
   maxCol: number
 }
@@ -213,6 +216,7 @@ function parseContent(xml: string): SheetAcc[] {
           name: attrs['table:name'] ?? '',
           cells: new Map<string, string>(),
           formulaCache: new Map<string, string>(),
+          merges: [],
           maxRow: -1,
           maxCol: -1,
         }
@@ -240,6 +244,22 @@ function parseContent(xml: string): SheetAcc[] {
     const selfClosed = m[3].trimEnd().endsWith('/')
     const repAttr = Number(attrs['table:number-columns-repeated'] ?? 1)
     const rep = Number.isFinite(repAttr) && repAttr > 0 ? Math.min(repAttr, MAX_REPEAT) : 1
+
+    // объединение ячеек (novagrid-047): master-ячейка несёт span-атрибуты;
+    // covered-ячейки в следующих строках — её продолжение
+    if (!covered) {
+      const spanR = Number(attrs['table:number-rows-spanned'] ?? 1)
+      const spanC = Number(attrs['table:number-columns-spanned'] ?? 1)
+      const rows = Number.isFinite(spanR) ? Math.max(1, Math.min(spanR, MAX_ROW - rowNow + 1)) : 1
+      const cols = Number.isFinite(spanC) ? Math.max(1, Math.min(spanC, MAX_COL - colNow + 1)) : 1
+      if (rows > 1 || cols > 1)
+        acc.merges.push({
+          r1: rowNow,
+          c1: colNow,
+          r2: rowNow + rows - 1,
+          c2: Math.min(colNow + cols - 1, MAX_COL),
+        })
+    }
 
     let value: string | undefined
     let formula: string | undefined
@@ -299,6 +319,7 @@ export async function odsToSheets(buffer: ArrayBuffer): Promise<SheetWire[]> {
       sheet: {
         cells: acc.cells,
         styles: new Map(),
+        ...(acc.merges.length > 0 ? { merges: acc.merges } : {}),
         ...(acc.formulaCache.size > 0 ? { formulaCache: acc.formulaCache } : {}),
         rows: Math.max(MIN_ROWS, acc.maxRow + 1),
         cols: Math.max(MIN_COLS, acc.maxCol + 1),

@@ -7,13 +7,15 @@
  *
  * Ограничения v1 (сознательные, см. CONCEPT Ф1/Этап 4): формулы чужих файлов
  * с неподдержанными функциями читаются кэшем значений («∛»); макросы .xlsm
- * не сохраняются; объединённые ячейки читаются как значение левой ячейки;
- * стили переносятся только для .xlsx; .ods читается значениями и формулами,
- * но не пишется (прямой записи .ods нет — «Сохранить как .xlsx/.csv»).
+ * не сохраняются; объединённые ячейки читаются в модель merges (novagrid-047,
+ * сохранение объединений в файл — novagrid-050); стили переносятся только
+ * для .xlsx; .ods читается значениями и формулами, но не пишется (прямой
+ * записи .ods нет — «Сохранить как .xlsx/.csv»).
  */
 
 import ExcelJS from 'exceljs'
 import * as XLSX from 'xlsx'
+import type { MergeRect } from '../core/merges'
 import {
   normalizeCellSize,
   parseNumber,
@@ -67,6 +69,43 @@ function argbToHex(color: { argb?: string } | undefined): string | undefined {
   if (!argb || !/^[0-9a-fA-F]{8}$/.test(argb)) return undefined
   const hex = argb.slice(2).toUpperCase()
   return hex === '000000' ? undefined : hex
+}
+
+/** «A1» (как в mergeCells .xlsx) → индексы с 0; null — неразборчивый адрес. */
+function a1ToRC(ref: string): { r: number; c: number } | null {
+  const m = /^\$?([A-Za-z]{1,3})\$?(\d{1,7})$/.exec(ref.trim())
+  if (!m) return null
+  let c = 0
+  for (const ch of m[1].toUpperCase()) c = c * 26 + (ch.charCodeAt(0) - 64)
+  const r = Number(m[2]) - 1
+  return c >= 1 && r >= 0 && c <= 16384 && r <= 1_048_575 ? { r, c: c - 1 } : null
+}
+
+/**
+ * mergeCells листа (novagrid-047): «A1:B2» → прямоугольники; скрытые ячейки
+ * объединений очищаются от значений — модель хранит только левый верхний.
+ */
+function mergesOf(ws: ExcelJS.Worksheet, cells: Map<string, string>): MergeRect[] {
+  const out: MergeRect[] = []
+  const refs = ws.model.merges ?? []
+  for (const ref of refs) {
+    const [a, b = a] = String(ref).split(':')
+    const p1 = a1ToRC(a)
+    const p2 = a1ToRC(b)
+    if (!p1 || !p2) continue
+    const rect = {
+      r1: Math.min(p1.r, p2.r),
+      c1: Math.min(p1.c, p2.c),
+      r2: Math.max(p1.r, p2.r),
+      c2: Math.max(p1.c, p2.c),
+    }
+    if (rect.r1 === rect.r2 && rect.c1 === rect.c2) continue
+    out.push(rect)
+    for (let r = rect.r1; r <= rect.r2; r++)
+      for (let c = rect.c1; c <= rect.c2; c++)
+        if (r !== rect.r1 || c !== rect.c1) cells.delete(cellKey(r, c))
+  }
+  return out
 }
 
 function cellStyleOf(cell: ExcelJS.Cell): CellStyle | undefined {
@@ -154,11 +193,13 @@ export async function xlsxToSheets(buffer: ArrayBuffer): Promise<SheetWire[]> {
         if (style && raw !== '') styles.set(key, style)
       })
     })
+    const merges = mergesOf(ws, cells)
     out.push({
       name,
       sheet: {
         cells,
         styles,
+        ...(merges.length > 0 ? { merges } : {}),
         ...(formulaCache ? { formulaCache } : {}),
         rows: Math.max(MIN_ROWS, maxRow + 1),
         cols: Math.max(MIN_COLS, maxCol + 1),
@@ -218,11 +259,28 @@ function sheetsFromSheetJs(wb: XLSX.WorkBook, raw: boolean): SheetWire[] {
         }
       }),
     )
+    // объединённые ячейки .xls (novagrid-047): SheetJS отдаёт их диапазонами
+    const merges: MergeRect[] = []
+    for (const mr of ws['!merges'] ?? []) {
+      if (!mr || typeof mr !== 'object') continue
+      const rect = {
+        r1: Math.min(mr.s.r, mr.e.r),
+        c1: Math.min(mr.s.c, mr.e.c),
+        r2: Math.max(mr.s.r, mr.e.r),
+        c2: Math.max(mr.s.c, mr.e.c),
+      }
+      if (rect.r1 === rect.r2 && rect.c1 === rect.c2) continue
+      merges.push(rect)
+      for (let r = rect.r1; r <= rect.r2; r++)
+        for (let c = rect.c1; c <= rect.c2; c++)
+          if (r !== rect.r1 || c !== rect.c1) cells.delete(cellKey(r, c))
+    }
     out.push({
       name,
       sheet: {
         cells,
         styles: new Map(),
+        ...(merges.length > 0 ? { merges } : {}),
         rows: Math.max(MIN_ROWS, maxRow + 1),
         cols: Math.max(MIN_COLS, maxCol + 1),
         maxRow,

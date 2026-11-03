@@ -7,10 +7,14 @@ import {
   Eraser,
   Italic,
   PaintBucket,
+  TableCellsMerge,
+  TableCellsSplit,
   Underline,
 } from 'lucide-react'
 import { useState } from 'react'
 import { useStore } from 'zustand'
+import { mergeLosesData } from '../core/merges'
+import { normalize } from '../core/selection'
 import { CELL_SIZE_MAX, CELL_SIZE_MIN, cellKey, type CellFormat } from '../core/sheet'
 import { gridStore } from '../core/store'
 import { useT } from '../i18n'
@@ -69,6 +73,32 @@ export function FormatBar() {
     gridStore.getState().applyStyle(
       fmt === 'general' ? { fmt: undefined } : { fmt: fmt as CellFormat },
     )
+
+  // объединение ячеек (novagrid-047): одна область выделения; при потере
+  // данных — предупреждение (как диалог Excel)
+  const canMerge = useStore(gridStore, (s) => {
+    if (s.selection.ranges.length !== 1) return false
+    const n = normalize(s.selection.ranges[0])
+    return n.r1 !== n.r2 || n.c1 !== n.c2
+  })
+  const canUnmerge = useStore(gridStore, (s) =>
+    (s.sheet.merges ?? []).some((m) =>
+      s.selection.ranges.some((rg) => {
+        const n = normalize(rg)
+        return m.r1 <= n.r2 && m.r2 >= n.r1 && m.c1 <= n.c2 && m.c2 >= n.c1
+      }),
+    ),
+  )
+  const mergeSelection = () => {
+    const st = gridStore.getState()
+    if (st.selection.ranges.length !== 1) return
+    if (
+      mergeLosesData(st.sheet, normalize(st.selection.ranges[0])) &&
+      !window.confirm(t.mergeLossWarning)
+    )
+      return
+    st.mergeSelection()
+  }
 
   const pickColor = (hex: string) => {
     gridStore.getState().applyStyle(palette === 'fg' ? { fg: hex } : { bg: hex })
@@ -190,6 +220,27 @@ export function FormatBar() {
         onClick={apply(() => setAlign('right'))}
       >
         <AlignRight size={15} strokeWidth={2} aria-hidden />
+      </button>
+
+      <button
+        type="button"
+        className="fmt-btn"
+        aria-label={t.formatMerge}
+        title={t.formatMerge}
+        disabled={!canMerge}
+        onClick={apply(mergeSelection)}
+      >
+        <TableCellsMerge size={15} strokeWidth={2} aria-hidden />
+      </button>
+      <button
+        type="button"
+        className="fmt-btn"
+        aria-label={t.formatUnmerge}
+        title={t.formatUnmerge}
+        disabled={!canUnmerge}
+        onClick={apply(() => gridStore.getState().unmergeSelection())}
+      >
+        <TableCellsSplit size={15} strokeWidth={2} aria-hidden />
       </button>
 
       <span className="fmt-sep" aria-hidden />

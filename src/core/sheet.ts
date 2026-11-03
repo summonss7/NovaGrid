@@ -5,6 +5,8 @@
  * листа (важно для стресс-режима 100k×30 и будущих больших файлов).
  */
 
+import type { Merges } from './merges'
+
 export type CellRaw = string
 
 /** Логические габариты нового листа (как чистый лист Excel). */
@@ -94,6 +96,11 @@ export interface SheetModel {
   /** стили только заполненных ячеек — тем же ключом (переносятся из .xlsx) */
   styles: Map<string, CellStyle>
   /**
+   * Объединённые ячейки (novagrid-047): список прямоугольников; значение и
+   * стиль живут в левой верхней ячейке. undefined — объединений нет.
+   */
+  merges?: Merges
+  /**
    * Кэш значений чужих формул из файла (Этап 4.6): то, что вычислил Excel.
    * Показывается с индикатором «∛ не пересчитывается», если нашу функцию
    * движок не знает; поддерживаемые формулы считаются заново и кэш не нужен.
@@ -132,6 +139,7 @@ export function withCell(sheet: SheetModel, row: number, col: number, value: Cel
   return {
     cells,
     styles: sheet.styles,
+    merges: sheet.merges,
     formulaCache: sheet.formulaCache,
     rows: Math.max(sheet.rows, row + 1),
     cols: Math.max(sheet.cols, col + 1),
@@ -169,6 +177,7 @@ export function withCellList(
   return {
     cells,
     styles: sheet.styles,
+    merges: sheet.merges,
     formulaCache: sheet.formulaCache,
     rows,
     cols,

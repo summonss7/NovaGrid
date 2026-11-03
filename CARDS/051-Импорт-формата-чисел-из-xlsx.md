@@ -2,7 +2,7 @@
 id: novagrid-051
 title: Импорт формата чисел из .xlsx
 status: todo
-priority: 8
+priority: 4
 speed: 8
 created: 2026-11-02
 updated: 2026-11-02
@@ -24,3 +24,4 @@ parent: novagrid-046
 - [ ] Юнит-тесты маппинга numFmt → fmt проходят; e2e не сломаны
 
 ## Журнал
+- 02.11.2026, 14:41:32: приоритет изменён Артёмом через Aila: 8 → 4 (0 — самый быстрый).

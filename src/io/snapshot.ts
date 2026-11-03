@@ -15,6 +15,7 @@
  * Заголовок (0–35) идёт в AAD: подделка любого байта ломает тег GCM.
  */
 
+import type { MergeRect } from '../core/merges'
 import type { CellStyle, SheetModel } from '../core/sheet'
 import type { SheetTab } from '../core/workbook'
 
@@ -36,6 +37,8 @@ interface SnapshotSheet {
   cells: Record<string, string>
   styles: Record<string, CellStyle>
   formulaCache?: Record<string, string>
+  /** объединённые ячейки (novagrid-047); отсутствие — объединений нет */
+  merges?: MergeRect[]
   rows: number
   cols: number
   maxRow: number
@@ -113,6 +116,9 @@ export function bookToSnapshot(
         if (tab.sheet.formulaCache && tab.sheet.formulaCache.size > 0) {
           s.formulaCache = mapToRecord(tab.sheet.formulaCache)
         }
+        if (tab.sheet.merges && tab.sheet.merges.length > 0) {
+          s.merges = tab.sheet.merges.map((m) => ({ ...m }))
+        }
         return s
       }),
     },
@@ -127,6 +133,7 @@ export function snapshotToBook(payload: SnapshotPayload): DecodedSnapshot['wire'
       sheet: {
         cells: recordToMap(s.cells),
         styles: recordToMap(s.styles),
+        ...(s.merges ? { merges: s.merges.map((m) => ({ ...m })) } : {}),
         ...(s.formulaCache ? { formulaCache: recordToMap(s.formulaCache) } : {}),
         rows: s.rows,
         cols: s.cols,

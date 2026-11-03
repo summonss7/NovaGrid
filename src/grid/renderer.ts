@@ -9,6 +9,7 @@
  * с фильтром рисуется воронка, у остальных — кнопка меню ▾.
  */
 
+import { type MergeRect, mergeAt } from '../core/merges'
 import { normalize, type Range, type Selection } from '../core/selection'
 import { cellKey, formatCellDisplay, type CellStyle, type SheetModel } from '../core/sheet'
 import type { EditState } from '../core/store'
@@ -341,6 +342,21 @@ export function drawGrid(input: DrawInput): VisibleRegion {
     }
     ctx.stroke()
 
+    // ── объединённые ячейки (novagrid-047): одна область — внутренние линии
+    // сетки стерты, фон левой верхней ячейки, рамка по периметру ──
+    if (sheet.merges && sheet.merges.length > 0) {
+      for (const mg of sheet.merges) {
+        const r = mergeAreaRect(mg, layout, reg, cols, rowY, colX)
+        if (!r) continue
+        const bg = sheet.styles.get(cellKey(mg.r1, mg.c1))?.bg
+        ctx.fillStyle = bg ? `#${bg}` : theme.bg
+        ctx.fillRect(r.x, r.y, r.w, r.h)
+        ctx.strokeStyle = theme.gridLine
+        ctx.lineWidth = 1
+        ctx.strokeRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1)
+      }
+    }
+
     // ── подсветка совпадений поиска (Ф2): мятный фон под текстом ──
     if (search.hitSet.size > 0) {
       ctx.fillStyle = theme.mintFill
@@ -353,7 +369,12 @@ export function drawGrid(input: DrawInput): VisibleRegion {
           const x = colX(c)
           const w = cols.width(c)
           if (x + w <= reg.x || x >= reg.x + reg.w) continue
-          ctx.fillRect(x + 1, y + 1, w - 2, m.rowH - 2)
+          // совпадение в объединённой ячейке красит её целиком; скрытые
+          // ячейки не совпадаются (пусты) — сюда не попадают
+          const mg = mergeAt(sheet, r, c)
+          const span = mg ? mergeSpan(mg, layout, cols, rowY, colX) : null
+          if (span) ctx.fillRect(span.x + 1, span.y + 1, span.w - 2, span.h - 2)
+          else ctx.fillRect(x + 1, y + 1, w - 2, m.rowH - 2)
         }
       }
     }
@@ -372,10 +393,23 @@ export function drawGrid(input: DrawInput): VisibleRegion {
       for (let c = reg.colFrom; c <= reg.colTo; c++) {
         const raw = sheet.cells.get(cellKey(r, c))
         if (raw === undefined) continue
+        // скрытые ячейки объединения не рисуются; текст левой верхней
+        // размещается по всей площади объединения (novagrid-047)
+        const mg = mergeAt(sheet, r, c)
+        if (mg && (r !== mg.r1 || c !== mg.c1)) continue
         // правка ячейки рисуется редактором; правка из строки формул — нет
         if (edit && edit.row === r && edit.col === c && edit.source !== 'bar') continue
-        const x = colX(c)
-        const w = cols.width(c)
+        let x = colX(c)
+        let w = cols.width(c)
+        let cellCy = cy
+        if (mg) {
+          const span = mergeSpan(mg, layout, cols, rowY, colX)
+          if (span) {
+            x = span.x
+            w = span.w
+            cellCy = span.y + span.h / 2
+          }
+        }
         const style = sheet.styles.get(cellKey(r, c))
         const isFormula = raw.startsWith('=') && raw.trim().length > 1
         const computed = isFormula ? cellText(sheet, r, c) : raw
@@ -397,14 +431,14 @@ export function drawGrid(input: DrawInput): VisibleRegion {
           textX = x + w / 2
           ctx.textAlign = 'center'
         }
-        ctx.fillText(shown, textX, cy)
+        ctx.fillText(shown, textX, cellCy)
         if (align !== 'left') ctx.textAlign = 'left'
         // подчёркивание (novagrid-039): линия шириной текста под базовой линией
         if (style?.underline) {
           const textW = ctx.measureText(shown).width
           const lineX =
             align === 'right' ? textX - textW : align === 'center' ? textX - textW / 2 : textX
-          const py = Math.round(cy + cellPxOf(style, theme) * 0.42) + 0.5
+          const py = Math.round(cellCy + cellPxOf(style, theme) * 0.42) + 0.5
           ctx.fillRect(lineX, py, textW, 1)
         }
         // метка чужой формулы (∛) — маленький знак в правом верхнем углу
@@ -423,17 +457,21 @@ export function drawGrid(input: DrawInput): VisibleRegion {
       const n = normalize(rg)
       paintRange(ctx, reg, n.r1, n.c1, n.r2, n.c2, layout, cols, rowY, colX, theme.limeFill, theme.limeBorder)
     }
-    // активная ячейка — толстая зелёная рамка поверх заливки
+    // активная ячейка — толстая зелёная рамка поверх заливки; объединённая
+    // активная обводится целиком (novagrid-047)
     {
       const { row, col } = selection.active
       const i = layout.indexOf(row)
       if (i >= reg.rowFrom && i <= reg.rowTo && col >= reg.colFrom && col <= reg.colTo) {
-        const x = colX(col)
-        const w = cols.width(col)
-        const y = rowY(i)
+        const mg = mergeAt(sheet, row, col)
+        const span = mg ? mergeSpan(mg, layout, cols, rowY, colX) : null
+        const x = span ? span.x : colX(col)
+        const w = span ? span.w : cols.width(col)
+        const y = span ? span.y : rowY(i)
+        const h = span ? span.h : m.rowH
         ctx.strokeStyle = theme.greenBorder
         ctx.lineWidth = 2
-        ctx.strokeRect(x + 1, y + 1, w - 2, m.rowH - 2)
+        ctx.strokeRect(x + 1, y + 1, w - 2, h - 2)
       }
     }
     // ссылки редактируемой формулы — цветные рамки с лёгкой заливкой поверх
@@ -448,19 +486,23 @@ export function drawGrid(input: DrawInput): VisibleRegion {
       const n = normalize(altRange)
       paintRange(ctx, reg, n.r1, n.c1, n.r2, n.c2, layout, cols, rowY, colX, theme.altFill, theme.altBorder)
     }
-    // текущее совпадение поиска — оранжевая рамка поверх всего (Ф2)
+    // текущее совпадение поиска — оранжевая рамка поверх всего (Ф2);
+    // совпадение в объединённой ячейке обводит её целиком (novagrid-047)
     if (search.currentKey) {
       const csep = search.currentKey.indexOf(':')
       const hitRow = Number(search.currentKey.slice(0, csep))
       const hitCol = Number(search.currentKey.slice(csep + 1))
       const i = layout.indexOf(hitRow)
       if (i >= reg.rowFrom && i <= reg.rowTo && hitCol >= reg.colFrom && hitCol <= reg.colTo) {
-        const x = colX(hitCol)
-        const w = cols.width(hitCol)
-        const y = rowY(i)
+        const mg = mergeAt(sheet, hitRow, hitCol)
+        const span = mg ? mergeSpan(mg, layout, cols, rowY, colX) : null
+        const x = span ? span.x : colX(hitCol)
+        const w = span ? span.w : cols.width(hitCol)
+        const y = span ? span.y : rowY(i)
+        const h = span ? span.h : m.rowH
         ctx.strokeStyle = theme.altBorder
         ctx.lineWidth = 2
-        ctx.strokeRect(x + 1, y + 1, w - 2, m.rowH - 2)
+        ctx.strokeRect(x + 1, y + 1, w - 2, h - 2)
       }
     }
     ctx.restore()
@@ -500,6 +542,55 @@ export function drawGrid(input: DrawInput): VisibleRegion {
     firstCol: regions[regions.length - 1].colFrom,
     lastCol,
   }
+}
+
+/** Габариты объединения в визуальных координатах; null — скрыто фильтром. */
+function mergeSpan(
+  mg: MergeRect,
+  layout: RowLayout,
+  cols: ColLayout,
+  rowY: (i: number) => number,
+  colX: (c: number) => number,
+): { x: number; y: number; w: number; h: number } | null {
+  const i1 = layout.indexOf(mg.r1)
+  if (i1 < 0) return null
+  const i2 = lastVisibleTill(layout, mg.r1, mg.r2)
+  if (i2 < i1) return null
+  const y = rowY(i1)
+  const x = colX(mg.c1)
+  return {
+    x,
+    y,
+    w: colX(mg.c2) + cols.width(mg.c2) - x,
+    h: rowY(i2) + METRICS.rowH - y,
+  }
+}
+
+/** Прямоугольник объединения, обрезанный областью кадра (novagrid-047). */
+function mergeAreaRect(
+  mg: MergeRect,
+  layout: RowLayout,
+  reg: Region,
+  cols: ColLayout,
+  rowY: (i: number) => number,
+  colX: (c: number) => number,
+): { x: number; y: number; w: number; h: number } | null {
+  const i1raw = layout.indexOf(mg.r1)
+  const i1 = i1raw >= 0 ? i1raw : firstVisibleFrom(layout, mg.r1, mg.r2)
+  const i2 = lastVisibleTill(layout, mg.r1, mg.r2)
+  if (i1 < 0 || i2 < i1) return null
+  const vi1 = Math.max(i1, reg.rowFrom)
+  const vi2 = Math.min(i2, reg.rowTo)
+  const cc1 = Math.max(mg.c1, reg.colFrom)
+  const cc2 = Math.min(mg.c2, reg.colTo)
+  if (vi1 > vi2 || cc1 > cc2) return null
+  const m = METRICS
+  const x = colX(cc1)
+  const w = colX(cc2) + cols.width(cc2) - x
+  const y = rowY(vi1)
+  const h = rowY(vi2) + m.rowH - y
+  if (x + w <= reg.x || y + h <= reg.y || x >= reg.x + reg.w || y >= reg.y + reg.h) return null
+  return { x, y, w, h }
 }
 
 /** Край диапазона модели в визуальных индексах (скрытые фильтром — мимо). */

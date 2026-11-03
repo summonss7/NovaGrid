@@ -36,7 +36,8 @@ test.describe('клавиатура везде (6.2)', () => {
     await expect(menu.locator('button').first()).toBeFocused()
     await expect(menu.locator('button').first()).toContainText('Вырезать')
 
-    // стрелками доходим до фильтра и применяем Enter'ом
+    // стрелками доходим до фильтра и применяем Enter'ом; недоступные пункты
+    // (объединение ячеек на одиночной ячейке, novagrid-047) навигация пропускает
     for (let i = 0; i < 4; i++) await page.keyboard.press('ArrowDown')
     const filterItem = menu.getByRole('menuitem', { name: 'Фильтровать: A = «Иванов»' })
     await expect(filterItem).toBeFocused()

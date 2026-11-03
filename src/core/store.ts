@@ -22,6 +22,12 @@ import {
 } from './filter'
 import { History, type CellChange, type HistoryEntry, type StyleChange } from './history'
 import {
+  applyMerge,
+  mergeAt,
+  resolveMergedMove,
+  type MergeRect,
+} from './merges'
+import {
   type NormRange,
   type Range,
   type Selection,
@@ -279,6 +285,13 @@ export interface GridState {
   toggleStyle: (prop: 'bold' | 'italic' | 'underline') => void
   /** Снять всё форматирование ячеек выделения (novagrid-039). */
   clearStyle: () => void
+  /**
+   * Объединить выделенный диапазон (novagrid-047): значение — в левом верхнем
+   * углу, остальные ячейки очищаются; предупреждение о потере данных — на UI.
+   */
+  mergeSelection: () => void
+  /** Снять объединения, пересекающиеся с выделением (novagrid-047). */
+  unmergeSelection: () => void
   /**
    * Вставка TSV из системного буфера (novagrid-025): блок пишется от активной
    * ячейки, границы листа растут, одна транзакция истории; выделение
@@ -545,11 +558,37 @@ function jumpTarget(
   }
 }
 
+/**
+ * Клик/переход на ячейку внутри объединения попадает на его левый верхний
+ * угол (novagrid-047) — скрытые ячейки не выбираются.
+ */
+function toMergeOrigin(sheet: SheetModel, row: number, col: number): { row: number; col: number } {
+  const m = mergeAt(sheet, row, col)
+  return m ? { row: m.r1, col: m.c1 } : { row, col }
+}
+
+/**
+ * Шаг навигации с объединениями и клампом границ листа: пропуск объединения
+ * целиком, у края листа — откат на его левый верхний угол.
+ */
+function resolveMoveClamped(
+  sheet: SheetModel,
+  row: number,
+  col: number,
+  dr: number,
+  dc: number,
+): { row: number; col: number } {
+  const res = resolveMergedMove(sheet, row, col, dr, dc)
+  const clamped = clampRef(res, sheet.rows, sheet.cols)
+  return clamped.row !== res.row || clamped.col !== res.col
+    ? toMergeOrigin(sheet, clamped.row, clamped.col)
+    : res
+}
+
 function applyChanges(
   sheet: SheetModel,
   changes: readonly CellChange[],
-  direction: 'before' | 'after',
-): SheetModel {
+  direction: 'before' | 'after',): SheetModel {
   // одним клоном Map на весь батч: цепочка withCell была O(n²) и замораживала
   // интерфейс на больших вставках/удалениях (novagrid-035)
   return withCellList(
@@ -1136,6 +1175,7 @@ export const gridStore = createStore<GridState>((set, get) => {
         sheet: {
           cells: new Map(src.sheet.cells),
           styles: new Map(src.sheet.styles),
+          ...(src.sheet.merges ? { merges: src.sheet.merges.map((m) => ({ ...m })) } : {}),
           formulaCache: src.sheet.formulaCache
             ? new Map(src.sheet.formulaCache)
             : undefined,
@@ -1201,6 +1241,10 @@ export const gridStore = createStore<GridState>((set, get) => {
       const { selection } = get()
       // клик во время правки фиксирует её (как в Excel), а не отбрасывает
       if (get().edit) get().commitEdit('none')
+      // клик по скрытой ячейке объединения выбирает его левый верхний угол
+      const org = toMergeOrigin(get().sheet, row, col)
+      row = org.row
+      col = org.col
       if (opts?.shift) {
         // расширение от якоря последней области
         const ranges = [...selection.ranges]
@@ -1289,15 +1333,28 @@ export const gridStore = createStore<GridState>((set, get) => {
       const target = opts?.jump
         ? jumpTarget(sheet, from.row, from.col, dr, dc)
         : clampRef({ row: from.row + dr, col: from.col + dc }, sheet.rows, sheet.cols)
-      // скрытые фильтром строки навигация пропускает — активная ячейка видима
+      // скрытые фильтром строки навигация пропускает — активная ячейка видима;
+      // объединения: шаг внутрь перепрыгивает объединение, заход сбоку — на угол
       const visible = visibleRowsOf(sheet, state.filters)
-      const row = visible ? nearestVisibleRow(visible, target.row, dr !== 0 ? dr : 1) : target.row
+      const snap = (r: number): number =>
+        visible ? nearestVisibleRow(visible, r, dr !== 0 ? dr : 1) : r
+      let row: number
+      let col: number
+      if (opts?.jump) {
+        const org = toMergeOrigin(sheet, snap(target.row), target.col)
+        row = org.row
+        col = org.col
+      } else {
+        const res = resolveMoveClamped(sheet, snap(target.row), target.col, dr, dc)
+        row = res.row
+        col = res.col
+      }
       if (opts?.extend) {
         const ranges = [...selection.ranges]
-        ranges[ranges.length - 1] = { ...last, tr: row, tc: target.col }
+        ranges[ranges.length - 1] = { ...last, tr: row, tc: col }
         set({ selection: { ...selection, ranges } })
       } else {
-        set({ selection: selectionOf(row, target.col) })
+        set({ selection: selectionOf(row, col) })
       }
     },
 
@@ -1308,12 +1365,14 @@ export const gridStore = createStore<GridState>((set, get) => {
     goTo: (row, col, opts) => {
       const { sheet, selection } = get()
       const target = clampRef({ row, col }, sheet.rows, sheet.cols)
+      // переход (поиск) на скрытую ячейку объединения — на его левый верхний угол
+      const org = opts?.extend ? target : toMergeOrigin(sheet, target.row, target.col)
       if (opts?.extend) {
         const ranges = [...selection.ranges]
         ranges[ranges.length - 1] = { ...ranges[ranges.length - 1], tr: target.row, tc: target.col }
         set({ selection: { ...selection, ranges } })
       } else {
-        set({ selection: selectionOf(target.row, target.col) })
+        set({ selection: selectionOf(org.row, org.col) })
       }
     },
 
@@ -1388,6 +1447,59 @@ export const gridStore = createStore<GridState>((set, get) => {
         },
         'style-clear',
       )
+    },
+
+    // ── объединение ячеек (novagrid-047) ─────────────────────────────────
+    mergeSelection: () => {
+      if (get().edit) get().commitEdit('none')
+      const st = get()
+      const { sheet, selection, tabs, activeTab } = st
+      if (selection.ranges.length !== 1) return
+      const n = normalize(selection.ranges[0])
+      const same = sheet.merges?.some(
+        (m) => m.r1 === n.r1 && m.c1 === n.c1 && m.r2 === n.r2 && m.c2 === n.c2,
+      )
+      if (same) return
+      const { sheet: next, changes } = applyMerge(sheet, selection.ranges[0])
+      if (next === sheet) return
+      // одна транзакция Ctrl+Z: снимок до/после (правки значений + merges)
+      historyOf(tabs[activeTab].id).push({
+        label: 'merge',
+        changes: [],
+        layout: { before: sheet, after: next },
+      })
+      applyFormulaChanges(sheet, next, changes)
+      patchSheet(next)
+      set({
+        dirty: true,
+        selection: {
+          active: { row: n.r1, col: n.c1 },
+          ranges: [{ fr: n.r1, fc: n.c1, tr: n.r2, tc: n.c2 }],
+        },
+      })
+      refreshSearch()
+    },
+
+    unmergeSelection: () => {
+      if (get().edit) get().commitEdit('none')
+      const st = get()
+      const { sheet, selection, tabs, activeTab } = st
+      if (!sheet.merges || sheet.merges.length === 0) return
+      const boxes = selection.ranges.map(normalize)
+      const hit = (m: MergeRect) =>
+        boxes.some((n) => m.r1 <= n.r2 && m.r2 >= n.r1 && m.c1 <= n.c2 && m.c2 >= n.c1)
+      const rest = sheet.merges.filter((m) => !hit(m))
+      if (rest.length === sheet.merges.length) return
+      const next: SheetModel = { ...sheet, merges: rest.length > 0 ? rest : undefined }
+      historyOf(tabs[activeTab].id).push({
+        label: 'unmerge',
+        changes: [],
+        layout: { before: sheet, after: next },
+      })
+      applyFormulaChanges(sheet, next, [])
+      patchSheet(next)
+      set({ dirty: true })
+      refreshSearch()
     },
 
     pasteText: (text) => {
@@ -1551,7 +1663,12 @@ export const gridStore = createStore<GridState>((set, get) => {
         set({ dirty: true })
       }
       const [dr, dc] = MOVE_DELTA[move]
-      const target = clampRef({ row: edit.row + dr, col: edit.col + dc }, next.rows, next.cols)
+      const base = clampRef({ row: edit.row + dr, col: edit.col + dc }, next.rows, next.cols)
+      // Tab/Enter после правки не заходят в скрытые ячейки объединения
+      const target =
+        move === 'none'
+          ? toMergeOrigin(next, base.row, base.col)
+          : resolveMoveClamped(next, base.row, base.col, dr, dc)
       set({ edit: null, selection: selectionOf(target.row, target.col) })
       refreshSearch()
     },

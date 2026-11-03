@@ -73,6 +73,8 @@ export interface NvTestApi {
   book: () => NvBookInfo
   /** фильтры активной вкладки (КТ-3) */
   filters: () => ColumnFilter[]
+  /** объединённые ячейки активного листа (novagrid-047) */
+  merges: () => { r1: number; c1: number; r2: number; c2: number }[]
   /** видимые строки активной вкладки; null — фильтров нет */
   visibleRows: () => number[] | null
   /** состояние поиска: счётчик/индекс (Ф2) */
@@ -193,6 +195,8 @@ export function installTestHook(refs: TestHookRefs): void {
       }
     },
     filters: () => gridStore.getState().filters,
+    merges: () =>
+      (gridStore.getState().sheet.merges ?? []).map((m) => ({ r1: m.r1, c1: m.c1, r2: m.r2, c2: m.c2 })),
     visibleRows: () => {
       const vis = visibleRowsOf(gridStore.getState().sheet, gridStore.getState().filters)
       return vis ? [...vis] : null

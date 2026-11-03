@@ -212,3 +212,62 @@ describe('excel: чтение .xls (SheetJS, BIFF8)', () => {
     expect(getCell(sheets[0].sheet, 2, 0)).toBe('третья')
   })
 })
+
+describe('excel: объединённые ячейки в файлах (novagrid-047)', () => {
+  it('.xlsx: mergeCells читаются, скрытые ячейки пусты', async () => {
+    const wb = new ExcelJS.Workbook()
+    const ws = wb.addWorksheet('M')
+    ws.addRow(['Шапка таблицы', 'x', 'y'])
+    ws.addRow(['a', 'b', 'c'])
+    ws.mergeCells('A1:B1')
+    ws.mergeCells('A2:A3')
+
+    const sheets = await xlsxToSheets(await xlsxRoundBuffer(wb))
+    const data = sheets[0].sheet
+    expect(data.merges).toEqual([
+      { r1: 0, c1: 0, r2: 0, c2: 1 },
+      { r1: 1, c1: 0, r2: 2, c2: 0 },
+    ])
+    expect(getCell(data, 0, 0)).toBe('Шапка таблицы')
+    expect(getCell(data, 0, 1)).toBe('') // скрытая ячейка очищена
+  })
+
+  it('.xls: диапазоны !merges читаются', () => {
+    const wb = XLSX.utils.book_new()
+    const ws = XLSX.utils.aoa_to_sheet([
+      ['Шапка', 'x'],
+      ['a', 'b'],
+    ])
+    ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 1 } }]
+    XLSX.utils.book_append_sheet(wb, ws, 'Лист1')
+    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'biff8' }) as Buffer
+    const arrayBuf = buf.buffer.slice(
+      buf.byteOffset,
+      buf.byteOffset + buf.byteLength,
+    ) as ArrayBuffer
+
+    const sheets = xlsToSheets(arrayBuf)
+    expect(sheets[0].sheet.merges).toEqual([{ r1: 0, c1: 0, r2: 0, c2: 1 }])
+    expect(getCell(sheets[0].sheet, 0, 0)).toBe('Шапка')
+    expect(getCell(sheets[0].sheet, 0, 1)).toBe('')
+  })
+
+  it('.ods: span-атрибуты читаются объединениями', async () => {
+    const wb = XLSX.utils.book_new()
+    const ws = XLSX.utils.aoa_to_sheet([
+      ['Шапка', 'x'],
+      ['a', 'b'],
+    ])
+    ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 1, c: 0 } }]
+    XLSX.utils.book_append_sheet(wb, ws, 'Лист1')
+    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'ods' }) as Buffer
+    const arrayBuf = buf.buffer.slice(
+      buf.byteOffset,
+      buf.byteOffset + buf.byteLength,
+    ) as ArrayBuffer
+
+    const sheets: SheetWire[] = await odsToSheets(arrayBuf)
+    expect(sheets[0].sheet.merges).toEqual([{ r1: 0, c1: 0, r2: 1, c2: 0 }])
+    expect(getCell(sheets[0].sheet, 0, 0)).toBe('Шапка')
+  })
+})

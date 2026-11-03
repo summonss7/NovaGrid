@@ -95,6 +95,8 @@ const en: RuDict = {
   ctxClearAll: 'Reset all filters',
   ctxCopyCell: 'Copy cell',
   ctxCopyRow: 'Copy row',
+  ctxMerge: 'Merge cells',
+  ctxUnmerge: 'Unmerge',
   copiedToast: 'Copied',
 
   // freeze panes (novagrid-044), like Excel "Freeze Panes"
@@ -259,6 +261,10 @@ const en: RuDict = {
   formatAlignLeft: 'Align left',
   formatAlignCenter: 'Align center',
   formatAlignRight: 'Align right',
+  formatMerge: 'Merge cells',
+  formatUnmerge: 'Unmerge cells',
+  mergeLossWarning:
+    'Merging keeps only the top-left value — the others will be lost. Merge anyway?',
   formatNumberLabel: 'Number format',
   formatNumGeneral: 'General',
   formatNumNumber: 'Number',

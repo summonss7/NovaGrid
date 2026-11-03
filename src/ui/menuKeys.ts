@@ -36,6 +36,19 @@ export function useMenuKeys(
       if (e.key === 'ArrowDown') next = (idx + 1) % list.length
       else if (e.key === 'ArrowUp') next = (idx <= 0 ? list.length : idx) - 1
       else if (e.key === 'End') next = list.length - 1
+      // отключённые пункты получают фокус «впустую» и стрелки застревают на
+      // них (объединение ячеек недоступно на одиночной ячейке, novagrid-047) —
+      // навигация идёт по цепочке до ближайшего активного
+      if ((list[next] as HTMLButtonElement).disabled) {
+        const dir = e.key === 'ArrowUp' ? -1 : 1
+        for (let step = 1; step <= list.length; step++) {
+          const cand = (next + dir * step + list.length * 2) % list.length
+          if (!(list[cand] as HTMLButtonElement).disabled) {
+            next = cand
+            break
+          }
+        }
+      }
       list[next]?.focus()
     }
     root.addEventListener('keydown', onKey)
