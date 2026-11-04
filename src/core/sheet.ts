@@ -54,6 +54,20 @@ export interface CellStyle {
   fg?: string
   /** формат числа (novagrid-045): отображение в гриде, сырые данные не меняются */
   fmt?: CellFormat
+  /** границы по сторонам (novagrid-049): тонкая чёрная линия */
+  borders?: CellBorders
+}
+
+/**
+ * Границы ячейки по сторонам (novagrid-049): сторона true — тонкая чёрная
+ * линия. Стиль линии и цвет — минимум (расширение по спайку рендера),
+ * сохранение в файл — novagrid-050.
+ */
+export interface CellBorders {
+  top?: boolean
+  right?: boolean
+  bottom?: boolean
+  left?: boolean
 }
 
 /**

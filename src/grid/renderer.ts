@@ -9,6 +9,7 @@
  * с фильтром рисуется воронка, у остальных — кнопка меню ▾.
  */
 
+import { mergeEdgeSides } from '../core/borders'
 import { type MergeRect, mergeAt } from '../core/merges'
 import { normalize, type Range, type Selection } from '../core/selection'
 import { cellKey, formatCellDisplay, type CellStyle, type SheetModel } from '../core/sheet'
@@ -367,6 +368,12 @@ export function drawGrid(input: DrawInput): VisibleRegion {
       }
     }
 
+    // ── границы ячеек (novagrid-049): тонкие линии поверх сетки, одним
+    // проходом по видимым ячейкам; общая сторона соседних ячеек ложится
+    // в одни координаты (x+0.5), поэтому не двоится. Периметр объединённой
+    // ячейки компонуется из краёв её ячеек (mergeEdgeSides) ──
+    drawBorders(ctx, sheet, reg, layout, rows, cols, rowY, colX, theme)
+
     // ── подсветка совпадений поиска (Ф2): мятный фон под текстом ──
     if (search.hitSet.size > 0) {
       ctx.fillStyle = theme.mintFill
@@ -572,6 +579,85 @@ export function drawGrid(input: DrawInput): VisibleRegion {
     firstCol: regions[regions.length - 1].colFrom,
     lastCol,
   }
+}
+
+/**
+ * Границы ячеек области кадра (novagrid-049): одна beginPath на область —
+ * линии собираются с видимых ячеек и периметров объединений, один stroke.
+ * Общая сторона соседей чертится в одних координатах (край + 0.5, как линии
+ * сетки), переукладка поверх не видна — границы не двоятся. Прокрутка режет
+ * линии рамкой области — так же, как линии сетки.
+ */
+function drawBorders(
+  ctx: CanvasRenderingContext2D,
+  sheet: SheetModel,
+  reg: Region,
+  layout: RowLayout,
+  rows: RowAxis,
+  cols: ColLayout,
+  rowY: (i: number) => number,
+  colX: (c: number) => number,
+  theme: GridTheme,
+): void {
+  // без предпросмотра всей Map: обход только видимых ячеек (~сотня lookup'ов)
+  ctx.strokeStyle = theme.ink
+  ctx.lineWidth = 1
+  ctx.beginPath()
+  for (let i = reg.rowFrom; i <= reg.rowTo; i++) {
+    const r = layout.rowAt(i)
+    const y = rowY(i)
+    const ih = rows.height(i)
+    if (y + ih <= reg.y || y >= reg.y + reg.h) continue
+    for (let c = reg.colFrom; c <= reg.colTo; c++) {
+      const borders = sheet.styles.get(cellKey(r, c))?.borders
+      if (!borders) continue
+      // ячейки объединения не рисуются поодиночке — его периметр ниже
+      if (mergeAt(sheet, r, c)) continue
+      const x = colX(c)
+      const w = cols.width(c)
+      if (x + w <= reg.x || x >= reg.x + reg.w) continue
+      if (borders.top) {
+        ctx.moveTo(x, y + 0.5)
+        ctx.lineTo(x + w, y + 0.5)
+      }
+      if (borders.bottom) {
+        ctx.moveTo(x, y + ih + 0.5)
+        ctx.lineTo(x + w, y + ih + 0.5)
+      }
+      if (borders.left) {
+        ctx.moveTo(x + 0.5, y)
+        ctx.lineTo(x + 0.5, y + ih)
+      }
+      if (borders.right) {
+        ctx.moveTo(x + w + 0.5, y)
+        ctx.lineTo(x + w + 0.5, y + ih)
+      }
+    }
+  }
+  if (sheet.merges) {
+    for (const mg of sheet.merges) {
+      const rect = mergeAreaRect(mg, layout, rows, reg, cols, rowY, colX)
+      if (!rect) continue
+      const sides = mergeEdgeSides(sheet, mg)
+      if (sides.top) {
+        ctx.moveTo(rect.x, rect.y + 0.5)
+        ctx.lineTo(rect.x + rect.w, rect.y + 0.5)
+      }
+      if (sides.bottom) {
+        ctx.moveTo(rect.x, rect.y + rect.h + 0.5)
+        ctx.lineTo(rect.x + rect.w, rect.y + rect.h + 0.5)
+      }
+      if (sides.left) {
+        ctx.moveTo(rect.x + 0.5, rect.y)
+        ctx.lineTo(rect.x + 0.5, rect.y + rect.h)
+      }
+      if (sides.right) {
+        ctx.moveTo(rect.x + rect.w + 0.5, rect.y)
+        ctx.lineTo(rect.x + rect.w + 0.5, rect.y + rect.h)
+      }
+    }
+  }
+  ctx.stroke()
 }
 
 /** Габариты объединения в визуальных координатах; null — скрыто фильтром. */

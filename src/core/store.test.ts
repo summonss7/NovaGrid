@@ -4,6 +4,7 @@ import { createSheet, getCell, getStyle, withCell } from './sheet'
 import { cellNumber } from '../formula/engine'
 import { gridStore, selectionMetrics } from './store'
 import { normalize } from './selection'
+import { mergeEdgeSides } from './borders'
 import { rememberCopy } from './copy'
 
 const s = () => gridStore.getState()
@@ -845,6 +846,16 @@ describe('store: форматирование ячеек (novagrid-039)', () => 
     expect(getStyle(s().sheet, 1, 0)).toBeUndefined()
   })
 
+  it('clearStyle снимает и границы (novagrid-049)', () => {
+    s().clickCell(0, 0)
+    s().applyBorders('all')
+    expect(getStyle(s().sheet, 0, 0)?.borders?.top).toBe(true)
+    s().clearStyle()
+    expect(getStyle(s().sheet, 0, 0)).toBeUndefined()
+    s().undo()
+    expect(getStyle(s().sheet, 0, 0)?.borders?.top).toBe(true)
+  })
+
   it('clearStyle снимает всё форматирование одной транзакцией', () => {
     s().clickCell(0, 0)
     s().applyStyle({
@@ -968,5 +979,99 @@ describe('store: вставка/удаление строк и колонок (n
     expect(getStyle(s().sheet, 2, 0)?.bg).toBe('FFEE00')
     s().undo()
     expect(getStyle(s().sheet, 1, 0)?.bg).toBe('FFEE00')
+  })
+})
+
+
+describe('store: границы ячеек (novagrid-049)', () => {
+  it('applyBorders all красит выделение, один Ctrl+Z снимает всё', () => {
+    s().clickCell(0, 0)
+    s().clickCell(2, 2, { shift: true }) // A1:C3
+    s().applyBorders('all')
+    // у каждой ячейки выделения четыре стороны
+    expect(getStyle(s().sheet, 1, 1)?.borders).toEqual({
+      top: true,
+      right: true,
+      bottom: true,
+      left: true,
+    })
+    expect(getStyle(s().sheet, 0, 0)?.borders?.top).toBe(true)
+    // вне выделения границ нет
+    expect(getStyle(s().sheet, 3, 0)).toBeUndefined()
+    s().undo()
+    expect(getStyle(s().sheet, 1, 1)).toBeUndefined()
+    s().redo()
+    expect(getStyle(s().sheet, 2, 2)?.borders?.bottom).toBe(true)
+  })
+
+  it('внешние — периметру, внутренним ячейкам ничего; стороны дописываются', () => {
+    s().clickCell(0, 0)
+    s().clickCell(2, 2, { shift: true })
+    s().applyBorders('outer')
+    expect(getStyle(s().sheet, 0, 0)?.borders).toEqual({ top: true, left: true })
+    expect(getStyle(s().sheet, 1, 1)?.borders).toBeUndefined() // центр диапазона
+    expect(getStyle(s().sheet, 0, 1)?.borders).toEqual({ top: true })
+    // стороны дописываются к стоящим, не стирая их (одиночная ячейка)
+    s().clickCell(1, 1)
+    s().applyBorders('top')
+    s().applyBorders('bottom')
+    expect(getStyle(s().sheet, 1, 1)?.borders).toEqual({ top: true, bottom: true })
+  })
+
+  it('«убрать» снимает границы одной транзакцией, остальные свойства стиля живут', () => {
+    s().clickCell(0, 0)
+    s().applyStyle({ bold: true })
+    s().applyBorders('all')
+    s().applyBorders('none')
+    expect(getStyle(s().sheet, 0, 0)).toEqual({ bold: true })
+    // один Ctrl+Z возвращает границы (none — одна транзакция)
+    s().undo()
+    expect(getStyle(s().sheet, 0, 0)).toEqual({
+      bold: true,
+      borders: { top: true, right: true, bottom: true, left: true },
+    })
+  })
+
+  it('вставка/удаление строк сдвигает границы вместе с контентом', () => {
+    s().clickCell(1, 0)
+    s().clickCell(1, 2, { shift: true })
+    s().applyBorders('outer')
+    s().insertRows(1, 1)
+    // однострочный диапазон: A2 была и верхом, и низом — стороны уехали как были
+    expect(getStyle(s().sheet, 2, 0)?.borders).toEqual({ top: true, bottom: true, left: true })
+    expect(getStyle(s().sheet, 1, 0)).toBeUndefined() // вставленная строка чиста
+    s().undo()
+    expect(getStyle(s().sheet, 1, 0)?.borders).toEqual({ top: true, bottom: true, left: true })
+    // удаление строки с границами убирает их вместе с ячейками
+    s().deleteRows(1, 1)
+    expect(getStyle(s().sheet, 1, 0)).toBeUndefined()
+  })
+
+  it('объединение сохраняет периметр границ (композиция из краёв ячеек)', () => {
+    s().clickCell(0, 0)
+    s().clickCell(1, 1, { shift: true }) // A1:B2
+    s().applyBorders('all')
+    s().mergeSelection()
+    const sheet = s().sheet
+    // mergeAt-подобная проверка через список merges + периметр из краёв
+    expect(sheet.merges).toEqual([{ r1: 0, c1: 0, r2: 1, c2: 1 }])
+    expect(mergeEdgeSides(sheet, sheet.merges![0])).toEqual({
+      top: true,
+      right: true,
+      bottom: true,
+      left: true,
+    })
+    // скрытые ячейки объединения сохранили стороны — снятие объединения
+    // возвращает границы на места
+    s().unmergeSelection()
+    expect(getStyle(s().sheet, 1, 1)?.borders?.bottom).toBe(true)
+  })
+
+  it('вставка колонок сдвигает границы по горизонтали', () => {
+    s().clickCell(0, 1)
+    s().applyBorders('all')
+    s().insertCols(0, 1)
+    expect(getStyle(s().sheet, 0, 2)?.borders?.top).toBe(true)
+    expect(getStyle(s().sheet, 0, 1)).toBeUndefined()
   })
 })

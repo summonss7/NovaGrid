@@ -508,6 +508,46 @@
   cursor: pointer;
 }
 
+/* novagrid-049: границы ячеек — кнопка-дропдаун видов в FormatBar */
+.fmt-borders-wrap {
+  position: relative;
+}
+
+.fmt-borders-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 45;
+  display: flex;
+  flex-direction: column;
+  min-width: 214px;
+  padding: 6px;
+  background: var(--nv-bg);
+  border: 1px solid var(--nv-grid-line);
+  border-radius: var(--nv-radius-panel);
+  box-shadow: var(--nv-shadow-pop);
+}
+
+.fmt-borders-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: none;
+  background: transparent;
+  font-family: var(--nv-font-text);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--nv-ink);
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.fmt-borders-item:hover {
+  background: var(--nv-mint);
+}
+
 /* ── Канвас-грид (Этап 1) ─────────────────────────────────────────────── */
 /* novagrid-027: скроллбары таблицы всегда видимые и классические. Нативные
    полосы Windows 11 оверлейные и автоскрываются — таблица выглядела

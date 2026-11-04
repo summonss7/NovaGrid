@@ -261,6 +261,15 @@ export const ru = {
   /** объединение ячеек (novagrid-047): значение — в левом верхнем угле */
   formatMerge: 'Объединить ячейки',
   formatUnmerge: 'Отменить объединение ячеек',
+  /** границы ячеек (novagrid-049): выпадающий список видов в FormatBar */
+  formatBorders: 'Границы',
+  formatBorderAll: 'Все границы',
+  formatBorderOuter: 'Внешние границы',
+  formatBorderTop: 'Верхняя граница',
+  formatBorderBottom: 'Нижняя граница',
+  formatBorderLeft: 'Левая граница',
+  formatBorderRight: 'Правая граница',
+  formatBorderNone: 'Убрать границы',
   mergeLossWarning:
     'При объединении останется только значение левой верхней ячейки — остальные будут потеряны. Объединить?',
   /** формат числа (novagrid-045): отображение значения ячейки */

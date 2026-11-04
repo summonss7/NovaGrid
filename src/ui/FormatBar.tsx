@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 import { useState } from 'react'
 import { useStore } from 'zustand'
+import { type BorderKind } from '../core/borders'
 import { mergeLosesData } from '../core/merges'
 import { normalize } from '../core/selection'
 import { CELL_SIZE_MAX, CELL_SIZE_MIN, cellKey, type CellFormat } from '../core/sheet'
@@ -39,9 +40,53 @@ const PALETTE: readonly string[] = [
 /** Размеры шрифта в пунктах (pt): высота строки 30px вмещает до 16pt. */
 const SIZES: readonly number[] = [8, 9, 10, 11, 12, 13, 14, 16]
 
+/** Виды границ (novagrid-049): порядок как в выпадающем списке Excel. */
+const BORDER_KINDS: readonly BorderKind[] = [
+  'all',
+  'outer',
+  'top',
+  'bottom',
+  'left',
+  'right',
+  'none',
+]
+
+/**
+ * Мини-сетка вида границы (novagrid-049): светлый каркас ячейки + жирные
+ * стороны, которые вид включает (как иконки выпадающего списка Excel).
+ */
+function BorderKindIcon({ kind }: { kind: BorderKind }) {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" stroke="currentColor" fill="none" aria-hidden>
+      <rect x="2" y="2" width="12" height="12" strokeWidth="1" opacity="0.35" />
+      {kind === 'all' && (
+        <>
+          <line x1="8" y1="2" x2="8" y2="14" strokeWidth="2" />
+          <line x1="2" y1="8" x2="14" y2="8" strokeWidth="2" />
+        </>
+      )}
+      {kind === 'outer' && <rect x="2" y="2" width="12" height="12" strokeWidth="2" />}
+      {kind === 'top' && <line x1="2" y1="2" x2="14" y2="2" strokeWidth="2" />}
+      {kind === 'bottom' && <line x1="2" y1="14" x2="14" y2="14" strokeWidth="2" />}
+      {kind === 'left' && <line x1="2" y1="2" x2="2" y2="14" strokeWidth="2" />}
+      {kind === 'right' && <line x1="14" y1="2" x2="14" y2="14" strokeWidth="2" />}
+    </svg>
+  )
+}
+
 export function FormatBar() {
   const t = useT()
   const [palette, setPalette] = useState<'fg' | 'bg' | null>(null)
+  const [borderMenu, setBorderMenu] = useState(false)
+  const borderLabels: Record<BorderKind, string> = {
+    all: t.formatBorderAll,
+    outer: t.formatBorderOuter,
+    top: t.formatBorderTop,
+    bottom: t.formatBorderBottom,
+    left: t.formatBorderLeft,
+    right: t.formatBorderRight,
+    none: t.formatBorderNone,
+  }
   const style = useStore(gridStore, (s) =>
     s.sheet.styles.get(cellKey(s.selection.active.row, s.selection.active.col)),
   )
@@ -255,6 +300,50 @@ export function FormatBar() {
       >
         <TableCellsSplit size={15} strokeWidth={2} aria-hidden />
       </button>
+
+      {/* границы ячеек (novagrid-049): выпадающий список видов, как в Excel */}
+      <div className="fmt-borders-wrap">
+        <button
+          type="button"
+          className={`fmt-btn${borderMenu ? ' is-on' : ''}`}
+          aria-label={t.formatBorders}
+          title={t.formatBorders}
+          aria-haspopup="menu"
+          aria-expanded={borderMenu}
+          onClick={() => setBorderMenu((v) => !v)}
+        >
+          <BorderKindIcon kind="all" />
+        </button>
+        {borderMenu && (
+          <>
+            <div
+              className="menu-backdrop"
+              onClick={() => {
+                setBorderMenu(false)
+                focusGrid()
+              }}
+              aria-hidden
+            />
+            <div className="fmt-borders-menu" role="menu" aria-label={t.formatBorders}>
+              {BORDER_KINDS.map((kind) => (
+                <button
+                  key={kind}
+                  type="button"
+                  role="menuitem"
+                  className="fmt-borders-item"
+                  onClick={apply(() => {
+                    gridStore.getState().applyBorders(kind)
+                    setBorderMenu(false)
+                  })}
+                >
+                  <BorderKindIcon kind={kind} />
+                  {borderLabels[kind]}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
 
       <span className="fmt-sep" aria-hidden />
 

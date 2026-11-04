@@ -11,6 +11,7 @@
  */
 
 import { createStore } from 'zustand/vanilla'
+import { type BorderKind, borderStyleChanges } from './borders'
 import {
   type ColumnFilter,
   columnValueCounts,
@@ -284,6 +285,13 @@ export interface GridState {
    * (novagrid-048).
    */
   toggleStyle: (prop: 'bold' | 'italic' | 'underline' | 'wrap') => void
+  /**
+   * Границы ячеек выделения (novagrid-049): вид из выпадающего списка
+   * FormatBar (все / внешние / сторона / убрать) применяется к каждой
+   * области выделения отдельно, стороны дописываются к существующим.
+   * Одна транзакция Ctrl+Z.
+   */
+  applyBorders: (kind: BorderKind) => void
   /** Снять всё форматирование ячеек выделения (novagrid-039). */
   clearStyle: () => void
   /**
@@ -1433,6 +1441,20 @@ export const gridStore = createStore<GridState>((set, get) => {
       runStylePatch(patch, 'style')
     },
 
+    // ── границы ячеек (novagrid-049) ─────────────────────────────────────
+    applyBorders: (kind) => {
+      const st = get()
+      const changes = borderStyleChanges(st.sheet, st.selection, kind)
+      if (changes.length === 0) return
+      historyOf(st.tabs[st.activeTab].id).push({
+        label: 'borders',
+        changes: [],
+        styleChanges: changes,
+      })
+      patchSheet(withStyleList(st.sheet, changes))
+      set({ dirty: true })
+    },
+
     clearStyle: () => {
       runStylePatch(
         {
@@ -1446,6 +1468,7 @@ export const gridStore = createStore<GridState>((set, get) => {
           bg: undefined,
           fg: undefined,
           fmt: undefined,
+          borders: undefined,
         },
         'style-clear',
       )

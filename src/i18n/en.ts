@@ -265,6 +265,15 @@ const en: RuDict = {
   formatWrap: 'Wrap text',
   formatMerge: 'Merge cells',
   formatUnmerge: 'Unmerge cells',
+  /** cell borders (novagrid-049): FormatBar dropdown of kinds */
+  formatBorders: 'Borders',
+  formatBorderAll: 'All borders',
+  formatBorderOuter: 'Outside borders',
+  formatBorderTop: 'Top border',
+  formatBorderBottom: 'Bottom border',
+  formatBorderLeft: 'Left border',
+  formatBorderRight: 'Right border',
+  formatBorderNone: 'No border',
   mergeLossWarning:
     'Merging keeps only the top-left value — the others will be lost. Merge anyway?',
   formatNumberLabel: 'Number format',
