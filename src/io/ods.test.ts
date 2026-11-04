@@ -351,4 +351,35 @@ describe('ods: чтение чужого файла со стилями и за�
     })
     expect(sheet.merges).toEqual([{ r1: 0, c1: 0, r2: 0, c2: 1 }])
   })
+
+  it('числовые стили-эвристика: процент/валюта обычным number-style (novagrid-051)', async () => {
+    const auto =
+      '<office:automatic-styles>' +
+      '<number:number-style style:name="N201"><number:number number:decimal-places="2" number:min-integer-digits="1"/><number:text>%</number:text></number:number-style>' +
+      '<number:number-style style:name="N202"><number:number number:decimal-places="2" number:min-integer-digits="1"/><number:text> €</number:text></number:number-style>' +
+      '<number:number-style style:name="N203"><number:number number:decimal-places="2" number:min-integer-digits="1" number:grouping="true"/></number:number-style>' +
+      '<style:style style:name="ce1" style:family="table-cell" style:data-style-name="N201"></style:style>' +
+      '<style:style style:name="ce2" style:family="table-cell" style:data-style-name="N202"></style:style>' +
+      '<style:style style:name="ce3" style:family="table-cell" style:data-style-name="N203"></style:style>' +
+      '</office:automatic-styles>'
+    const content =
+      '<?xml version="1.0" encoding="UTF-8"?>' +
+      `<office:document-content ${NS} xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0" xmlns:number="urn:oasis:names:tc:opendocument:xmlns:datastyle:1.0" office:version="1.3">` +
+      auto +
+      '<office:body><office:spreadsheet>' +
+      '<table:table table:name="Данные">' +
+      '<table:table-row>' +
+      '<table:table-cell table:style-name="ce1" office:value-type="percentage" office:value="0.15"/>' +
+      '<table:table-cell table:style-name="ce2" office:value-type="float" office:value="1200"/>' +
+      '<table:table-cell table:style-name="ce3" office:value-type="float" office:value="3400"/>' +
+      '</table:table-row>' +
+      '</table:table>' +
+      '</office:spreadsheet></office:body></office:document-content>'
+
+    const sheets = await odsToSheets(await buildOds(content))
+    const styles = sheets[0].sheet.styles
+    expect(styles.get(cellKey(0, 0))?.fmt).toBe('percent')
+    expect(styles.get(cellKey(0, 1))?.fmt).toBe('money')
+    expect(styles.get(cellKey(0, 2))?.fmt).toBe('number')
+  })
 })

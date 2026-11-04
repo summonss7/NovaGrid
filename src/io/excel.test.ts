@@ -3,7 +3,14 @@ import ExcelJS from 'exceljs'
 import * as XLSX from 'xlsx'
 import { cellKey, createSheet, getCell, withCell } from '../core/sheet'
 import { cellText, cellIsFrozen, recalcSheet } from '../formula/engine'
-import { type SheetWire, odsToSheets, sheetsToXlsx, xlsToSheets, xlsxToSheets } from './excel'
+import {
+  type SheetWire,
+  numFmtToFormat,
+  odsToSheets,
+  sheetsToXlsx,
+  xlsToSheets,
+  xlsxToSheets,
+} from './excel'
 
 /* exceljs в Node отдаёт Buffer (view над пулом) — копируем в чистый ArrayBuffer */
 async function xlsxRoundBuffer(wb: ExcelJS.Workbook): Promise<ArrayBuffer> {
@@ -343,5 +350,52 @@ describe('excel: ширины, закрепление и новые атрибу
     expect(back[0].sheet.merges).toEqual([{ r1: 0, c1: 0, r2: 0, c2: 1 }])
     expect(back[0].colWidths).toEqual(new Map([[0, 200]]))
     expect(back[0].freeze).toEqual({ rows: 1, cols: 0 })
+  })
+})
+
+describe('novagrid-051: маппинг numFmt .xlsx → CellFormat', () => {
+  it('числовой: группировка через запятую и (неразрывный) пробел', () => {
+    expect(numFmtToFormat('#,##0')).toBe('number')
+    expect(numFmtToFormat('#,##0.00')).toBe('number')
+    expect(numFmtToFormat('#,##0.000')).toBe('number')
+    expect(numFmtToFormat('# ##0.00')).toBe('number')
+    expect(numFmtToFormat('#\u00a0##0.00')).toBe('number')
+    expect(numFmtToFormat('#,##0" шт"')).toBe('number')
+  })
+
+  it('валютный ₽/$/€, в том числе [$...-id]', () => {
+    expect(numFmtToFormat('#,##0.00" ₽"')).toBe('money')
+    expect(numFmtToFormat('#,##0.00 ₽')).toBe('money')
+    expect(numFmtToFormat('$#,##0.00')).toBe('money')
+    expect(numFmtToFormat('#,##0.00\\ $')).toBe('money')
+    expect(numFmtToFormat('#,##0.00 €')).toBe('money')
+    expect(numFmtToFormat('#,##0.00 [$₽-419]')).toBe('money')
+    expect(numFmtToFormat('#,##0.00 [$€-407]')).toBe('money')
+  })
+
+  it('процентный', () => {
+    expect(numFmtToFormat('0.00%')).toBe('percent')
+    expect(numFmtToFormat('0%')).toBe('percent')
+    expect(numFmtToFormat('0.0%')).toBe('percent')
+  })
+
+  it('неизвестные и даты — Общий (undefined), не падают', () => {
+    expect(numFmtToFormat(undefined)).toBeUndefined()
+    expect(numFmtToFormat('General')).toBeUndefined()
+    expect(numFmtToFormat('0.00')).toBeUndefined()
+    expect(numFmtToFormat('DD.MM.YYYY')).toBeUndefined()
+    expect(numFmtToFormat('@')).toBeUndefined()
+    expect(numFmtToFormat('[Red]??;;—')).toBeUndefined()
+  })
+
+  it('чужой .xlsx: $ и процент читаются как money/percent', async () => {
+    const wb = new ExcelJS.Workbook()
+    const ws = wb.addWorksheet('S')
+    ws.addRow([1200, 0.15])
+    ws.getCell(1, 1).numFmt = '$#,##0.00'
+    ws.getCell(1, 2).numFmt = '0.00%'
+    const sheets = await xlsxToSheets(await xlsxRoundBuffer(wb))
+    expect(sheets[0].sheet.styles.get(cellKey(0, 0))?.fmt).toBe('money')
+    expect(sheets[0].sheet.styles.get(cellKey(0, 1))?.fmt).toBe('percent')
   })
 })

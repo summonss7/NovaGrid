@@ -115,16 +115,28 @@ function borderSide(style: Partial<ExcelJS.Border> | undefined): boolean {
   return !!style && style.style !== undefined
 }
 
-/** Формат числа .xlsx → CellFormat (novagrid-050): свой или чужой по эвристике. */
+/**
+ * Формат числа .xlsx → CellFormat (novagrid-050/051): свой или чужой по эвристике.
+ * Порядок важен: валюта проверяется до числового, иначе «#,##0.00 $» уйдёт
+ * в Числовой по группировке разрядов. Неизвестное — undefined = Общий.
+ */
 export function numFmtToFormat(fmt: string | undefined): CellFormat | undefined {
   if (!fmt || fmt === 'General') return undefined
-  const low = fmt.toLowerCase()
-  if (low === '#,##0.00' || low === '#,##0' || low === '# ##0.00') return 'number'
-  if (low === '0.00%' || low === '0%' || low === '0.0%') return 'percent'
-  if (fmt.includes('₽') || fmt.includes('руб') || low.includes('"р"') || low.includes('rub'))
+  // ru-локали пишут группу разрядов неразрывным пробелом — нормируем
+  const low = fmt.toLowerCase().replace(/\u00a0/g, ' ')
+  if (
+    fmt.includes('₽') ||
+    fmt.includes('$') ||
+    fmt.includes('€') ||
+    low.includes('руб') ||
+    low.includes('"р"') ||
+    low.includes('rub') ||
+    low.includes('[$')
+  )
     return 'money'
   if (low.includes('%')) return 'percent'
-  if (/[#0],[#0]/.test(low) || low.includes('#,##')) return 'number'
+  // '#,##0*' → Числовой: группировка через запятую или пробел
+  if (/#,##0|# ##0/.test(low)) return 'number'
   return undefined
 }
 

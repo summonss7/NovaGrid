@@ -737,7 +737,8 @@ interface OdsAutoStyles {
 }
 
 function parseAutoStyles(xml: string): OdsAutoStyles {
-  // стили чисел: имя → формат модели (наш round-trip + эвристика LibreOffice)
+  // стили чисел: имя → формат модели (наш round-trip + эвристика LibreOffice,
+  // novagrid-051: процент/валюта бывают и обычным number-style с number:text)
   const dataFmts = new Map<string, CellFormat>()
   const dataRe =
     /<number:(number-style|currency-style|percentage-style)\b([^>]*)>([\s\S]*?)<\/number:\1>/g
@@ -748,7 +749,12 @@ function parseAutoStyles(xml: string): OdsAutoStyles {
     if (!name) continue
     if (dm[1] === 'currency-style') dataFmts.set(name, 'money')
     else if (dm[1] === 'percentage-style') dataFmts.set(name, 'percent')
-    else if (/number:grouping="true"/.test(dm[3])) dataFmts.set(name, 'number')
+    else {
+      const texts = dm[3].replace(/<[^>]+>/g, '')
+      if (texts.includes('%')) dataFmts.set(name, 'percent')
+      else if (/[₽$€]/.test(texts)) dataFmts.set(name, 'money')
+      else if (/number:grouping="true"/.test(dm[3])) dataFmts.set(name, 'number')
+    }
   }
 
   const out: OdsAutoStyles = { cells: new Map(), columns: new Map() }
