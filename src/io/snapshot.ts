@@ -17,7 +17,7 @@
 
 import type { MergeRect } from '../core/merges'
 import type { CellStyle, SheetModel } from '../core/sheet'
-import type { SheetTab } from '../core/workbook'
+import type { SheetWire } from '../core/workbook'
 
 /** Расширение капсулы; mime — октет-стрим (содержимое непрозрачно). */
 export const SNAPSHOT_EXT = 'nvgridx'
@@ -39,6 +39,10 @@ interface SnapshotSheet {
   formulaCache?: Record<string, string>
   /** объединённые ячейки (novagrid-047); отсутствие — объединений нет */
   merges?: MergeRect[]
+  /** ширины колонок (novagrid-050): индекс (строкой) → базовые единицы */
+  colWidths?: Record<string, number>
+  /** закрепление областей (novagrid-050); отсутствие — нет */
+  freeze?: { rows: number; cols: number }
   rows: number
   cols: number
   maxRow: number
@@ -47,8 +51,9 @@ interface SnapshotSheet {
 
 /**
  * Полезная нагрузка капсулы. Содержимое — то же, что держит автосохранение
- * сессии (Dexie): модель всех листов + имя файла + разделитель CSV.
- * Фильтры и ширины колонок не едут — как у сессии.
+ * сессии (Dexie): модель всех листов + имя файла + разделитель CSV, а с
+ * novagrid-050 ещё ширины колонок и закрепление каждого листа.
+ * Фильтры не ездят — как у сессии.
  */
 export interface SnapshotPayload {
   app: 'NovaGrid'
@@ -64,7 +69,7 @@ export interface SnapshotPayload {
 /** Восстановленная капсула для store.loadBook (+ метаданные файла). */
 export interface DecodedSnapshot {
   payload: SnapshotPayload
-  wire: { sheets: { name: string; sheet: SheetModel }[] }
+  wire: { sheets: SheetWire[] }
 }
 
 export function isSnapshotName(name: string): boolean {
@@ -93,7 +98,7 @@ function recordToMap<V>(rec: Record<string, V> | undefined): Map<string, V> {
 
 /** Книга из стора → полезная нагрузка капсулы (сериализуемая). */
 export function bookToSnapshot(
-  tabs: readonly SheetTab[],
+  sheets: readonly SheetWire[],
   meta: { fileName: string | null; csvDelimiter: string },
 ): SnapshotPayload {
   return {
@@ -103,21 +108,29 @@ export function bookToSnapshot(
     book: {
       fileName: meta.fileName,
       csvDelimiter: meta.csvDelimiter,
-      sheets: tabs.map((tab) => {
+      sheets: sheets.map((wire) => {
         const s: SnapshotSheet = {
-          name: tab.name,
-          cells: mapToRecord(tab.sheet.cells),
-          styles: mapToRecord(tab.sheet.styles),
-          rows: tab.sheet.rows,
-          cols: tab.sheet.cols,
-          maxRow: tab.sheet.maxRow,
-          maxCol: tab.sheet.maxCol,
+          name: wire.name,
+          cells: mapToRecord(wire.sheet.cells),
+          styles: mapToRecord(wire.sheet.styles),
+          rows: wire.sheet.rows,
+          cols: wire.sheet.cols,
+          maxRow: wire.sheet.maxRow,
+          maxCol: wire.sheet.maxCol,
         }
-        if (tab.sheet.formulaCache && tab.sheet.formulaCache.size > 0) {
-          s.formulaCache = mapToRecord(tab.sheet.formulaCache)
+        if (wire.sheet.formulaCache && wire.sheet.formulaCache.size > 0) {
+          s.formulaCache = mapToRecord(wire.sheet.formulaCache)
         }
-        if (tab.sheet.merges && tab.sheet.merges.length > 0) {
-          s.merges = tab.sheet.merges.map((m) => ({ ...m }))
+        if (wire.sheet.merges && wire.sheet.merges.length > 0) {
+          s.merges = wire.sheet.merges.map((m) => ({ ...m }))
+        }
+        if (wire.colWidths && wire.colWidths.size > 0) {
+          const widths: Record<string, number> = {}
+          for (const [c, w] of wire.colWidths) widths[String(c)] = w
+          s.colWidths = widths
+        }
+        if (wire.freeze && (wire.freeze.rows > 0 || wire.freeze.cols > 0)) {
+          s.freeze = { ...wire.freeze }
         }
         return s
       }),
@@ -127,8 +140,11 @@ export function bookToSnapshot(
 
 /** Полезная нагрузка → модель для loadBook (Map восстановлены). */
 export function snapshotToBook(payload: SnapshotPayload): DecodedSnapshot['wire'] {
-  return {
-    sheets: payload.book.sheets.map((s) => ({
+  const sheets: SheetWire[] = payload.book.sheets.map((s) => {
+    const widths = s.colWidths
+      ? new Map(Object.entries(s.colWidths).map(([c, w]) => [Number(c), w]))
+      : undefined
+    return {
       name: s.name,
       sheet: {
         cells: recordToMap(s.cells),
@@ -140,8 +156,11 @@ export function snapshotToBook(payload: SnapshotPayload): DecodedSnapshot['wire'
         maxRow: s.maxRow,
         maxCol: s.maxCol,
       } satisfies SheetModel,
-    })),
-  }
+      ...(widths && widths.size > 0 ? { colWidths: widths } : {}),
+      ...(s.freeze ? { freeze: { ...s.freeze } } : {}),
+    }
+  })
+  return { sheets }
 }
 
 async function deriveKey(passphrase: string, salt: Uint8Array): Promise<CryptoKey> {

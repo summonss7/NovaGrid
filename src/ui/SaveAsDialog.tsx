@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useT } from '../i18n'
 
-export type SaveAsFormat = 'xlsx' | 'csv' | 'nvgridx'
+export type SaveAsFormat = 'xlsx' | 'ods' | 'csv' | 'nvgridx'
 
 export interface SaveAsChoice {
   fileName: string
@@ -92,6 +92,7 @@ export function SaveAsDialog(props: SaveAsDialogProps) {
               }}
             >
               <option value="xlsx">{t.saveAsFormatXlsx}</option>
+              <option value="ods">{t.saveAsFormatOds}</option>
               <option value="csv">{t.saveAsFormatCsv}</option>
               <option value="nvgridx">{t.saveAsFormatNvgridx}</option>
             </select>

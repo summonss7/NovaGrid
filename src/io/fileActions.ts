@@ -5,11 +5,10 @@
  */
 
 import { gridStore, type FileFormat } from '../core/store'
-import { readFileBuffer, writeCsv, writeXlsx } from './client'
-import type { SheetWire } from './excel'
+import { readFileBuffer, writeCsv, writeOds, writeXlsx } from './client'
 import { bookToSnapshot, encryptSnapshot } from './snapshot'
 
-export type { SheetWire }
+export type { SheetWire } from './excel'
 
 export function extToFormat(name: string): FileFormat | null {
   const ext = name.slice(name.lastIndexOf('.') + 1).toLowerCase()
@@ -46,21 +45,23 @@ export async function openFixture(url: string, name: string): Promise<void> {
   gridStore.getState().loadBook({ sheets }, { fileName: name, fileFormat: format, csvDelimiter })
 }
 
-/** Буфер книги по формату (csv — активный лист). */
+/** Буфер книги по формату (csv — активный лист; ods — свой writer, novagrid-050). */
 export async function buildBookBuffer(
-  format: 'xlsx' | 'csv',
+  format: 'xlsx' | 'csv' | 'ods',
   delimiter: string,
 ): Promise<ArrayBuffer> {
   const st = gridStore.getState()
   if (format === 'csv') return writeCsv(st.sheet, delimiter)
-  return writeXlsx(st.tabs.map((t) => ({ name: t.name, sheet: t.sheet })))
+  // ширины/закрепление листа едут в файл вместе с моделью (novagrid-050)
+  const sheets = st.sheetsWire()
+  return format === 'ods' ? writeOds(sheets) : writeXlsx(sheets)
 }
 
 /** Капсула .nvgridx всей книги (Этап 7.6): снапшот → AES-GCM по фразе. */
 export async function buildSnapshotBuffer(passphrase: string): Promise<ArrayBuffer> {
   const st = gridStore.getState()
   return encryptSnapshot(
-    bookToSnapshot(st.tabs, { fileName: st.fileName, csvDelimiter: st.csvDelimiter }),
+    bookToSnapshot(st.sheetsWire(), { fileName: st.fileName, csvDelimiter: st.csvDelimiter }),
     passphrase,
   )
 }
@@ -90,6 +91,10 @@ export function downloadBuffer(name: string, buffer: ArrayBuffer, mime: string):
 
 export function xlsxMime(): string {
   return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+}
+
+export function odsMime(): string {
+  return 'application/vnd.oasis.opendocument.spreadsheet'
 }
 
 export function csvMime(): string {

@@ -7,12 +7,14 @@
 
 import { csvToSheet } from './csv'
 import { type SheetWire, odsToSheets, xlsToSheets, xlsxToSheets, sheetsToXlsx } from './excel'
+import { sheetsToOds } from './ods'
 import { sheetToCsv } from './csv'
 import type { SheetModel } from '../core/sheet'
 
 export type IoRequest =
   | { id: number; kind: 'read'; name: string; buffer: ArrayBuffer }
   | { id: number; kind: 'write-xlsx'; sheets: SheetWire[] }
+  | { id: number; kind: 'write-ods'; sheets: SheetWire[] }
   | { id: number; kind: 'write-csv'; sheet: SheetModel; delimiter: string }
 
 export type IoResponse =
@@ -50,6 +52,10 @@ async function handle(msg: IoRequest): Promise<IoResponse> {
   }
   if (msg.kind === 'write-xlsx') {
     const buffer = await sheetsToXlsx(msg.sheets)
+    return { id: msg.id, ok: true, kind: 'write', buffer }
+  }
+  if (msg.kind === 'write-ods') {
+    const buffer = await sheetsToOds(msg.sheets)
     return { id: msg.id, ok: true, kind: 'write', buffer }
   }
   const text = sheetToCsv(msg.sheet, msg.delimiter)

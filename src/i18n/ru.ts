@@ -185,7 +185,7 @@ export const ru = {
   tabDeleteConfirm: (name: string) => `Удалить лист «${name}»? Отменить будет нельзя.`,
   tabMenuLabel: 'Меню листа',
   xlsSaveNote: 'Файл .xls сохранится как .xlsx (современный формат)',
-  odsSaveNote: 'Файл .ods сохранится как .xlsx — прямой записи .ods в NovaGrid нет',
+  saveAsFormatOds: '.ods (OpenDocument, LibreOffice)',
 
   // закрытие с несохранёнными правками (novagrid-033): десктоп — диалог
   // «Сохранить / Не сохранять / Отмена», браузер/PWA — системный beforeunload

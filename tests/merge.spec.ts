@@ -60,7 +60,18 @@ function canvasPixel(page: Page, x: number, y: number) {
  */
 async function colBorderPixel(page: Page, api: Nv, row: number, col: number, dy = 5) {
   const m = await api.metrics()
-  const x = m.rowHeaderW + (col + 1) * m.colW
+  // правый край колонки — по фактическим ширинам (фикстуры везут свои,
+  // novagrid-050), а не «метрика × номер»
+  const x =
+    m.rowHeaderW +
+    (await page.evaluate(
+      (c) => {
+        let acc = 0
+        for (let i = 0; i <= c; i++) acc += window.__nv!.colWidth(i)
+        return acc
+      },
+      col,
+    ))
   const y = m.headerH + row * m.rowH + dy
   return canvasPixel(page, x, y)
 }

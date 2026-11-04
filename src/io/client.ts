@@ -65,6 +65,14 @@ export function writeXlsx(sheets: readonly SheetWire[]): Promise<ArrayBuffer> {
   }).then((res) => res.buffer)
 }
 
+/** Запись .ods (novagrid-050): собственный writer в IO-воркере. */
+export function writeOds(sheets: readonly SheetWire[]): Promise<ArrayBuffer> {
+  return call<IoResponse & { kind: 'write'; ok: true; buffer: ArrayBuffer }>({
+    kind: 'write-ods',
+    sheets: [...sheets],
+  }).then((res) => res.buffer)
+}
+
 export function writeCsv(sheet: SheetModel, delimiter: string): Promise<ArrayBuffer> {
   return call<IoResponse & { kind: 'write'; ok: true; buffer: ArrayBuffer }>({
     kind: 'write-csv',

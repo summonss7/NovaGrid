@@ -79,6 +79,7 @@ import {
 import {
   type BookWire,
   type SheetTab,
+  type SheetWire,
   DEFAULT_SHEET_NAME,
   createTab,
   newTabId,
@@ -233,6 +234,12 @@ export interface GridState {
     wire: BookWire,
     meta?: { fileName?: string | null; fileFormat?: FileFormat | null; csvDelimiter?: string },
   ) => void
+  /**
+   * Книга проводами для сохранения (novagrid-050): модель каждого листа +
+   * его ширины колонок и закрепление — активная вкладка из состояния, остальные
+   * из по-вкладочной памяти. Едут в файл (.xlsx/.ods), сессию и снапшот.
+   */
+  sheetsWire: () => SheetWire[]
   newBook: () => void
   /** фиксация сохранения: dirty снят, имя/формат/разделитель запомнены */
   markSaved: (
@@ -1045,6 +1052,16 @@ export const gridStore = createStore<GridState>((set, get) => {
       const sheets = tabs.length > 0 ? tabs : [createTab(DEFAULT_SHEET_NAME)]
       sheets.forEach((t) => recalcSheet(t.sheet))
       clearHistories()
+      // ширины/закрепление из провода — в по-вкладочную память (novagrid-050):
+      // файлы и сессии теперь их несут; активной становится первая вкладка
+      sheets.forEach((t, i) => {
+        const w = wire.sheets[i]?.colWidths
+        if (w && w.size > 0) tabColWidths.set(t.id, new Map(w))
+        const f = wire.sheets[i]?.freeze
+        if (f && (f.rows > 0 || f.cols > 0)) tabFreeze.set(t.id, f)
+      })
+      const firstWidths = tabColWidths.get(sheets[0].id)
+      const firstFreeze = tabFreeze.get(sheets[0].id) ?? NO_FREEZE
       set({
         tabs: sheets,
         activeTab: 0,
@@ -1054,8 +1071,8 @@ export const gridStore = createStore<GridState>((set, get) => {
         altRange: null,
         filters: [],
         filterAnchor: null,
-        colWidths: null,
-        freeze: NO_FREEZE,
+        colWidths: firstWidths && firstWidths.size > 0 ? firstWidths : null,
+        freeze: firstFreeze,
         sumPick: null,
         search: EMPTY_SEARCH,
         replace: EMPTY_REPLACE,
@@ -1065,6 +1082,20 @@ export const gridStore = createStore<GridState>((set, get) => {
         dirty: false,
         fileHandle: null,
         desktopPath: null,
+      })
+    },
+
+    sheetsWire: () => {
+      const { tabs, activeTab, colWidths, freeze } = get()
+      return tabs.map((t, i) => {
+        const w = i === activeTab ? colWidths : tabColWidths.get(t.id)
+        const f = i === activeTab ? freeze : tabFreeze.get(t.id)
+        return {
+          name: t.name,
+          sheet: t.sheet,
+          ...(w && w.size > 0 ? { colWidths: w } : {}),
+          ...(f && (f.rows > 0 || f.cols > 0) ? { freeze: f } : {}),
+        }
       })
     },
 
@@ -1762,7 +1793,8 @@ export const gridStore = createStore<GridState>((set, get) => {
       const clamped = Math.min(COL_W_MAX, Math.max(COL_W_MIN, Math.round(width)))
       if (clamped === BASE_COL_W) next.delete(col)
       else next.set(col, clamped)
-      set({ colWidths: next.size > 0 ? next : null })
+      // ширина едет в файл (novagrid-050) — правка становится несохранённой
+      set({ colWidths: next.size > 0 ? next : null, dirty: true })
     },
 
     setFreeze: (rows, cols) => {
@@ -1772,7 +1804,8 @@ export const gridStore = createStore<GridState>((set, get) => {
         cols: Math.max(0, Math.min(Math.round(cols), Math.max(st.sheet.cols - 1, 0))),
       }
       if (clamped.rows === st.freeze.rows && clamped.cols === st.freeze.cols) return
-      set({ freeze: clamped })
+      // закрепление едет в файл (novagrid-050) — правка становится несохранённой
+      set({ freeze: clamped, dirty: true })
     },
 
     // ── вставка/удаление строк и колонок (novagrid-045) ─────────────────

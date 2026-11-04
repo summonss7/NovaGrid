@@ -271,3 +271,77 @@ describe('excel: объединённые ячейки в файлах (novagrid
     expect(getCell(sheets[0].sheet, 0, 0)).toBe('Шапка')
   })
 })
+
+describe('excel: ширины, закрепление и новые атрибуты стиля (novagrid-050)', () => {
+  it('roundtrip ширины колонок и закрепление переживают сохранить → открыть', async () => {
+    let sheet = createSheet()
+    sheet = withCell(sheet, 0, 0, 'Шапка')
+    sheet = withCell(sheet, 1, 0, 'данные')
+    const colWidths = new Map([
+      [0, 150],
+      [2, 40],
+    ])
+
+    const buffer = await sheetsToXlsx([
+      { name: 'L', sheet, colWidths, freeze: { rows: 1, cols: 2 } },
+    ])
+    const back = await xlsxToSheets(buffer)
+    expect(back[0].colWidths).toEqual(new Map([
+      [0, 150],
+      [2, 40],
+    ]))
+    expect(back[0].freeze).toEqual({ rows: 1, cols: 2 })
+  })
+
+  it('roundtrip перенос, формат числа и границы ячейки', async () => {
+    let sheet = createSheet()
+    sheet = withCell(sheet, 0, 0, 'переносимый текст')
+    sheet = withCell(sheet, 1, 0, '1200')
+    sheet = withCell(sheet, 2, 0, 'рамка')
+    sheet.styles.set(cellKey(0, 0), { wrap: true })
+    sheet.styles.set(cellKey(1, 0), { fmt: 'money' })
+    sheet.styles.set(cellKey(2, 0), { borders: { top: true, left: true } })
+
+    const buffer = await sheetsToXlsx([{ name: 'L', sheet }])
+    const back = await xlsxToSheets(buffer)
+    const s = back[0].sheet
+    expect(s.styles.get(cellKey(0, 0))).toEqual({ wrap: true })
+    expect(s.styles.get(cellKey(1, 0))).toEqual({ fmt: 'money' })
+    expect(s.styles.get(cellKey(2, 0))).toEqual({ borders: { top: true, left: true } })
+  })
+
+  it('чужой .xlsx: закрепление и ширины читаются, формат числа узнаётся', async () => {
+    const wb = new ExcelJS.Workbook()
+    const ws = wb.addWorksheet('S')
+    ws.addRow(['шапка', 'x'])
+    ws.addRow(['a', 'b'])
+    ws.views = [{ state: 'frozen', xSplit: 1, ySplit: 1 }]
+    ws.getColumn(2).width = 20
+    const c = ws.getCell(2, 2)
+    c.value = 1200
+    c.numFmt = '#,##0.00" ₽"'
+
+    const sheets = await xlsxToSheets(await xlsxRoundBuffer(wb))
+    expect(sheets[0].freeze).toEqual({ rows: 1, cols: 1 })
+    // 20 символов → px по формуле чтения; базовые единицы грида
+    expect(sheets[0].colWidths?.get(1)).toBe(145)
+    expect(sheets[0].sheet.styles.get(cellKey(1, 1))?.fmt).toBe('money')
+  })
+
+  it('полный roundtrip книги: все атрибуты листа сразу (стили + ширины + закрепление + объединение)', async () => {
+    let sheet = createSheet()
+    sheet = withCell(sheet, 0, 0, 'Титул')
+    sheet = withCell(sheet, 1, 0, '1')
+    sheet.styles.set(cellKey(0, 0), { bold: true, bg: 'E8F8EC', wrap: true })
+    sheet.merges = [{ r1: 0, c1: 0, r2: 0, c2: 1 }]
+
+    const buffer = await sheetsToXlsx([
+      { name: 'Отчёт', sheet, colWidths: new Map([[0, 200]]), freeze: { rows: 1, cols: 0 } },
+    ])
+    const back = await xlsxToSheets(buffer)
+    expect(back[0].sheet.styles.get(cellKey(0, 0))).toEqual({ bold: true, bg: 'E8F8EC', wrap: true })
+    expect(back[0].sheet.merges).toEqual([{ r1: 0, c1: 0, r2: 0, c2: 1 }])
+    expect(back[0].colWidths).toEqual(new Map([[0, 200]]))
+    expect(back[0].freeze).toEqual({ rows: 1, cols: 0 })
+  })
+})

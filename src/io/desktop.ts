@@ -106,7 +106,7 @@ export function desktopTakeStagedBook(id: number): Promise<ArrayBuffer> {
 /** Нативный «Сохранить как»: путь или null — отмена диалога. */
 export function desktopPickSavePath(
   defaultName: string,
-  format: 'xlsx' | 'csv' | 'nvgridx',
+  format: 'xlsx' | 'ods' | 'csv' | 'nvgridx',
 ): Promise<string | null> {
   return invoke<string | null>('pick_save_book', { defaultName, format })
 }

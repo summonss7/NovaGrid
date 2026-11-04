@@ -48,13 +48,31 @@ function canvasPixel(page: Page, x: number, y: number) {
 /** Пиксель на вертикальной границе колонок col|col+1 (dy от верха строки). */
 async function colLinePixel(page: Page, api: Nv, row: number, col: number, dy = 5) {
   const m = await api.metrics()
-  return canvasPixel(page, m.rowHeaderW + (col + 1) * m.colW, m.headerH + row * m.rowH + dy)
+  // правый край колонки — по фактическим ширинам (фикстуры везут свои,
+  // novagrid-050), а не «метрика × номер»
+  const edge = await page.evaluate(
+    (c) => {
+      let x = 0
+      for (let i = 0; i <= c; i++) x += window.__nv!.colWidth(i)
+      return x
+    },
+    col,
+  )
+  return canvasPixel(page, m.rowHeaderW + edge, m.headerH + row * m.rowH + dy)
 }
 
 /** Пиксель на горизонтальной границе строк row|row+1 (dx от левого края колонки). */
 async function rowLinePixel(page: Page, api: Nv, row: number, col: number, dx = 5) {
   const m = await api.metrics()
-  return canvasPixel(page, m.rowHeaderW + col * m.colW + dx, m.headerH + (row + 1) * m.rowH)
+  const left = await page.evaluate(
+    (c) => {
+      let x = 0
+      for (let i = 0; i < c; i++) x += window.__nv!.colWidth(i)
+      return x
+    },
+    col,
+  )
+  return canvasPixel(page, m.rowHeaderW + left + dx, m.headerH + (row + 1) * m.rowH)
 }
 
 /** Выделить B2:C3 кликом + Shift-кликом. */

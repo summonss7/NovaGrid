@@ -12,9 +12,23 @@ export interface SheetTab {
   sheet: SheetModel
 }
 
+/**
+ * Лист для передачи через границу воркера/IndexedDB/снапшота (novagrid-050):
+ * модель + атрибуты листа, живущие в файле, — ширины колонок и закрепление.
+ * Map клонируется структурно, отдельной сериализации не требует.
+ */
+export interface SheetWire {
+  name: string
+  sheet: SheetModel
+  /** переопределённые ширины колонок: индекс → базовые единицы (зум 100 %) */
+  colWidths?: ReadonlyMap<number, number>
+  /** закрепление: первые rows строк сверху, cols колонок слева; нет — не пишем */
+  freeze?: { rows: number; cols: number }
+}
+
 /** Книга для передачи через границу воркера/IndexedDB (Map клонируется структурно). */
 export interface BookWire {
-  sheets: { name: string; sheet: SheetModel }[]
+  sheets: SheetWire[]
 }
 
 let idSeq = 0

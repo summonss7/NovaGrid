@@ -195,7 +195,7 @@ const en: RuDict = {
   tabDeleteConfirm: (name: string) => `Delete sheet "${name}"? This cannot be undone.`,
   tabMenuLabel: 'Sheet menu',
   xlsSaveNote: '.xls files are saved as .xlsx (the modern format)',
-  odsSaveNote: '.ods files are saved as .xlsx — NovaGrid cannot write .ods directly',
+  saveAsFormatOds: '.ods (OpenDocument, LibreOffice)',
 
   // closing with unsaved changes (novagrid-033): desktop shows the dialog
   // «Save / Don’t save / Cancel», browser/PWA — the system beforeunload prompt

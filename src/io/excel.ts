@@ -7,32 +7,34 @@
  *
  * Ограничения v1 (сознательные, см. CONCEPT Ф1/Этап 4): формулы чужих файлов
  * с неподдержанными функциями читаются кэшем значений («∛»); макросы .xlsm
- * не сохраняются; объединённые ячейки читаются в модель merges (novagrid-047,
- * сохранение объединений в файл — novagrid-050); стили переносятся только
- * для .xlsx; .ods читается значениями и формулами, но не пишется (прямой
- * записи .ods нет — «Сохранить как .xlsx/.csv»).
+ * не сохраняются. novagrid-050: в .xlsx пишутся и читаются все атрибуты
+ * листа — стили (начертания, шрифт/размер, цвета, выравнивание, перенос,
+ * формат числа, границы), ширины колонок, закрепление и объединения;
+ * .ods — собственный writer в ods.ts в пределах поддержки формата.
  */
 
 import ExcelJS from 'exceljs'
 import * as XLSX from 'xlsx'
 import type { MergeRect } from '../core/merges'
 import {
+  BASE_COL_W,
+  COL_W_MAX,
+  COL_W_MIN,
+} from '../grid/geometry'
+import {
   normalizeCellSize,
   parseNumber,
+  type CellBorders,
+  type CellFormat,
   type CellStyle,
-  type SheetModel,
   cellKey,
 } from '../core/sheet'
 import { MIN_COLS, MIN_ROWS } from '../core/sheet'
 import { formulaResultForSave, isFormulaRaw } from '../formula/engine'
-import { sanitizeSheetName, uniqueTabName } from '../core/workbook'
+import { sanitizeSheetName, uniqueTabName, type SheetWire } from '../core/workbook'
 
 export { odsToSheets } from './ods'
-
-export interface SheetWire {
-  name: string
-  sheet: SheetModel
-}
+export type { SheetWire } from '../core/workbook'
 
 /* ── чтение .xlsx/.xlsm ─────────────────────────────────────────────── */
 
@@ -108,6 +110,44 @@ function mergesOf(ws: ExcelJS.Worksheet, cells: Map<string, string>): MergeRect[
   return out
 }
 
+/** Есть ли у стороны границы стиль (тонкая линия — novagrid-049/050). */
+function borderSide(style: Partial<ExcelJS.Border> | undefined): boolean {
+  return !!style && style.style !== undefined
+}
+
+/** Формат числа .xlsx → CellFormat (novagrid-050): свой или чужой по эвристике. */
+export function numFmtToFormat(fmt: string | undefined): CellFormat | undefined {
+  if (!fmt || fmt === 'General') return undefined
+  const low = fmt.toLowerCase()
+  if (low === '#,##0.00' || low === '#,##0' || low === '# ##0.00') return 'number'
+  if (low === '0.00%' || low === '0%' || low === '0.0%') return 'percent'
+  if (fmt.includes('₽') || fmt.includes('руб') || low.includes('"р"') || low.includes('rub'))
+    return 'money'
+  if (low.includes('%')) return 'percent'
+  if (/[#0],[#0]/.test(low) || low.includes('#,##')) return 'number'
+  return undefined
+}
+
+/** CellFormat → строка numFmt .xlsx (запись, novagrid-050). */
+export function formatToNumFmt(fmt: CellFormat): string {
+  if (fmt === 'percent') return '0.00%'
+  if (fmt === 'money') return '#,##0.00" ₽"'
+  return '#,##0.00'
+}
+
+/** Ширина колонки ExcelJS (символы) → базовые единицы грида (px, зум 100 %). */
+export function excelWidthToPx(width: number): number | undefined {
+  if (!Number.isFinite(width) || width <= 0) return undefined
+  const px = Math.round(width * 7 + 5)
+  const clamped = Math.min(COL_W_MAX, Math.max(COL_W_MIN, px))
+  return clamped === BASE_COL_W ? undefined : clamped
+}
+
+/** Базовые единицы грида (px) → ширина колонки ExcelJS (символы). */
+export function pxToExcelWidth(px: number): number {
+  return Math.max(1, Math.round(((px - 5) / 7) * 100) / 100)
+}
+
 function cellStyleOf(cell: ExcelJS.Cell): CellStyle | undefined {
   const style: CellStyle = {}
   if (cell.font?.bold) style.bold = true
@@ -115,13 +155,25 @@ function cellStyleOf(cell: ExcelJS.Cell): CellStyle | undefined {
   // без своего размера наследуют стандарт грида, а не «11 по умолчанию»
   if (cell.font?.italic) style.italic = true
   if (cell.font?.underline) style.underline = true
-  if (typeof cell.font?.size === 'number') {
+  // размер берём только явный: ячейка с одним выравниванием/переносом получает
+  // от ExcelJS дефолтный шрифт книги (Calibri 11, цвет — theme) — это не
+  // «размер ячейки»; свой размер наш writer пишет без name/цвета
+  const fontColor = cell.font?.color as { argb?: string; theme?: number } | undefined
+  const isDefaultFont =
+    cell.font?.name === 'Calibri' &&
+    cell.font?.size === 11 &&
+    !cell.font?.bold &&
+    !cell.font?.italic &&
+    !cell.font?.underline &&
+    fontColor?.argb === undefined
+  if (typeof cell.font?.size === 'number' && !isDefaultFont) {
     const pt = normalizeCellSize(cell.font.size)
     if (pt !== undefined) style.size = pt
   }
   if (cell.font?.name === 'Montserrat') style.font = 'display'
   const h = cell.alignment?.horizontal
   if (h === 'left' || h === 'center' || h === 'right') style.align = h
+  if (cell.alignment?.wrapText) style.wrap = true
   if (cell.fill && (cell.fill as { type?: string }).type === 'pattern') {
     const pattern = cell.fill as { pattern?: string; fgColor?: { argb?: string } }
     if (pattern.pattern === 'solid') {
@@ -131,7 +183,45 @@ function cellStyleOf(cell: ExcelJS.Cell): CellStyle | undefined {
   }
   const fg = argbToHex(cell.font?.color)
   if (fg && fg !== '000000') style.fg = fg
+  const fmt = numFmtToFormat(cell.numFmt)
+  if (fmt) style.fmt = fmt
+  // границы (novagrid-049/050): любая ненулевая сторона файла — тонкая линия
+  const b = cell.border
+  if (b) {
+    const borders: CellBorders = {
+      ...(borderSide(b.top) ? { top: true } : {}),
+      ...(borderSide(b.right) ? { right: true } : {}),
+      ...(borderSide(b.bottom) ? { bottom: true } : {}),
+      ...(borderSide(b.left) ? { left: true } : {}),
+    }
+    if (Object.keys(borders).length > 0) style.borders = borders
+  }
   return Object.keys(style).length > 0 ? style : undefined
+}
+
+/** Закрепление листа .xlsx: первый frozen view → {rows, cols} (0 — нет). */
+function freezeOf(ws: ExcelJS.Worksheet): { rows: number; cols: number } | undefined {
+  const view = (ws.views ?? []).find((v) => (v as { state?: string }).state === 'frozen') as
+    | { xSplit?: number; ySplit?: number }
+    | undefined
+  if (!view) return undefined
+  const rows = Math.max(0, Math.floor(view.ySplit ?? 0))
+  const cols = Math.max(0, Math.floor(view.xSplit ?? 0))
+  return rows > 0 || cols > 0 ? { rows, cols } : undefined
+}
+
+/** Ширины колонок .xlsx: только переопределённые (index → базовые единицы). */
+function colWidthsOf(ws: ExcelJS.Worksheet): Map<number, number> | undefined {
+  const out = new Map<number, number>()
+  // ws.columns отдаёт только определённые в файле колонки (1-based)
+  const cols = (ws.columns ?? []) as (ExcelJS.Column | undefined)[]
+  cols.forEach((col, i) => {
+    const width = col?.width
+    if (typeof width !== 'number' || i >= 1024) return
+    const px = excelWidthToPx(width)
+    if (px !== undefined) out.set(i, px)
+  })
+  return out.size > 0 ? out : undefined
 }
 
 export async function xlsxToSheets(buffer: ArrayBuffer): Promise<SheetWire[]> {
@@ -152,7 +242,9 @@ export async function xlsxToSheets(buffer: ArrayBuffer): Promise<SheetWire[]> {
     let maxRow = -1
     let maxCol = -1
     ws.eachRow({ includeEmpty: false }, (row, rn) => {
-      row.eachCell({ includeEmpty: false }, (cell, cn) => {
+      // includeEmpty (novagrid-050): стили бывают и у пустых ячеек (заливка/
+      // границы «на вырост») — значение всё равно хранится только непустое
+      row.eachCell({ includeEmpty: true }, (cell, cn) => {
         const key = cellKey(rn - 1, cn - 1)
         const v = cell.value
         let raw: string
@@ -190,10 +282,12 @@ export async function xlsxToSheets(buffer: ArrayBuffer): Promise<SheetWire[]> {
           maxCol = Math.max(maxCol, cn - 1)
         }
         const style = cellStyleOf(cell)
-        if (style && raw !== '') styles.set(key, style)
+        if (style) styles.set(key, style)
       })
     })
     const merges = mergesOf(ws, cells)
+    const colWidths = colWidthsOf(ws)
+    const freeze = freezeOf(ws)
     out.push({
       name,
       sheet: {
@@ -206,6 +300,8 @@ export async function xlsxToSheets(buffer: ArrayBuffer): Promise<SheetWire[]> {
         maxRow,
         maxCol,
       },
+      ...(colWidths ? { colWidths } : {}),
+      ...(freeze ? { freeze } : {}),
     })
   }
   return out
@@ -310,7 +406,7 @@ function toArrayBuffer(out: unknown): ArrayBuffer {
 export async function sheetsToXlsx(sheets: readonly SheetWire[]): Promise<ArrayBuffer> {
   const wb = new ExcelJS.Workbook()
   const used = new Set<string>()
-  for (const { name, sheet } of sheets) {
+  for (const { name, sheet, colWidths, freeze } of sheets) {
     let wsName = sanitizeSheetName(name) || `Лист ${used.size + 1}`
     if (used.has(wsName)) wsName = uniqueTabName([...used], wsName)
     used.add(wsName)
@@ -318,6 +414,21 @@ export async function sheetsToXlsx(sheets: readonly SheetWire[]): Promise<ArrayB
 
     const lastRow = Math.max(sheet.maxRow, 0)
     const lastCol = Math.max(sheet.maxCol, 0)
+    // стили и объединения бывают и за контентом (границы/заливка «на вырост»,
+    // объединение пустых ячеек) — границы записи идут по ним тоже
+    let extentRow = lastRow
+    let extentCol = lastCol
+    for (const key of sheet.styles.keys()) {
+      const sep = key.indexOf(':')
+      const r = Number(key.slice(0, sep))
+      const c = Number(key.slice(sep + 1))
+      if (r > extentRow) extentRow = r
+      if (c > extentCol) extentCol = c
+    }
+    for (const m of sheet.merges ?? []) {
+      if (m.r2 > extentRow) extentRow = m.r2
+      if (m.c2 > extentCol) extentCol = m.c2
+    }
     // матрица значений: числа — числами, пусто — null (не пустая строка);
     // формулы — null в матрице (записываются ниже объектом {formula, result})
     const matrix: (string | number | null)[][] = []
@@ -338,6 +449,18 @@ export async function sheetsToXlsx(sheets: readonly SheetWire[]): Promise<ArrayB
     }
     ws.addRows(matrix)
 
+    // объединения — ДО стилей (novagrid-050): mergeCells стирает стили
+    // покрываемых ячеек, а стиль после объединения ложится и на скрытые
+    // координаты (границы периметра объединения — именно на них)
+    for (const m of sheet.merges ?? []) {
+      if (m.r2 > extentRow || m.c2 > extentCol) continue
+      try {
+        ws.mergeCells(m.r1 + 1, m.c1 + 1, m.r2 + 1, m.c2 + 1)
+      } catch {
+        // перекрывающиеся области в модели — пропускаем, файл остаётся валидным
+      }
+    }
+
     // формулы: канонический текст («,» между аргументами) + вычисленный
     // результат; чужие (∛) сохраняются как есть со значением из файла
     for (const fc of formulaCells) {
@@ -347,10 +470,11 @@ export async function sheetsToXlsx(sheets: readonly SheetWire[]): Promise<ArrayB
       cell.value = { formula: canonical ?? raw.slice(1), result }
     }
 
-    // стили применяются координатно после значений
+    // стили применяются координатно после значений; ячейка без значения,
+    // но со стилем (заливка/границы «на вырост») тоже записывается
     for (const [key, style] of sheet.styles) {
       const [r, c] = key.split(':').map(Number)
-      if (!(r >= 0 && r <= lastRow && c >= 0 && c <= lastCol)) continue
+      if (!(r >= 0 && r <= extentRow && c >= 0 && c <= extentCol)) continue
       const cell = ws.getCell(r + 1, c + 1)
       if (
         style.bold ||
@@ -369,9 +493,40 @@ export async function sheetsToXlsx(sheets: readonly SheetWire[]): Promise<ArrayB
           ...(style.fg ? { color: { argb: `FF${style.fg}` } } : {}),
         }
       }
-      if (style.align) cell.alignment = { horizontal: style.align }
+      if (style.align || style.wrap) {
+        cell.alignment = {
+          ...(style.align ? { horizontal: style.align } : {}),
+          ...(style.wrap ? { wrapText: true } : {}),
+        }
+      }
       if (style.bg)
         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: `FF${style.bg}` } }
+      if (style.fmt) cell.numFmt = formatToNumFmt(style.fmt)
+      if (style.borders) {
+        const thin = { style: 'thin' as const }
+        cell.border = {
+          ...(style.borders.top ? { top: thin } : {}),
+          ...(style.borders.right ? { right: thin } : {}),
+          ...(style.borders.bottom ? { bottom: thin } : {}),
+          ...(style.borders.left ? { left: thin } : {}),
+        }
+      }
+    }
+
+    // ширины колонок и закрепление (novagrid-050)
+    if (colWidths) {
+      for (const [c, w] of colWidths) {
+        if (c >= 0 && c < 16384) ws.getColumn(c + 1).width = pxToExcelWidth(w)
+      }
+    }
+    if (freeze && (freeze.rows > 0 || freeze.cols > 0)) {
+      ws.views = [
+        {
+          state: 'frozen',
+          ...(freeze.cols > 0 ? { xSplit: freeze.cols } : {}),
+          ...(freeze.rows > 0 ? { ySplit: freeze.rows } : {}),
+        },
+      ]
     }
   }
   const out = await wb.xlsx.writeBuffer()

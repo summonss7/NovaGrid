@@ -596,6 +596,42 @@ describe('store: ширины колонок (novagrid-020)', () => {
     s().activateTab(0)
     expect(s().colWidths?.get(1)).toBe(1000) // прежний лист помнит
   })
+
+  it('ширины и закрепление ездят через loadBook/sheetsWire (сессия и файлы, novagrid-050)', () => {
+    s().loadBook({
+      sheets: [
+        {
+          name: 'А',
+          sheet: createSheet(),
+          colWidths: new Map([
+            [0, 150],
+            [2, 40],
+          ]),
+          freeze: { rows: 1, cols: 2 },
+        },
+        { name: 'Б', sheet: createSheet() },
+      ],
+    })
+    // активная вкладка — первая: атрибуты в состоянии
+    expect(s().colWidths?.get(0)).toBe(150)
+    expect(s().freeze).toEqual({ rows: 1, cols: 2 })
+    // провод для сохранения несёт атрибуты обоих листов; у «Б» их нет
+    const wire = s().sheetsWire()
+    expect(wire[0].colWidths).toEqual(
+      new Map([
+        [0, 150],
+        [2, 40],
+      ]),
+    )
+    expect(wire[0].freeze).toEqual({ rows: 1, cols: 2 })
+    expect(wire[1].colWidths).toBeUndefined()
+    expect(wire[1].freeze).toBeUndefined()
+    // правки ширин/закрепления в активной вкладке меняют провод
+    s().setColWidth(0, 200)
+    s().setFreeze(2, 1)
+    expect(s().sheetsWire()[0].colWidths?.get(0)).toBe(200)
+    expect(s().sheetsWire()[0].freeze).toEqual({ rows: 2, cols: 1 })
+  })
 })
 
 describe('store: указание ссылок формулы (novagrid-020)', () => {

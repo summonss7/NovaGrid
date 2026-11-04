@@ -24,6 +24,7 @@ import {
   ensureReadPermission,
   extToFormat,
   isFsaAvailable,
+  odsMime,
   openFixture,
   pickOpenFile,
   readBookFile,
@@ -309,17 +310,18 @@ export default function App() {
   const save = useCallback(async () => {
     const st = gridStore.getState()
     if (st.edit) st.commitEdit('none')
-    // .xls/.ods напрямую не пишем — только конверт в .xlsx/.csv через диалог
-    const directFormat = st.fileFormat === 'csv' || st.fileFormat === 'xlsx'
+    // .xls напрямую не пишем — только конверт в .xlsx/.csv/.ods через диалог;
+    // .xlsx/.ods/.csv (novagrid-050) пишутся прямо, со всеми атрибутами листа
+    const directFormat =
+      st.fileFormat === 'csv' || st.fileFormat === 'xlsx' || st.fileFormat === 'ods'
+        ? st.fileFormat
+        : null
     // десктоп-обёртка: прямая запись по пути вместо FSA-хэндла
     if (isDesktop()) {
       if (st.desktopPath && st.fileFormat && directFormat) {
         setBusy(t.savingFile)
         try {
-          const buffer = await buildBookBuffer(
-            st.fileFormat === 'csv' ? 'csv' : 'xlsx',
-            st.csvDelimiter,
-          )
+          const buffer = await buildBookBuffer(directFormat, st.csvDelimiter)
           await desktopWriteFile(st.desktopPath, buffer)
           gridStore.getState().markSaved()
           showToast(t.savedToast(st.fileName ?? ''), 'ok')
@@ -339,10 +341,7 @@ export default function App() {
     if (st.fileHandle && st.fileFormat && directFormat) {
       setBusy(t.savingFile)
       try {
-        const buffer = await buildBookBuffer(
-          st.fileFormat === 'csv' ? 'csv' : 'xlsx',
-          st.csvDelimiter,
-        )
+        const buffer = await buildBookBuffer(directFormat, st.csvDelimiter)
         await writeToHandle(st.fileHandle, buffer)
         gridStore.getState().markSaved()
         showToast(t.savedToast(st.fileName ?? ''), 'ok')
@@ -361,21 +360,21 @@ export default function App() {
 
   /**
    * «Сохранить» в диалоге закрытия (novagrid-033): прямой записью — сохранить
-   * и закрыть сразу; книге без пути (новая/.xls/.ods) — «Сохранить как…»,
+   * и закрыть сразу; книге без пути (новая/.xls) — «Сохранить как…»,
    * окно закроется после успешной записи (closeAfterSaveRef). Ошибка записи
    * оставляет диалог открытым — решение за пользователем.
    */
   const saveAndClose = useCallback(async () => {
     const st = gridStore.getState()
     if (st.edit) st.commitEdit('none')
-    const directFormat = st.fileFormat === 'csv' || st.fileFormat === 'xlsx'
+    const directFormat =
+      st.fileFormat === 'csv' || st.fileFormat === 'xlsx' || st.fileFormat === 'ods'
+        ? st.fileFormat
+        : null
     if (st.desktopPath && st.fileFormat && directFormat) {
       setBusy(t.savingFile)
       try {
-        const buffer = await buildBookBuffer(
-          st.fileFormat === 'csv' ? 'csv' : 'xlsx',
-          st.csvDelimiter,
-        )
+        const buffer = await buildBookBuffer(directFormat, st.csvDelimiter)
         await desktopWriteFile(st.desktopPath, buffer)
         gridStore.getState().markSaved()
         setCloseAskOpen(false)
@@ -454,13 +453,22 @@ export default function App() {
                     description: 'Excel (.xlsx)',
                     accept: { [xlsxMime()]: ['.xlsx'] },
                   }
-                : { description: 'CSV (.csv)', accept: { [csvMime()]: ['.csv'] } },
+                : choice.format === 'ods'
+                  ? {
+                      description: 'OpenDocument (.ods)',
+                      accept: { [odsMime()]: ['.ods'] },
+                    }
+                  : { description: 'CSV (.csv)', accept: { [csvMime()]: ['.csv'] } },
             ],
           })
           await writeToHandle(handle, buffer)
           gridStore.getState().setFileHandle(handle)
         } else {
-          downloadBuffer(choice.fileName, buffer, choice.format === 'csv' ? csvMime() : xlsxMime())
+          downloadBuffer(
+            choice.fileName,
+            buffer,
+            choice.format === 'csv' ? csvMime() : choice.format === 'ods' ? odsMime() : xlsxMime(),
+          )
         }
         gridStore
           .getState()
@@ -734,7 +742,12 @@ export default function App() {
   }, [mode, save, onOpenClicked])
 
   const suggestedName = gridStore.getState().fileName ?? t.unsavedBook
-  const defaultFormat: SaveAsFormat = gridStore.getState().fileFormat === 'csv' ? 'csv' : 'xlsx'
+  const defaultFormat: SaveAsFormat =
+    gridStore.getState().fileFormat === 'csv'
+      ? 'csv'
+      : gridStore.getState().fileFormat === 'ods'
+        ? 'ods'
+        : 'xlsx'
 
   return (
     <div
@@ -861,13 +874,7 @@ export default function App() {
           suggestedName={suggestedName}
           defaultFormat={defaultFormat}
           defaultDelimiter={gridStore.getState().csvDelimiter}
-          convertNote={
-            gridStore.getState().fileFormat === 'xls'
-              ? t.xlsSaveNote
-              : gridStore.getState().fileFormat === 'ods'
-                ? t.odsSaveNote
-                : null
-          }
+          convertNote={gridStore.getState().fileFormat === 'xls' ? t.xlsSaveNote : null}
           onConfirm={(choice) => void saveAsChosen(choice)}
           onCancel={() => setSaveAsOpen(false)}
         />

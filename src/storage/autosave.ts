@@ -23,13 +23,15 @@ export async function flushSession(): Promise<void> {
   const st = gridStore.getState()
   if (st.fileName === null) return
   if (countCells(st.tabs) > AUTOSAVE_CELL_LIMIT) return
-  await saveSession(st.tabs, st.fileName).catch(() => undefined)
+  await saveSession(st.sheetsWire(), st.fileName).catch(() => undefined)
 }
 
 export function installAutosave(): () => void {
   let timer = 0
   let lastTabs: unknown = null
   let lastFileName: string | null = null
+  let lastWidths: unknown = null
+  let lastFreeze: unknown = null
   let saving = false
   let pendingAgain = false
 
@@ -48,7 +50,11 @@ export function installAutosave(): () => void {
     saving = true
     lastTabs = st.tabs
     lastFileName = st.fileName
-    void saveSession(st.tabs, st.fileName)
+    lastWidths = st.colWidths
+    lastFreeze = st.freeze
+    // листы с ширинами/закреплением (novagrid-050): перетаскивание границы
+    // колонки или закрепление тоже меняют сессию, а не только правки ячеек
+    void saveSession(st.sheetsWire(), st.fileName)
       .catch(() => undefined) // IndexedDB может быть недоступна (private mode) — молча
       .finally(() => {
         saving = false
@@ -68,7 +74,13 @@ export function installAutosave(): () => void {
   }
 
   const unsub = gridStore.subscribe((st) => {
-    if (st.tabs === lastTabs && st.fileName === lastFileName) return
+    if (
+      st.tabs === lastTabs &&
+      st.fileName === lastFileName &&
+      st.colWidths === lastWidths &&
+      st.freeze === lastFreeze
+    )
+      return
     schedule()
   })
 

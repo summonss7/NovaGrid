@@ -8,6 +8,7 @@
 
 import Dexie, { type EntityTable } from 'dexie'
 import type { SheetModel } from '../core/sheet'
+import type { SheetWire } from '../core/workbook'
 import type { OpeningRow } from './recents'
 
 export type { OpeningRow } from './recents'
@@ -18,7 +19,8 @@ export interface SessionRow {
   savedAt: number
   /** суммарное число заполненных ячеек — для подписи в «Недавних» */
   cells: number
-  sheets: { name: string; sheet: SheetModel }[]
+  /** листы с ширинами/закреплением (novagrid-050); старые записи — без них */
+  sheets: SheetWire[]
 }
 
 /**
@@ -62,14 +64,16 @@ export function countCells(sheets: readonly { sheet: SheetModel }[]): number {
 }
 
 export async function saveSession(
-  sheets: { name: string; sheet: SheetModel }[],
+  sheets: readonly SheetWire[],
   fileName: string | null,
 ): Promise<void> {
   const row: SessionRow = {
     fileName,
     savedAt: Date.now(),
     cells: countCells(sheets),
-    sheets: sheets.map((s) => ({ name: s.name, sheet: s.sheet })),
+    // провод целиком: с ширинами колонок и закреплением (novagrid-050);
+    // Map клонируется структурно, ReadonlyMap в IndexedDB лежит как Map
+    sheets: sheets.map((s) => ({ ...s })),
   }
   await db.sessions.add(row)
   // держим только последние N сессий

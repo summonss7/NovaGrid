@@ -36,6 +36,8 @@ function nv(page: Page) {
       page.evaluate(({ x, y }) => window.__nv!.scrollTo(x, y), { x, y }),
     cellCenter: (row: number, col: number) =>
       page.evaluate(({ row, col }) => window.__nv!.cellCenter(row, col), { row, col }),
+    /** закрепление активной вкладки (novagrid-050) */
+    freeze: () => page.evaluate(() => window.__nv!.freeze()),
   }
 }
 
@@ -189,28 +191,123 @@ test.describe('файловой цикл: открыл → изменил → с
     await expect.poll(() => api.cellText(1, 4)).toBe('8484')
     await expect.poll(() => api.cellText(5, 2)).toBe('40142')
 
-    // «Сохранить как…»: формат .xlsx по умолчанию, заметка о конверте видна
+    // «Сохранить как…»: .ods-книга сохраняется прямо в .ods своим writer
+    // (novagrid-050), заметки о конверте больше нет
     const downloadPromise = page.waitForEvent('download')
     await page.getByRole('button', { name: 'Сохранить как…' }).click()
     const dialog = page.getByRole('dialog', { name: 'Сохранить как' })
     await expect(dialog).toBeVisible()
-    await expect(dialog.locator('.dialog-note')).toContainText('.xlsx')
+    await expect(dialog.locator('select').first()).toHaveValue('ods')
     await dialog.getByRole('button', { name: 'Сохранить', exact: true }).click()
     const download = await downloadPromise
-    expect(download.suggestedFilename()).toBe('ods-book.xlsx')
-    const savedPath = test.info().outputPath('ods-saved.xlsx')
+    expect(download.suggestedFilename()).toBe('ods-book.ods')
+    const savedPath = test.info().outputPath('ods-saved.ods')
     await download.saveAs(savedPath)
 
-    // переоткрыли сохранённый .xlsx: правка, второй лист и формулы на месте
+    // переоткрыли сохранённый .ods: правка, второй лист и формулы на месте;
+    // ждём именно переключения книги (значения истинны и до него — гонка)
     await openFixtureFile(page, savedPath)
     await expect
-      .poll(() => page.evaluate(() => window.__nv?.cell(1, 2) ?? ''), { timeout: 3000 })
-      .toBe('4242')
+      .poll(() => page.evaluate(() => window.__nv?.book().fileName ?? ''), { timeout: 3000 })
+      .toBe('ods-saved.ods')
+    await expect.poll(() => api.cell(1, 2)).toBe('4242')
     await expect.poll(() => api.cellText(1, 4)).toBe('8484')
     await expect.poll(() => api.cellText(5, 2)).toBe('40142')
     book = await api.book()
     expect(book.tabs).toEqual(['Данные', 'Справка'])
-    expect(book.fileName).toBe('ods-book.xlsx')
+  })
+
+  test('оформление листа едет в .xlsx и возвращается (novagrid-050)', async ({ page }) => {
+    await page.goto('/?testui=1')
+    await openFixtureFile(page, 'public/fixtures/demo-book.xlsx')
+    await expect
+      .poll(() => page.evaluate(() => window.__nv?.cell(1, 0) ?? ''), { timeout: 3000 })
+      .toBe('Иванов')
+
+    const api = nv(page)
+    // жирный + перенос на чистой ячейке A2 (Ctrl+B, кнопка «Перенос текста»)
+    const a2 = await api.cellCenter(1, 0)
+    await page.mouse.click(a2.x, a2.y)
+    await page.keyboard.press('Control+b')
+    await page.getByRole('button', { name: 'Перенос текста' }).click()
+    // ширина колонки B — перетаскиванием из тест-хука; закреп до B2 — ПКМ
+    await page.evaluate(() => window.__nv!.setColWidth(1, 150))
+    const b2 = await api.cellCenter(1, 1)
+    await page.mouse.click(b2.x, b2.y, { button: 'right' })
+    await page
+      .getByRole('menuitem', { name: 'Закрепить области (выше и левее активной ячейки)' })
+      .click()
+    expect(await api.freeze()).toEqual({ rows: 1, cols: 1 })
+    expect(JSON.stringify(await page.evaluate(() => window.__nv!.style(1, 0)))).toBe(
+      JSON.stringify({ bold: true, wrap: true }),
+    )
+
+    // Ctrl+S → диалог (нет FSA) → скачивание
+    const downloadPromise = page.waitForEvent('download')
+    await page.keyboard.press('Control+s')
+    const dialog = page.getByRole('dialog', { name: 'Сохранить как' })
+    await expect(dialog).toBeVisible()
+    await dialog.getByRole('button', { name: 'Сохранить', exact: true }).click()
+    const download = await downloadPromise
+    const savedPath = test.info().outputPath('styled.xlsx')
+    await download.saveAs(savedPath)
+
+    // переоткрыли: стиль, ширина и закрепление пережили круг через файл;
+    // ждём именно переключения книги (стиль/ширина истинны и до него — гонка)
+    await openFixtureFile(page, savedPath)
+    await expect
+      .poll(() => page.evaluate(() => window.__nv?.book().fileName ?? ''), { timeout: 3000 })
+      .toBe('styled.xlsx')
+    await expect
+      .poll(() => page.evaluate(() => JSON.stringify(window.__nv!.style(1, 0))))
+      .toBe(JSON.stringify({ bold: true, wrap: true }))
+    expect(await page.evaluate(() => window.__nv!.colWidth(1))).toBe(150)
+    expect(await api.freeze()).toEqual({ rows: 1, cols: 1 })
+  })
+
+  test('«Сохранить как .ods»: оформление возвращается своим парсером (novagrid-050)', async ({
+    page,
+  }) => {
+    await page.goto('/?testui=1')
+    await openFixtureFile(page, 'public/fixtures/demo-book.xlsx')
+    await expect
+      .poll(() => page.evaluate(() => window.__nv?.cell(1, 0) ?? ''), { timeout: 3000 })
+      .toBe('Иванов')
+
+    const api = nv(page)
+    const a2 = await api.cellCenter(1, 0)
+    await page.mouse.click(a2.x, a2.y)
+    await page.keyboard.press('Control+b')
+    await page.evaluate(() => window.__nv!.setColWidth(1, 150))
+    const b2 = await api.cellCenter(1, 1)
+    await page.mouse.click(b2.x, b2.y, { button: 'right' })
+    await page
+      .getByRole('menuitem', { name: 'Закрепить области (выше и левее активной ячейки)' })
+      .click()
+
+    // «Сохранить как…» → формат .ods → скачивание
+    const downloadPromise = page.waitForEvent('download')
+    await page.getByRole('button', { name: 'Сохранить как…' }).click()
+    const dialog = page.getByRole('dialog', { name: 'Сохранить как' })
+    await expect(dialog).toBeVisible()
+    await dialog.locator('select').first().selectOption('ods')
+    await dialog.getByRole('button', { name: 'Сохранить', exact: true }).click()
+    const download = await downloadPromise
+    expect(download.suggestedFilename()).toBe('demo-book.ods')
+    const savedPath = test.info().outputPath('styled.ods')
+    await download.saveAs(savedPath)
+
+    // переоткрыли: bold, ширина колонки и закрепление прочитаны из .ods
+    // (ждём переключения книги по имени — иначе гонка со старым состоянием)
+    await openFixtureFile(page, savedPath)
+    await expect
+      .poll(() => page.evaluate(() => window.__nv?.book().fileName ?? ''), { timeout: 3000 })
+      .toBe('styled.ods')
+    await expect
+      .poll(() => page.evaluate(() => JSON.stringify(window.__nv!.style(1, 0))))
+      .toBe(JSON.stringify({ bold: true }))
+    expect(await page.evaluate(() => window.__nv!.colWidth(1))).toBe(150)
+    expect(await api.freeze()).toEqual({ rows: 1, cols: 1 })
   })
 })
 
@@ -323,6 +420,15 @@ test.describe('автосохранение сессии и «Недавние»
     await page.keyboard.press('Enter')
     await expect.poll(() => api.cell(1, 1)).toBe('Заметка сессии')
 
+    // ширина колонки и закрепление тоже едут в сессию (novagrid-050):
+    // правки атрибутов листа сбрасывают дебаунс автосохранения сами
+    await page.evaluate(() => window.__nv!.setColWidth(1, 150))
+    await page.mouse.click(center.x, center.y, { button: 'right' })
+    await page
+      .getByRole('menuitem', { name: 'Закрепить области (выше и левее активной ячейки)' })
+      .click()
+    expect(await api.freeze()).toEqual({ rows: 1, cols: 1 })
+
     // ждём дебаунс автосохранения (1 с) и сброс в IndexedDB
     await page.waitForTimeout(2200)
 
@@ -336,6 +442,11 @@ test.describe('автосохранение сессии и «Недавние»
     await expect
       .poll(() => page.evaluate(() => window.__nv?.cell(1, 1) ?? ''), { timeout: 3000 })
       .toBe('Заметка сессии')
+    // атрибуты листа восстановились из сессии (novagrid-050)
+    await expect
+      .poll(() => page.evaluate(() => window.__nv!.colWidth(1)))
+      .toBe(150)
+    expect(await api.freeze()).toEqual({ rows: 1, cols: 1 })
     const book = await nv(page).book()
     expect(book.dirty).toBe(true)
     expect(book.tabs).toEqual(['Сотрудники', 'Справочник'])

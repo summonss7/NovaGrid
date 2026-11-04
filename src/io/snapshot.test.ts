@@ -115,6 +115,37 @@ describe('капсула .nvgridx: шифрование', () => {
     expect(Number.isNaN(Date.parse(opened.savedAt))).toBe(false)
   })
 
+  test('ширины колонок и закрепление листа едут в капсулу (novagrid-050)', async () => {
+    const wire = [
+      {
+        name: 'Сотрудники',
+        sheet: demoTabs()[0].sheet,
+        colWidths: new Map([
+          [0, 150],
+          [2, 40],
+        ]),
+        freeze: { rows: 1, cols: 2 },
+      },
+      { name: 'Справка', sheet: demoTabs()[1].sheet },
+    ]
+    const opened = snapshotToBook(
+      await decryptSnapshot(
+        await encryptSnapshot(bookToSnapshot(wire, { fileName: 'b.xlsx', csvDelimiter: ';' }), PASS),
+        PASS,
+      ),
+    )
+    expect(opened.sheets[0].colWidths).toEqual(
+      new Map([
+        [0, 150],
+        [2, 40],
+      ]),
+    )
+    expect(opened.sheets[0].freeze).toEqual({ rows: 1, cols: 2 })
+    // лист без ширин/закрепления их и не получает
+    expect(opened.sheets[1].colWidths).toBeUndefined()
+    expect(opened.sheets[1].freeze).toBeUndefined()
+  })
+
   test('неверная парольная фраза — отказ, а не мусор', async () => {
     const capsule = await encryptSnapshot(bookToSnapshot(demoTabs(), { fileName: null, csvDelimiter: ';' }), PASS)
     await expect(decryptSnapshot(capsule, 'другая фраза')).rejects.toThrow(

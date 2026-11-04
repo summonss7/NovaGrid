@@ -104,6 +104,7 @@ fn pick_open_books() -> Vec<String> {
 fn pick_save_book(default_name: String, format: String) -> Option<String> {
     let (label, ext) = match format.as_str() {
         "csv" => ("CSV", "csv"),
+        "ods" => ("OpenDocument", "ods"),
         "nvgridx" => ("Снапшот NovaGrid", "nvgridx"),
         _ => ("Excel", "xlsx"),
     };
