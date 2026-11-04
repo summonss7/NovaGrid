@@ -821,6 +821,19 @@ describe('store: форматирование ячеек (novagrid-039)', () => 
     expect(getStyle(s().sheet, 1, 2)).toBeUndefined()
   })
 
+  it('toggleStyle wrap (novagrid-048): включить по выделению, повторно — снять, Ctrl+Z возвращает', () => {
+    s().clickCell(1, 0)
+    s().clickCell(1, 2, { shift: true })
+    s().toggleStyle('wrap')
+    expect(getStyle(s().sheet, 1, 0)?.wrap).toBe(true)
+    expect(getStyle(s().sheet, 1, 2)?.wrap).toBe(true)
+    s().toggleStyle('wrap')
+    expect(getStyle(s().sheet, 1, 0)).toBeUndefined()
+    s().toggleStyle('wrap')
+    s().undo() // одна транзакция на всё выделение
+    expect(getStyle(s().sheet, 1, 0)).toBeUndefined()
+  })
+
   it('toggleStyle снимает свойство, только если оно есть во всём выделении', () => {
     s().applyStyle({ bold: true }) // жирная только активная A1
     s().clickCell(0, 0)

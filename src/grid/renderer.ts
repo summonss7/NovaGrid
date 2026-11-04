@@ -20,9 +20,10 @@ import {
   type ColLayout,
   type FreezeView,
   METRICS,
+  type RowAxis,
   type RowLayout,
-  visibleRows,
 } from './geometry'
+import { wrapLineMetrics, wrapLines } from './wrap'
 
 export interface GridTheme {
   ink: string
@@ -138,6 +139,8 @@ export interface DrawInput {
   layout: RowLayout
   /** раскладка ширин колонок — переменные ширины после перетаскивания (novagrid-020) */
   cols: ColLayout
+  /** ось строк с автовысотами переноса текста (novagrid-048) */
+  rows: RowAxis
   /** закреплённые строки/колонки (novagrid-044); отсутствие — как {0,0} */
   frozen?: FreezeView
   /** тег локали словаря — формат числа (novagrid-045) */
@@ -189,6 +192,7 @@ export function drawGrid(input: DrawInput): VisibleRegion {
     sheet,
     layout,
     cols,
+    rows,
     frozen,
     locale,
     selection,
@@ -200,24 +204,29 @@ export function drawGrid(input: DrawInput): VisibleRegion {
     theme,
   } = input
   const m = METRICS
+  /** измерение ширины строк для переноса текста — тем же контекстом кадра */
+  const ctxMeasure = (t: string, f: string): number => {
+    ctx.font = f
+    return ctx.measureText(t).width
+  }
 
   const fr = frozen?.rows ?? 0
   const fc = frozen?.cols ?? 0
-  const fy = fr * m.rowH
   const fx = fc > 0 ? cols.x0(fc) : 0
   // закреп не шире листа
   const frOk = Math.min(fr, layout.count)
   const fcOk = Math.min(fc, cols.count)
+  // высота закрепа и y строк — по оси строк: автовысоты переноса (novagrid-048)
+  const fy = rows.y0(frOk)
 
   // y унифицированной строки: закреп стоит под шапкой, дальше — прокрутка
-  const rowY = (i: number) =>
-    i < frOk ? m.headerH + i * m.rowH : m.headerH + fy + (i - frOk) * m.rowH - scrollY
+  const rowY = (i: number) => m.headerH + rows.y0(i) - (i < frOk ? 0 : scrollY)
   // x колонки: закреплённые не прокручиваются
   const colX = (c: number) => m.rowHeaderW + cols.x0(c) - (c < fcOk ? 0 : scrollX)
 
-  const svRows = visibleRows(scrollY, height - m.headerH - fy)
-  const scrollRowFrom = Math.min(frOk + svRows.first, layout.count - 1)
-  const scrollRowTo = Math.min(frOk + svRows.last, layout.count - 1)
+  const contentTop = rows.y0(frOk) + scrollY
+  const scrollRowFrom = Math.min(Math.max(frOk, rows.at(contentTop)), layout.count - 1)
+  const scrollRowTo = Math.min(rows.at(contentTop + height - m.headerH - fy), layout.count - 1)
   const svCols = cols.visible(width - m.rowHeaderW - fx, scrollX + fx)
   const scrollColTo = Math.min(svCols.last, sheet.cols - 1)
   const lastRow = scrollRowTo
@@ -263,7 +272,7 @@ export function drawGrid(input: DrawInput): VisibleRegion {
     y: m.headerH + fy,
     w: width - m.rowHeaderW - fx,
     h: height - m.headerH - fy,
-    rowFrom: frOk > 0 || fcOk > 0 ? scrollRowFrom : Math.min(svRows.first, layout.count - 1),
+    rowFrom: scrollRowFrom,
     rowTo: scrollRowTo,
     colFrom: Math.max(svCols.first, fcOk),
     colTo: scrollColTo,
@@ -277,7 +286,7 @@ export function drawGrid(input: DrawInput): VisibleRegion {
     0,
     Math.ceil((width - (contentRight - scrollX)) / m.colW),
   )
-  const contentBottom = m.headerH + layout.count * m.rowH
+  const contentBottom = m.headerH + rows.y0(layout.count)
   const fillerRows = Math.max(0, Math.ceil((height - (contentBottom - scrollY)) / m.rowH))
 
   ctx.save()
@@ -297,7 +306,8 @@ export function drawGrid(input: DrawInput): VisibleRegion {
     for (let i = reg.rowFrom; i <= reg.rowTo; i++) {
       const r = layout.rowAt(i)
       const y = rowY(i)
-      if (y + m.rowH <= reg.y || y >= reg.y + reg.h) continue
+      const ih = rows.height(i)
+      if (y + ih <= reg.y || y >= reg.y + reg.h) continue
       for (let c = reg.colFrom; c <= reg.colTo; c++) {
         const bg = sheet.styles.get(cellKey(r, c))?.bg
         if (!bg) continue
@@ -305,7 +315,7 @@ export function drawGrid(input: DrawInput): VisibleRegion {
         const w = cols.width(c)
         if (x + w <= reg.x || x >= reg.x + reg.w) continue
         ctx.fillStyle = `#${bg}`
-        ctx.fillRect(x, y, w, m.rowH)
+        ctx.fillRect(x, y, w, ih)
       }
     }
 
@@ -346,7 +356,7 @@ export function drawGrid(input: DrawInput): VisibleRegion {
     // сетки стерты, фон левой верхней ячейки, рамка по периметру ──
     if (sheet.merges && sheet.merges.length > 0) {
       for (const mg of sheet.merges) {
-        const r = mergeAreaRect(mg, layout, reg, cols, rowY, colX)
+        const r = mergeAreaRect(mg, layout, rows, reg, cols, rowY, colX)
         if (!r) continue
         const bg = sheet.styles.get(cellKey(mg.r1, mg.c1))?.bg
         ctx.fillStyle = bg ? `#${bg}` : theme.bg
@@ -363,7 +373,8 @@ export function drawGrid(input: DrawInput): VisibleRegion {
       for (let i = reg.rowFrom; i <= reg.rowTo; i++) {
         const r = layout.rowAt(i)
         const y = rowY(i)
-        if (y + m.rowH <= reg.y || y >= reg.y + reg.h) continue
+        const ih = rows.height(i)
+        if (y + ih <= reg.y || y >= reg.y + reg.h) continue
         for (let c = reg.colFrom; c <= reg.colTo; c++) {
           if (!search.hitSet.has(`${r}:${c}`)) continue
           const x = colX(c)
@@ -372,9 +383,9 @@ export function drawGrid(input: DrawInput): VisibleRegion {
           // совпадение в объединённой ячейке красит её целиком; скрытые
           // ячейки не совпадаются (пусты) — сюда не попадают
           const mg = mergeAt(sheet, r, c)
-          const span = mg ? mergeSpan(mg, layout, cols, rowY, colX) : null
+          const span = mg ? mergeSpan(mg, layout, rows, cols, rowY, colX) : null
           if (span) ctx.fillRect(span.x + 1, span.y + 1, span.w - 2, span.h - 2)
-          else ctx.fillRect(x + 1, y + 1, w - 2, m.rowH - 2)
+          else ctx.fillRect(x + 1, y + 1, w - 2, ih - 2)
         }
       }
     }
@@ -388,8 +399,9 @@ export function drawGrid(input: DrawInput): VisibleRegion {
     for (let i = reg.rowFrom; i <= reg.rowTo; i++) {
       const r = layout.rowAt(i)
       const y = rowY(i)
-      const cy = y + m.rowH / 2
-      if (y + m.rowH <= reg.y || y >= reg.y + reg.h) continue
+      const ih = rows.height(i)
+      const cy = y + ih / 2
+      if (y + ih <= reg.y || y >= reg.y + reg.h) continue
       for (let c = reg.colFrom; c <= reg.colTo; c++) {
         const raw = sheet.cells.get(cellKey(r, c))
         if (raw === undefined) continue
@@ -401,13 +413,17 @@ export function drawGrid(input: DrawInput): VisibleRegion {
         if (edit && edit.row === r && edit.col === c && edit.source !== 'bar') continue
         let x = colX(c)
         let w = cols.width(c)
+        let cellTop = y
         let cellCy = cy
+        let cellH = ih
         if (mg) {
-          const span = mergeSpan(mg, layout, cols, rowY, colX)
+          const span = mergeSpan(mg, layout, rows, cols, rowY, colX)
           if (span) {
             x = span.x
             w = span.w
+            cellTop = span.y
             cellCy = span.y + span.h / 2
+            cellH = span.h
           }
         }
         const style = sheet.styles.get(cellKey(r, c))
@@ -421,25 +437,38 @@ export function drawGrid(input: DrawInput): VisibleRegion {
         // шрифт собирается из стиля ячейки: гарнитура/размер/Ж/К (novagrid-039)
         ctx.font = cellFontOf(style, theme)
         ctx.fillStyle = style?.fg ? `#${style.fg}` : err ? theme.errInk : theme.ink
-        const shown = ellipsize(ctx, text, w - pad * 2)
         const align = style?.align ?? (numeric ? 'right' : 'left')
-        let textX = x + pad
-        if (align === 'right') {
-          textX = x + w - pad
-          ctx.textAlign = 'right'
-        } else if (align === 'center') {
-          textX = x + w / 2
-          ctx.textAlign = 'center'
+        /** строка текста на своей вертикали: выравнивание + подчёркивание */
+        const drawLine = (line: string, lineY: number) => {
+          let textX = x + pad
+          if (align === 'right') {
+            textX = x + w - pad
+            ctx.textAlign = 'right'
+          } else if (align === 'center') {
+            textX = x + w / 2
+            ctx.textAlign = 'center'
+          }
+          ctx.fillText(line, textX, lineY)
+          if (align !== 'left') ctx.textAlign = 'left'
+          // подчёркивание (novagrid-039): линия шириной текста под базовой линией
+          if (style?.underline) {
+            const textW = ctx.measureText(line).width
+            const lineX =
+              align === 'right' ? textX - textW : align === 'center' ? textX - textW / 2 : textX
+            const py = Math.round(lineY + cellPxOf(style, theme) * 0.42) + 0.5
+            ctx.fillRect(lineX, py, textW, 1)
+          }
         }
-        ctx.fillText(shown, textX, cellCy)
-        if (align !== 'left') ctx.textAlign = 'left'
-        // подчёркивание (novagrid-039): линия шириной текста под базовой линией
-        if (style?.underline) {
-          const textW = ctx.measureText(shown).width
-          const lineX =
-            align === 'right' ? textX - textW : align === 'center' ? textX - textW / 2 : textX
-          const py = Math.round(cellCy + cellPxOf(style, theme) * 0.42) + 0.5
-          ctx.fillRect(lineX, py, textW, 1)
+        // перенос текста (novagrid-048): строки по словам, вертикально —
+        // сверху; высота строки уже выросла под текст (не влезающее — обрезается)
+        if (style?.wrap) {
+          const wm = wrapLineMetrics(cellPxOf(style, theme), m.rowH)
+          const fit = Math.max(1, Math.floor((cellH - wm.padY * 2) / wm.lineH))
+          const lines = wrapLines(text, ctx.font, w - pad * 2, ctxMeasure)
+          for (let k = 0; k < lines.length && k < fit; k++)
+            drawLine(lines[k], cellTop + wm.padY + wm.lineH * k + wm.lineH / 2)
+        } else {
+          drawLine(ellipsize(ctx, text, w - pad * 2), cellCy)
         }
         // метка чужой формулы (∛) — маленький знак в правом верхнем углу
         if (frozenCell) {
@@ -455,7 +484,7 @@ export function drawGrid(input: DrawInput): VisibleRegion {
     // ── заливки и рамки выделения (Ф5: каждая область со своей рамкой) ──
     for (const rg of selection.ranges) {
       const n = normalize(rg)
-      paintRange(ctx, reg, n.r1, n.c1, n.r2, n.c2, layout, cols, rowY, colX, theme.limeFill, theme.limeBorder)
+      paintRange(ctx, reg, n.r1, n.c1, n.r2, n.c2, layout, rows, cols, rowY, colX, theme.limeFill, theme.limeBorder)
     }
     // активная ячейка — толстая зелёная рамка поверх заливки; объединённая
     // активная обводится целиком (novagrid-047)
@@ -464,11 +493,11 @@ export function drawGrid(input: DrawInput): VisibleRegion {
       const i = layout.indexOf(row)
       if (i >= reg.rowFrom && i <= reg.rowTo && col >= reg.colFrom && col <= reg.colTo) {
         const mg = mergeAt(sheet, row, col)
-        const span = mg ? mergeSpan(mg, layout, cols, rowY, colX) : null
+        const span = mg ? mergeSpan(mg, layout, rows, cols, rowY, colX) : null
         const x = span ? span.x : colX(col)
         const w = span ? span.w : cols.width(col)
         const y = span ? span.y : rowY(i)
-        const h = span ? span.h : m.rowH
+        const h = span ? span.h : rows.height(i)
         ctx.strokeStyle = theme.greenBorder
         ctx.lineWidth = 2
         ctx.strokeRect(x + 1, y + 1, w - 2, h - 2)
@@ -478,13 +507,13 @@ export function drawGrid(input: DrawInput): VisibleRegion {
     if (editRefs && editRefs.length > 0) {
       editRefs.forEach((d, k) => {
         const color = EDIT_REF_COLORS[k % EDIT_REF_COLORS.length]
-        paintRange(ctx, reg, d.r1, d.c1, d.r2, d.c2, layout, cols, rowY, colX, withAlpha(color, 0.1), color)
+        paintRange(ctx, reg, d.r1, d.c1, d.r2, d.c2, layout, rows, cols, rowY, colX, withAlpha(color, 0.1), color)
       })
     }
     // Alt-лассо — оранжевая рамка быстрой суммы (Ф4)
     if (altRange) {
       const n = normalize(altRange)
-      paintRange(ctx, reg, n.r1, n.c1, n.r2, n.c2, layout, cols, rowY, colX, theme.altFill, theme.altBorder)
+      paintRange(ctx, reg, n.r1, n.c1, n.r2, n.c2, layout, rows, cols, rowY, colX, theme.altFill, theme.altBorder)
     }
     // текущее совпадение поиска — оранжевая рамка поверх всего (Ф2);
     // совпадение в объединённой ячейке обводит её целиком (novagrid-047)
@@ -495,11 +524,11 @@ export function drawGrid(input: DrawInput): VisibleRegion {
       const i = layout.indexOf(hitRow)
       if (i >= reg.rowFrom && i <= reg.rowTo && hitCol >= reg.colFrom && hitCol <= reg.colTo) {
         const mg = mergeAt(sheet, hitRow, hitCol)
-        const span = mg ? mergeSpan(mg, layout, cols, rowY, colX) : null
+        const span = mg ? mergeSpan(mg, layout, rows, cols, rowY, colX) : null
         const x = span ? span.x : colX(hitCol)
         const w = span ? span.w : cols.width(hitCol)
         const y = span ? span.y : rowY(i)
-        const h = span ? span.h : m.rowH
+        const h = span ? span.h : rows.height(i)
         ctx.strokeStyle = theme.altBorder
         ctx.lineWidth = 2
         ctx.strokeRect(x + 1, y + 1, w - 2, h - 2)
@@ -523,6 +552,7 @@ export function drawGrid(input: DrawInput): VisibleRegion {
     frOk > 0 ? 0 : regions[regions.length - 1].rowFrom,
     lastRow,
     layout,
+    rows,
     cols,
     selection,
     filteredCols,
@@ -548,6 +578,7 @@ export function drawGrid(input: DrawInput): VisibleRegion {
 function mergeSpan(
   mg: MergeRect,
   layout: RowLayout,
+  rows: RowAxis,
   cols: ColLayout,
   rowY: (i: number) => number,
   colX: (c: number) => number,
@@ -562,7 +593,7 @@ function mergeSpan(
     x,
     y,
     w: colX(mg.c2) + cols.width(mg.c2) - x,
-    h: rowY(i2) + METRICS.rowH - y,
+    h: rowY(i2) + rows.height(i2) - y,
   }
 }
 
@@ -570,6 +601,7 @@ function mergeSpan(
 function mergeAreaRect(
   mg: MergeRect,
   layout: RowLayout,
+  rows: RowAxis,
   reg: Region,
   cols: ColLayout,
   rowY: (i: number) => number,
@@ -584,11 +616,10 @@ function mergeAreaRect(
   const cc1 = Math.max(mg.c1, reg.colFrom)
   const cc2 = Math.min(mg.c2, reg.colTo)
   if (vi1 > vi2 || cc1 > cc2) return null
-  const m = METRICS
   const x = colX(cc1)
   const w = colX(cc2) + cols.width(cc2) - x
   const y = rowY(vi1)
-  const h = rowY(vi2) + m.rowH - y
+  const h = rowY(vi2) + rows.height(vi2) - y
   if (x + w <= reg.x || y + h <= reg.y || x >= reg.x + reg.w || y >= reg.y + reg.h) return null
   return { x, y, w, h }
 }
@@ -602,6 +633,7 @@ function paintRange(
   r2: number,
   c2: number,
   layout: RowLayout,
+  rows: RowAxis,
   cols: ColLayout,
   rowY: (i: number) => number,
   colX: (c: number) => number,
@@ -621,11 +653,10 @@ function paintRange(
   const cc1 = Math.max(c1, reg.colFrom)
   const cc2 = Math.min(c2, reg.colTo)
   if (vi1 > vi2 || cc1 > cc2) return
-  const m = METRICS
   const x = colX(cc1)
   const w = colX(cc2) + cols.width(cc2) - x
   const y = rowY(vi1)
-  const h = rowY(vi2) + m.rowH - y
+  const h = rowY(vi2) + rows.height(vi2) - y
   if (x + w <= reg.x || y + h <= reg.y || x >= reg.x + reg.w || y >= reg.y + reg.h) return
   ctx.fillStyle = fill
   ctx.fillRect(x, y, w, h)
@@ -681,6 +712,7 @@ function drawHeaders(
   firstRow: number,
   lastRow: number,
   layout: RowLayout,
+  rows: RowAxis,
   cols: ColLayout,
   selection: Selection,
   filteredCols: ReadonlySet<number>,
@@ -691,7 +723,7 @@ function drawHeaders(
 ): void {
   const m = METRICS
   const selected = selection.ranges.map(normalize)
-  const fy = fr * m.rowH
+  const fy = rows.y0(fr) // высота закрепа — по оси строк (перенос, novagrid-048)
   const fx = fc > 0 ? cols.x0(fc) : 0
 
   // полоса заголовков колонок + заголовок строк + уголок — surface
@@ -746,19 +778,21 @@ function drawHeaders(
   }
 
   // номера строк (модельные — скрытые не сдвигают нумерацию); при закрепе
-  // строки от 0 — закреплённые всегда в кадре (novagrid-044)
+  // строки от 0 — закреплённые всегда в кадре (novagrid-044); номер стоит
+  // по центру выросшей строки переноса (novagrid-048)
   ctx.textAlign = 'center'
   for (let i = firstRow; i <= lastRow; i++) {
     const r = layout.rowAt(i)
     const y = rowY(i)
-    if (y + m.rowH <= m.headerH || y >= height) continue
+    const ih = rows.height(i)
+    if (y + ih <= m.headerH || y >= height) continue
     const isSel = selected.some((n) => r >= n.r1 && r <= n.r2)
     if (isSel) {
       ctx.fillStyle = theme.bg
-      ctx.fillRect(0, y, m.rowHeaderW, m.rowH)
+      ctx.fillRect(0, y, m.rowHeaderW, ih)
     }
     ctx.fillStyle = isSel ? theme.greenBorder : theme.inkSoft
-    ctx.fillText(String(r + 1), m.rowHeaderW / 2, y + m.rowH / 2)
+    ctx.fillText(String(r + 1), m.rowHeaderW / 2, y + ih / 2)
   }
 
   // номера виртуальных строк заполнителя — только без фильтров (иначе

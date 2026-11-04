@@ -42,14 +42,24 @@ import {
   colLayoutOf,
   freezeRowLayout,
   METRICS,
+  rowAxisOf,
   scrollIntoView,
   totalSize,
   zoomOf,
   type ColLayout,
+  type RowAxis,
   type RowLayout,
 } from './geometry'
 import { zoomStore } from './zoom'
-import { drawGrid, themeFromCSS, type GridTheme, type VisibleRegion } from './renderer'
+import {
+  cellFontOf,
+  cellPxOf,
+  drawGrid,
+  themeFromCSS,
+  type GridTheme,
+  type VisibleRegion,
+} from './renderer'
+import { wrapRowHeights } from './wrap'
 import { installTestHook } from './testHook'
 import { RowMenu } from '../ui/RowMenu'
 
@@ -160,6 +170,90 @@ export function GridCanvas() {
   }
   const layout = layoutFor(sheet, filters, freeze.rows)
 
+  // ── автовысоты строк переноса (novagrid-048) ──────────────────────────
+  // пересчёт по смене листа/ширин/зума/темы: текст измеряется канвасом;
+  // высоты хранятся по модельным строкам, ось ниже переводит их в визуальные
+  const wrapRef = useRef<{
+    sheet: SheetModel
+    widths: ReadonlyMap<number, number> | null
+    metricW: number
+    rowH: number
+    theme: GridTheme | null
+    locale: string
+    heights: Map<number, number>
+  } | null>(null)
+  const wrapHeightsFor = (sh: SheetModel, widths: ReadonlyMap<number, number> | null) => {
+    const theme = themeRef.current
+    const canvas = canvasRef.current
+    const cur = wrapRef.current
+    if (
+      cur &&
+      cur.sheet === sh &&
+      cur.widths === widths &&
+      cur.metricW === METRICS.colW &&
+      cur.rowH === METRICS.rowH &&
+      cur.theme === theme &&
+      cur.locale === t.localeTag
+    )
+      return cur.heights
+    const heights = new Map<number, number>()
+    if (theme && canvas) {
+      const ctx = canvas.getContext('2d')
+      if (ctx)
+        wrapRowHeights(sh, {
+          colWidth: (c) => colsLayoutFor(sh.cols, widths).width(c),
+          fontOf: (style) => cellFontOf(style, theme),
+          pxOf: (style) => cellPxOf(style, theme),
+          measure: (text, font) => {
+            ctx.font = font
+            return ctx.measureText(text).width
+          },
+          locale: t.localeTag,
+          baseRowH: METRICS.rowH,
+        }).forEach((h, r) => heights.set(r, h))
+    }
+    wrapRef.current = {
+      sheet: sh,
+      widths,
+      metricW: METRICS.colW,
+      rowH: METRICS.rowH,
+      theme,
+      locale: t.localeTag,
+      heights,
+    }
+    return heights
+  }
+
+  // ось строк: высоты модельных строк → визуальные индексы раскладки
+  // (скрытые фильтром строки высоту не двигают — их не видно)
+  const rowsAxisRef = useRef<{
+    layout: RowLayout
+    heights: Map<number, number>
+    rowH: number
+    axis: RowAxis
+  } | null>(null)
+  const rowsAxisFor = (lay: RowLayout, heights: Map<number, number>): RowAxis => {
+    const cur = rowsAxisRef.current
+    if (cur && cur.layout === lay && cur.heights === heights && cur.rowH === METRICS.rowH)
+      return cur.axis
+    let visual: Map<number, number> | null = null
+    if (heights.size > 0) {
+      visual = new Map()
+      for (const [r, h] of heights) {
+        const i = lay.indexOf(r)
+        if (i >= 0) visual.set(i, h)
+      }
+    }
+    const axis = rowAxisOf(lay.count, visual)
+    rowsAxisRef.current = { layout: lay, heights, rowH: METRICS.rowH, axis }
+    return axis
+  }
+  const axisOfState = (st: ReturnType<typeof gridStore.getState>): RowAxis =>
+    rowsAxisFor(
+      layoutFor(st.sheet, st.filters, st.freeze.rows),
+      wrapHeightsFor(st.sheet, st.colWidths),
+    )
+
   // ── раскладка колонок (переменные ширины, novagrid-020) ───────────────
   // cache key включает METRICS.colW — он меняется вместе с зумом
   const colsRef = useRef<{
@@ -202,6 +296,7 @@ export function GridCanvas() {
     const state = gridStore.getState()
     const lay = layoutFor(state.sheet, state.filters, state.freeze.rows)
     const colLay = colsLayoutFor(state.sheet.cols, state.colWidths)
+    const rowAx = axisOfState(state)
     const hit = state.search.hits[state.search.index]
     // подсветка ссылок редактируемой формулы (novagrid-041): прямоугольники
     // ссылок в границах листа; колонки A:A (r2 = −1) — до края листа
@@ -225,6 +320,7 @@ export function GridCanvas() {
       sheet: state.sheet,
       layout: lay,
       cols: colLay,
+      rows: rowAx,
       frozen: { rows: Math.min(state.freeze.rows, state.sheet.rows), cols: Math.min(state.freeze.cols, state.sheet.cols) },
       locale: t.localeTag,
       selection: state.selection,
@@ -257,6 +353,7 @@ export function GridCanvas() {
       st.sheet.cols,
       undefined,
       colsLayoutFor(st.sheet.cols, st.colWidths),
+      axisOfState(st),
     )
     spacer.style.width = `${size.w}px`
     spacer.style.height = `${size.h}px`
@@ -340,13 +437,14 @@ export function GridCanvas() {
     const st = gridStore.getState()
     const lay = layoutFor(st.sheet, st.filters, st.freeze.rows)
     const colLay = colsLayoutFor(st.sheet.cols, st.colWidths)
+    const rowAx = axisOfState(st)
     const fz = {
       rows: Math.min(st.freeze.rows, st.sheet.rows),
       cols: Math.min(st.freeze.cols, st.sheet.cols),
     }
     const apply = (vr: number, c: number) => {
       if (vr < 0) return // строка скрыта фильтром
-      const target = scrollIntoView(vr, c, el.scrollLeft, el.scrollTop, el.clientWidth, el.clientHeight, undefined, colLay, fz)
+      const target = scrollIntoView(vr, c, el.scrollLeft, el.scrollTop, el.clientWidth, el.clientHeight, undefined, colLay, fz, rowAx)
       if (target.scrollX !== el.scrollLeft) el.scrollLeft = target.scrollX
       if (target.scrollY !== el.scrollTop) el.scrollTop = target.scrollY
     }
@@ -369,20 +467,21 @@ export function GridCanvas() {
     const st = gridStore.getState()
     const lay = layoutFor(st.sheet, st.filters, st.freeze.rows)
     const colLay = colsLayoutFor(st.sheet.cols, st.colWidths)
+    const rowAx = axisOfState(st)
     const fz = {
       rows: Math.min(st.freeze.rows, st.sheet.rows),
       cols: Math.min(st.freeze.cols, st.sheet.cols),
     }
     const i = Math.max(0, lay.indexOf(row))
-    const r = cellRect(i, col, el.scrollLeft, el.scrollTop, undefined, colLay, fz)
+    const r = cellRect(i, col, el.scrollLeft, el.scrollTop, undefined, colLay, fz, rowAx)
     const m = mergeAt(st.sheet, row, col)
     if (!m) return r
-    const right = cellRect(i, m.c2, el.scrollLeft, el.scrollTop, undefined, colLay, fz)
+    const right = cellRect(i, m.c2, el.scrollLeft, el.scrollTop, undefined, colLay, fz, rowAx)
     let bottom = r.y + r.h
     for (let rr = m.r2; rr > m.r1; rr--) {
       const ir = lay.indexOf(rr)
       if (ir >= 0) {
-        const cr = cellRect(ir, m.c2, el.scrollLeft, el.scrollTop, undefined, colLay, fz)
+        const cr = cellRect(ir, m.c2, el.scrollLeft, el.scrollTop, undefined, colLay, fz, rowAx)
         bottom = cr.y + cr.h
         break
       }
@@ -416,6 +515,7 @@ export function GridCanvas() {
         const st = gridStore.getState()
         return colsLayoutFor(st.sheet.cols, st.colWidths)
       },
+      rows: () => axisOfState(gridStore.getState()),
     })
 
     const unsub = gridStore.subscribe(() => {
@@ -452,7 +552,11 @@ export function GridCanvas() {
     if (mainEl) ro.observe(mainEl)
     draw()
     // после загрузки переменных шрифтов канвас перерисовывается корректным начертанием
-    void document.fonts.ready.then(draw)
+    // после загрузки шрифтов изменились ширины текста — высоты пересчитать
+    void document.fonts.ready.then(() => {
+      wrapRef.current = null
+      draw()
+    })
 
     return () => {
       unsub()
@@ -512,6 +616,7 @@ export function GridCanvas() {
         rows: Math.min(st.freeze.rows, st.sheet.rows),
         cols: Math.min(st.freeze.cols, st.sheet.cols),
       },
+      axisOfState(st),
     )
     if (!hit) return null
     const visualRow = Math.min(hit.row, lay.count - 1)
@@ -590,6 +695,7 @@ export function GridCanvas() {
       st.sheet.cols,
       undefined,
       colsLayoutFor(st.sheet.cols, st.colWidths),
+      axisOfState(st),
     )
     let rows = st.sheet.rows
     let cols = st.sheet.cols
@@ -995,6 +1101,7 @@ export function GridCanvas() {
                 rows: Math.min(st.freeze.rows, st.sheet.rows),
                 cols: Math.min(st.freeze.cols, st.sheet.cols),
               },
+              axisOfState(st),
             )
               const rect = main.getBoundingClientRect()
               setCtxMenu({
@@ -1180,7 +1287,13 @@ export function GridCanvas() {
     return { left: r.x - 1, top: r.y - 1, width: r.w + 1, height: r.h + 1 }
   })()
 
-  const size = totalSize(layout.count, cols, undefined, colsLayoutFor(cols, colWidths))
+  const size = totalSize(
+    layout.count,
+    cols,
+    undefined,
+    colsLayoutFor(cols, colWidths),
+    rowsAxisFor(layout, wrapHeightsFor(sheet, colWidths)),
+  )
 
   return (
     <main

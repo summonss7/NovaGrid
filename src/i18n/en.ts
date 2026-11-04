@@ -261,6 +261,8 @@ const en: RuDict = {
   formatAlignLeft: 'Align left',
   formatAlignCenter: 'Align center',
   formatAlignRight: 'Align right',
+  /** wrap text in a cell (novagrid-048): row auto-height under the text */
+  formatWrap: 'Wrap text',
   formatMerge: 'Merge cells',
   formatUnmerge: 'Unmerge cells',
   mergeLossWarning:

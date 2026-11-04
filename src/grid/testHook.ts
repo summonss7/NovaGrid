@@ -13,7 +13,16 @@ import { getCell, getStyle, type CellStyle } from '../core/sheet'
 import { cellText, formulaStateAt } from '../formula/engine'
 import { gridStore, selectionMetrics, type EditState } from '../core/store'
 import { useSettings, type ResolvedTheme, type ThemePref } from '../i18n'
-import { cellRefName, cellRect, colLayoutOf, METRICS, zoomOf, type ColLayout, type RowLayout } from './geometry'
+import {
+  cellRefName,
+  cellRect,
+  colLayoutOf,
+  METRICS,
+  zoomOf,
+  type ColLayout,
+  type RowAxis,
+  type RowLayout,
+} from './geometry'
 import { drawStats, type VisibleRegion } from './renderer'
 
 export interface NvBookInfo {
@@ -88,6 +97,10 @@ export interface NvTestApi {
   colWidth: (col: number) => number
   /** стиль ячейки активного листа; null — стиля нет (novagrid-039) */
   style: (row: number, col: number) => CellStyle | null
+  /** высота строки грида с автовысотой переноса (novagrid-048) */
+  rowHeight: (row: number) => number
+  /** смена ширины колонки, как перетаскиванием границы (для e2e novagrid-048) */
+  setColWidth: (col: number, width: number) => void
   /** тема интерфейса (Этап 7.2): настройка и вычисленная тема */
   theme: () => { pref: ThemePref; resolved: ResolvedTheme }
 }
@@ -106,6 +119,8 @@ export interface TestHookRefs {
   layout: () => RowLayout
   /** раскладка колонок активного листа (переменные ширины, novagrid-020) */
   cols: () => ColLayout
+  /** ось строк активного листа (автовысоты переноса, novagrid-048) */
+  rows: () => RowAxis
 }
 
 export function installTestHook(refs: TestHookRefs): void {
@@ -114,6 +129,12 @@ export function installTestHook(refs: TestHookRefs): void {
   window.__nv = {
     cell: (row, col) => getCell(gridStore.getState().sheet, row, col),
     style: (row, col) => getStyle(gridStore.getState().sheet, row, col) ?? null,
+    rowHeight: (row) => {
+      const layout = refs.layout()
+      const i = layout.indexOf(row)
+      return i >= 0 ? refs.rows().height(i) : METRICS.rowH
+    },
+    setColWidth: (col, width) => gridStore.getState().setColWidth(col, width),
     cellText: (row, col) => cellText(gridStore.getState().sheet, row, col),
     formulaInfo: (row, col) => {
       const st = gridStore.getState()
@@ -177,7 +198,7 @@ export function installTestHook(refs: TestHookRefs): void {
       const r = cellRect(vi, col, el.scrollLeft, el.scrollTop, undefined, colLay, {
         rows: Math.min(st.freeze.rows, st.sheet.rows),
         cols: Math.min(st.freeze.cols, st.sheet.cols),
-      })
+      }, refs.rows())
       return { x: mainRect.left + r.x + r.w / 2, y: mainRect.top + r.y + r.h / 2 }
     },
     /** закрепление областей активной вкладки (novagrid-044) */

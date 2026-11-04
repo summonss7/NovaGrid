@@ -45,6 +45,9 @@ export interface CellStyle {
   /** размер шрифта в пунктах; undefined — стандартный размер грида */
   size?: number
   align?: 'left' | 'center' | 'right'
+  /** перенос текста в ячейке (novagrid-048): по словам под ширину колонки,
+   *  высота строки авто-растёт под число строк (как в Excel) */
+  wrap?: boolean
   /** заливка RRGGBB (без альфы и решётки) */
   bg?: string
   /** цвет текста RRGGBB */

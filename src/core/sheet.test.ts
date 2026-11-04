@@ -104,6 +104,13 @@ describe('стили ячеек: mergeCellStyle / withStyleList / normalizeCellS
     expect(mergeCellStyle(undefined, { bold: true })).toEqual({ bold: true })
   })
 
+  it('wrap (novagrid-048) живёт в стиле наравне с align: патч ставит, undefined снимает', () => {
+    expect(mergeCellStyle({ align: 'center' }, { wrap: true })).toEqual({ align: 'center', wrap: true })
+    expect(mergeCellStyle({ align: 'center', wrap: true }, { wrap: undefined })).toEqual({
+      align: 'center',
+    })
+  })
+
   it('withStyleList: пишет, заменяет и удаляет стили одним клоном Map', () => {
     let sheet = createSheet()
     sheet = withCell(sheet, 0, 0, 'Шапка')

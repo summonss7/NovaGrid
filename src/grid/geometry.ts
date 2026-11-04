@@ -44,6 +44,97 @@ export function rowLayoutOf(totalRows: number, visible: readonly number[] | null
   }
 }
 
+/* ── переменные высоты строк (перенос текста, novagrid-048) ───────────── */
+
+/**
+ * Ось строк с автовысотами переноса (novagrid-048): y0/height/at по
+ * визуальному индексу унифицированной раскладки (фильтры + закреп).
+ * Высоты-переопределения разрежены — Stress-режим не платит за фичу:
+ * y0 идёт через префиксные суммы «лишних» пикселей только по тронутым
+ * строкам, поиск — бинпоиском.
+ */
+export interface RowAxis {
+  /** сколько строк на оси (унифицированных) */
+  count: number
+  /** верх визуальной строки i в координатах контента (без headerH) */
+  y0(i: number): number
+  height(i: number): number
+  /** визуальная строка под смещением контента y; −1 — выше начала;
+   *  за концом — последняя (заполнитель листа кликается как последняя) */
+  at(y: number): number
+}
+
+/** Равномерная ось строк (переопределений нет) — арифметика без аллокаций. */
+export function rowAxisUniform(m = METRICS): RowAxis {
+  return {
+    count: Number.MAX_SAFE_INTEGER,
+    y0: (i) => i * m.rowH,
+    height: () => m.rowH,
+    at: (y) => (y < 0 ? -1 : Math.floor(y / m.rowH)),
+  }
+}
+
+/**
+ * Ось строк по переопределениям высот (ключ — визуальный индекс): высота
+ * берётся из карты, остальные — базовые; y0(i) = i·rowH + сумма излишков
+ * строк до i. Пустая карта/null — равномерная ось.
+ */
+export function rowAxisOf(
+  count: number,
+  heights: ReadonlyMap<number, number> | null,
+  m = METRICS,
+): RowAxis {
+  if (!heights || heights.size === 0) {
+    return {
+      count,
+      y0: (i) => i * m.rowH,
+      height: () => m.rowH,
+      at: (y) => (y < 0 ? -1 : Math.min(count - 1, Math.floor(y / m.rowH))),
+    }
+  }
+  // отсортированные визуальные индексы с излишком высоты и prefix-сумма
+  const idx = [...heights.keys()].sort((a, b) => a - b)
+  const extra: number[] = [0]
+  for (let k = 0; k < idx.length; k++) extra.push(extra[k] + Math.max(0, (heights.get(idx[k]) ?? m.rowH) - m.rowH))
+  const i0 = (v: number): number => {
+    // первый индекс в idx, который >= v (бинпоиск)
+    let lo = 0
+    let hi = idx.length
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1
+      if (idx[mid] < v) lo = mid + 1
+      else hi = mid
+    }
+    return lo
+  }
+  const y0 = (i: number): number => {
+    const k = i0(Math.min(i, count))
+    return i * m.rowH + extra[k]
+  }
+  return {
+    count,
+    y0,
+    height: (i) => heights.get(i) ?? m.rowH,
+    at: (y: number): number => {
+      if (y < 0) return -1
+      if (y >= y0(count)) return count - 1
+      let lo = 0
+      let hi = count - 1
+      while (lo < hi) {
+        const mid = (lo + hi + 1) >> 1
+        if (y0(mid) <= y) lo = mid
+        else hi = mid - 1
+      }
+      return lo
+    },
+  }
+}
+
+/** Высота закреплённых строк по оси (сумма их высот; 0 — закрепа нет). */
+export function frozenRowsAxisH(rows: RowAxis | undefined, fr: number, m = METRICS): number {
+  return fr > 0 ? (rows ? rows.y0(fr) : fr * m.rowH) : 0
+}
+
 /* ── закрепление областей (novagrid-044) ──────────────────────────────── */
 
 /** Закрепление первых строк/колонок (0 — закреп нет). */
@@ -290,23 +381,26 @@ export function cellAtPoint(
   m = METRICS,
   cols?: ColAxis,
   frozen?: FreezeView,
+  rows?: RowAxis,
 ): { row: number; col: number; kind: 'cell' | 'colHeader' | 'rowHeader' | 'corner' } | null {
   if (x < 0 || y < 0) return null
   const axis = cols ?? uniformAxis(m)
+  const rax = rows ?? rowAxisUniform(m)
   const fr = frozen?.rows ?? 0
   const fc = frozen?.cols ?? 0
   const fx = frozenColsW(cols, fc, m)
-  const fy = frozenRowsH(fr, m)
+  const fy = frozenRowsAxisH(rows, fr, m)
   if (x < m.rowHeaderW && y < m.headerH) return { row: -1, col: -1, kind: 'corner' }
   if (y < m.headerH) {
     const inFrozen = x - m.rowHeaderW < fx
     const col = colAtAxis(axis, x - m.rowHeaderW + (inFrozen ? 0 : scrollX), m)
     return col >= 0 ? { row: -1, col, kind: 'colHeader' } : null
   }
+  // высота строк переменная (перенос текста): строка под точкой — по оси
   const row =
     y < m.headerH + fy
-      ? Math.floor((y - m.headerH) / m.rowH)
-      : fr + Math.floor((y - m.headerH - fy + scrollY) / m.rowH)
+      ? rax.at(y - m.headerH)
+      : rax.at(y - m.headerH - fy + scrollY + rax.y0(fr))
   if (x < m.rowHeaderW) {
     return row >= 0 ? { row, col: -1, kind: 'rowHeader' } : null
   }
@@ -329,6 +423,7 @@ export function cellRect(
   m = METRICS,
   cols?: ColAxis,
   frozen?: FreezeView,
+  rows?: RowAxis,
 ): {
   x: number
   y: number
@@ -336,19 +431,20 @@ export function cellRect(
   h: number
 } {
   const axis = cols ?? uniformAxis(m)
+  const rax = rows ?? rowAxisUniform(m)
   const fr = frozen?.rows ?? 0
   const fc = frozen?.cols ?? 0
-  const fy = frozenRowsH(fr, m)
+  const fy = frozenRowsAxisH(rows, fr, m)
   return {
     // закреплённые колонки стоят на месте; для прокручиваемых fx-сдвиг
     // прокручиваемой зоны и сдвиг scrollX от её начала взаимно сокращаются
     x: m.rowHeaderW + axis.x0(col) - (col < fc ? 0 : scrollX),
     y:
       row < fr
-        ? m.headerH + row * m.rowH
-        : m.headerH + fy + (row - fr) * m.rowH - scrollY,
+        ? m.headerH + rax.y0(row)
+        : m.headerH + fy + rax.y0(row) - rax.y0(fr) - scrollY,
     w: axis.width(col),
-    h: m.rowH,
+    h: rax.height(row),
   }
 }
 
@@ -358,12 +454,14 @@ export function totalSize(
   cols: number,
   m = METRICS,
   axis?: ColAxis,
+  rowAxis?: RowAxis,
 ): { w: number; h: number } {
   const w =
     cols <= 0
       ? m.rowHeaderW
       : m.rowHeaderW + (axis ? axis.x0(cols - 1) + axis.width(cols - 1) : cols * m.colW)
-  return { w, h: m.headerH + rows * m.rowH }
+  // высота контента — по оси строк: автовысоты переноса растягивают спейсер
+  return { w, h: m.headerH + (rowAxis ? rowAxis.y0(rows) : rows * m.rowH) }
 }
 
 /**
@@ -382,13 +480,15 @@ export function scrollIntoView(
   m = METRICS,
   axis?: ColAxis,
   frozen?: FreezeView,
+  rows?: RowAxis,
 ): { scrollX: number; scrollY: number } {
   const ax = axis ?? uniformAxis(m)
+  const rax = rows ?? rowAxisUniform(m)
   const fr = frozen?.rows ?? 0
   const fc = frozen?.cols ?? 0
   const fx = frozenColsW(axis, fc, m)
-  const fy = frozenRowsH(fr, m)
-  const rect = cellRect(row, col, scrollX, scrollY, m, ax, frozen)
+  const fy = frozenRowsAxisH(rows, fr, m)
+  const rect = cellRect(row, col, scrollX, scrollY, m, ax, frozen, rows)
   let nx = scrollX
   let ny = scrollY
   if (col < fc) {
@@ -401,9 +501,10 @@ export function scrollIntoView(
   if (row < fr) {
     // закреплённая строка всегда в кадре
   } else {
-    const relY = (row - fr) * m.rowH
+    // высота строки переменная (перенос): в кадр тащится весь её низ
+    const relY = rax.y0(row) - rax.y0(fr)
     if (rect.y < m.headerH + fy) ny = relY
-    else if (rect.y + rect.h > viewportH) ny = relY + m.rowH + m.headerH + fy - viewportH
+    else if (rect.y + rect.h > viewportH) ny = relY + rect.h + m.headerH + fy - viewportH
   }
   return { scrollX: Math.max(0, nx), scrollY: Math.max(0, ny) }
 }

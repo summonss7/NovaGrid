@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
-  freezeRowLayout,
   cellAtPoint,
   cellRect,
   cellRefName,
   colLayoutOf,
   colName,
+  freezeRowLayout,
+  rowAxisOf,
   scrollIntoView,
   totalSize,
   visibleCols,
@@ -213,5 +214,70 @@ describe('geometry: закрепление областей (novagrid-044)', () 
     const t = scrollIntoView(30, 0, 0, 0, 800, 600, undefined, cols, f)
     expect(t.scrollY).toBe((30 - 1) * 30 + 30 + 60 - 600)
     expect(t.scrollX).toBe(0)
+  })
+})
+
+describe('geometry: ось строк с автовысотами переноса (novagrid-048)', () => {
+  it('rowAxisOf без переопределений — равномерная арифметика', () => {
+    const ax = rowAxisOf(10, null)
+    expect(ax.y0(0)).toBe(0)
+    expect(ax.y0(3)).toBe(90)
+    expect(ax.height(7)).toBe(30)
+    expect(ax.at(91)).toBe(3)
+    expect(ax.at(-1)).toBe(-1)
+  })
+
+  it('rowAxisOf: префиксные суммы излишков, at ищет строку под точкой', () => {
+    // строка 0 выросла до 60, строка 2 — до 90: y0 = [0,60,90,180,210]
+    const ax = rowAxisOf(5, new Map([[0, 60], [2, 90]]))
+    expect(ax.y0(0)).toBe(0)
+    expect(ax.y0(1)).toBe(60)
+    expect(ax.y0(2)).toBe(90)
+    expect(ax.y0(3)).toBe(180)
+    expect(ax.y0(5)).toBe(240) // полный размер контента
+    expect(ax.height(0)).toBe(60)
+    expect(ax.height(1)).toBe(30)
+    expect(ax.height(2)).toBe(90)
+    expect(ax.at(59)).toBe(0)
+    expect(ax.at(60)).toBe(1)
+    expect(ax.at(89)).toBe(1)
+    expect(ax.at(90)).toBe(2)
+    expect(ax.at(1000)).toBe(4) // за концом — последняя
+    expect(ax.at(-5)).toBe(-1)
+  })
+
+  it('cellRect/cellAtPoint/totalSize учитывают выросшие строки', () => {
+    const ax = rowAxisOf(5, new Map([[0, 60], [2, 90]]))
+    const cols = colLayoutOf(26, null)
+    expect(cellRect(2, 0, 0, 0, undefined, cols, undefined, ax)).toMatchObject({ y: 30 + 90, h: 90 })
+    // клик в середину выросшей строки 2 (y = 30 + 90 + 45)
+    const hit = cellAtPoint(60, 165, 0, 0, undefined, cols, undefined, ax)
+    expect(hit?.row).toBe(2)
+    expect(hit?.kind).toBe('cell')
+    // клик внутри строки 0 (выросла до 60)
+    expect(cellAtPoint(60, 80, 0, 0, undefined, cols, undefined, ax)?.row).toBe(0)
+    // спейсер растянут высотами: 30 + 240
+    expect(totalSize(5, 26, undefined, cols, ax).h).toBe(30 + 240)
+  })
+
+  it('cellAtPoint с осью: прокрутка и закреп считаются от высот оси', () => {
+    const ax = rowAxisOf(10, new Map([[0, 60]]))
+    const cols = colLayoutOf(26, null)
+    const f = { rows: 1, cols: 0 }
+    // закреп = строка 0 высотой 60 (шапка 30 + 60 = 90); ниже — прокрутка
+    expect(cellAtPoint(60, 100, 0, 0, undefined, cols, f, ax)?.row).toBe(1)
+    // прокрутка 30: контент ушёл вверх, y=100 — уже строка 2
+    expect(cellAtPoint(60, 100, 0, 30, undefined, cols, f, ax)?.row).toBe(2)
+    // закреплённая строка под точкой — по оси (выросшая до 60)
+    expect(cellAtPoint(60, 50, 0, 30, undefined, cols, f, ax)?.row).toBe(0)
+  })
+
+  it('scrollIntoView тащит в кадр весь низ выросшей строки', () => {
+    const ax = rowAxisOf(10, new Map([[5, 90]]))
+    const cols = colLayoutOf(26, null)
+    // строка 5 (y0=150, низ 240) при вьюпорте 600 не видна снизу? видна; проверим кейс ниже
+    // вьюпорт 210: верх строки на 30+150=180, низ 270 > 210 → скролл до низа
+    const t = scrollIntoView(5, 0, 0, 0, 800, 210, undefined, cols, undefined, ax)
+    expect(t.scrollY).toBe(150 + 90 + 30 - 210)
   })
 })

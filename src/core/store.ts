@@ -280,9 +280,10 @@ export interface GridState {
   applyStyle: (patch: Partial<CellStyle>) => void
   /**
    * Ж/К/Ч как в Excel (novagrid-039): если свойство есть во всех ячейках
-   * выделения — снять, иначе — включить.
+   * выделения — снять, иначе — включить. Перенос текста — тот же цикл
+   * (novagrid-048).
    */
-  toggleStyle: (prop: 'bold' | 'italic' | 'underline') => void
+  toggleStyle: (prop: 'bold' | 'italic' | 'underline' | 'wrap') => void
   /** Снять всё форматирование ячеек выделения (novagrid-039). */
   clearStyle: () => void
   /**
@@ -1441,6 +1442,7 @@ export const gridStore = createStore<GridState>((set, get) => {
           font: undefined,
           size: undefined,
           align: undefined,
+          wrap: undefined,
           bg: undefined,
           fg: undefined,
           fmt: undefined,

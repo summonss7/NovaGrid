@@ -10,6 +10,7 @@ import {
   TableCellsMerge,
   TableCellsSplit,
   Underline,
+  WrapText,
 } from 'lucide-react'
 import { useState } from 'react'
 import { useStore } from 'zustand'
@@ -220,6 +221,18 @@ export function FormatBar() {
         onClick={apply(() => setAlign('right'))}
       >
         <AlignRight size={15} strokeWidth={2} aria-hidden />
+      </button>
+
+      {/* перенос текста (novagrid-048): по выделению, как Ж; строка растёт */}
+      <button
+        type="button"
+        className={`fmt-btn fmt-toggle${style?.wrap ? ' is-on' : ''}`}
+        aria-label={t.formatWrap}
+        title={t.formatWrap}
+        aria-pressed={style?.wrap === true}
+        onClick={apply(() => gridStore.getState().toggleStyle('wrap'))}
+      >
+        <WrapText size={15} strokeWidth={2} aria-hidden />
       </button>
 
       <button
