@@ -33,6 +33,9 @@ export interface ViewStateRow {
   sheetName: string
   row: number
   col: number
+  /** курсор по каждому листу — имя → позиция (novagrid-053); старые записи без него
+   *  помнят только активный лист (sheetName/row/col) */
+  sheets?: Record<string, { row: number; col: number }>
   updatedAt: number
 }
 

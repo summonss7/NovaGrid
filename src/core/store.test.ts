@@ -365,6 +365,13 @@ describe('store: книга и вкладки (Этап 2.2)', () => {
     expect(getCell(s().sheet, 1, 0)).toBe('Иванов')
   })
 
+  it('removeTab неактивной не сбрасывает курсор активной (novagrid-053)', () => {
+    s().addTab() // вкладка «Лист 2» активна
+    s().goTo(3, 2)
+    expect(s().removeTab(0)).toBe(true) // удалили неактивную первую
+    expect(s().selection.active).toEqual({ row: 3, col: 2 })
+  })
+
   it('undo изолирован по вкладкам', () => {
     s().addTab()
     // правка на вкладке 1
@@ -393,6 +400,72 @@ describe('store: книга и вкладки (Этап 2.2)', () => {
     expect(s().fileName).toBe('книга.csv')
     expect(s().fileFormat).toBe('csv')
     expect(s().csvDelimiter).toBe(',')
+  })
+})
+
+describe('store: курсор по вкладкам — память «где я был» (novagrid-053)', () => {
+  const loadTwoSheets = () =>
+    s().loadBook({
+      sheets: [
+        { name: 'Данные', sheet: createSheet() },
+        { name: 'Справка', sheet: createSheet() },
+      ],
+    })
+
+  it('уходя с листа курсор запоминается, вернувшись — восстанавливается', () => {
+    loadTwoSheets()
+    s().goTo(17, 3)
+    s().activateTab(1) // ушли с «Данных» — новый лист с A1
+    expect(s().selection.active).toEqual({ row: 0, col: 0 })
+    s().goTo(5, 1)
+    s().activateTab(0) // вернулись — там же, где были
+    expect(s().selection.active).toEqual({ row: 17, col: 3 })
+    s().activateTab(1)
+    expect(s().selection.active).toEqual({ row: 5, col: 1 })
+  })
+
+  it('loadBook сбрасывает память: новая книга начинает с A1', () => {
+    loadTwoSheets()
+    s().goTo(9, 2)
+    s().activateTab(1)
+    loadTwoSheets() // другая книга — позиции прежней не должны протечь
+    s().activateTab(1)
+    expect(s().selection.active).toEqual({ row: 0, col: 0 })
+  })
+
+  it('tabCursorsWire: активная — из живого выделения, остальные — из памяти', () => {
+    loadTwoSheets()
+    s().goTo(4, 2)
+    s().activateTab(1)
+    s().goTo(7, 1)
+    expect(s().tabCursorsWire()).toEqual({
+      Данные: { row: 4, col: 2 },
+      Справка: { row: 7, col: 1 },
+    })
+  })
+
+  it('seedTabCursors сеет по именам с клампом к листу, чужие имена игнорирует', () => {
+    loadTwoSheets()
+    s().seedTabCursors({
+      Данные: { row: 999_999, col: 1 },
+      НетТакогоЛиста: { row: 3, col: 3 },
+    })
+    s().activateTab(1)
+    expect(s().selection.active).toEqual({ row: 0, col: 0 }) // чужое имя не сеется
+    s().activateTab(0)
+    // 999 999 клампился к границе листа (с запасом пустого места, но не 1 млн)
+    expect(s().selection.active).toEqual({ row: s().tabs[0].sheet.rows - 1, col: 1 })
+  })
+
+  it('removeTab активной возвращает курсор соседа', () => {
+    loadTwoSheets()
+    s().goTo(6, 1)
+    s().activateTab(1)
+    s().goTo(8, 0)
+    s().addTab() // третья вкладка активна
+    expect(s().removeTab(2)).toBe(true) // удалили активную → сосед «Справка»
+    expect(s().tabs.map((t) => t.name)).toEqual(['Данные', 'Справка'])
+    expect(s().selection.active).toEqual({ row: 8, col: 0 })
   })
 })
 

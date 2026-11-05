@@ -252,6 +252,10 @@ export interface GridState {
   setCsvDelimiter: (d: string) => void
 
   activateTab: (index: number) => void
+  /** позиции курсора всех листов по именам — снимок для памяти «где я был» (novagrid-053) */
+  tabCursorsWire: () => Record<string, { row: number; col: number }>
+  /** посев позиций по именам после открытия книги — память «где я был» (novagrid-053) */
+  seedTabCursors: (byName: Record<string, { row: number; col: number }>) => void
   addTab: () => void
   renameTab: (index: number, name: string) => void
   /** удаление возможно при ≥2 вкладках; возвращает true, если удалила */
@@ -642,6 +646,10 @@ const tabColWidths = new Map<string, ReadonlyMap<number, number>>()
 /** Закрепление областей — по вкладкам (id), как ширины (novagrid-044). */
 const tabFreeze = new Map<string, { rows: number; cols: number }>()
 
+/** Курсор «где я был» — по вкладкам (id), как ширины (novagrid-053): уходя
+ *  с листа позиция запоминается, возвращением — восстанавливается. */
+const tabCursors = new Map<string, { row: number; col: number }>()
+
 const NO_FREEZE = { rows: 0, cols: 0 }
 
 function historyOf(tabId: string): History {
@@ -659,6 +667,7 @@ function clearHistories(): void {
   tabFilterAnchors.clear()
   tabColWidths.clear()
   tabFreeze.clear()
+  tabCursors.clear()
 }
 
 const initialTab = createTab(DEFAULT_SHEET_NAME)
@@ -779,13 +788,14 @@ export const gridStore = createStore<GridState>((set, get) => {
     refreshReplace()
   }
 
-  /** Сохранить фильтры, ширины и закрепление активной вкладки (перед сменой). */
+  /** Сохранить фильтры, ширины, закрепление и курсор активной вкладки (перед сменой). */
   const saveFilters = () => {
-    const { tabs, activeTab, filters, colWidths, filterAnchor, freeze } = get()
+    const { tabs, activeTab, filters, colWidths, filterAnchor, freeze, selection } = get()
     tabFilters.set(tabs[activeTab].id, filters)
     tabFilterAnchors.set(tabs[activeTab].id, filterAnchor)
     tabColWidths.set(tabs[activeTab].id, colWidths ?? new Map())
     tabFreeze.set(tabs[activeTab].id, freeze)
+    tabCursors.set(tabs[activeTab].id, { row: selection.active.row, col: selection.active.col })
   }
 
   /**
@@ -1103,6 +1113,30 @@ export const gridStore = createStore<GridState>((set, get) => {
       get().loadBook({ sheets: [{ name: DEFAULT_SHEET_NAME, sheet: createSheet() }] })
     },
 
+    tabCursorsWire: () => {
+      const { tabs, activeTab, selection } = get()
+      const out: Record<string, { row: number; col: number }> = {}
+      tabs.forEach((t, i) => {
+        const c = i === activeTab ? selection.active : tabCursors.get(t.id)
+        if (c) out[t.name] = { row: c.row, col: c.col }
+      })
+      return out
+    },
+
+    seedTabCursors: (byName) => {
+      const { tabs, activeTab } = get()
+      tabs.forEach((t, i) => {
+        const c = byName[t.name]
+        if (!c) return
+        // файл снаружи мог стать короче — координаты клампимся к листу
+        const at = clampRef({ row: c.row, col: c.col }, t.sheet.rows, t.sheet.cols)
+        tabCursors.set(t.id, at)
+        // активной вкладке позицию даём сразу живым курсором: иначе первый
+        // же уход с листа затрёт посев текущим A1
+        if (i === activeTab) get().goTo(at.row, at.col)
+      })
+    },
+
     markSaved: (fileName, meta) => {
       set({
         dirty: false,
@@ -1121,11 +1155,14 @@ export const gridStore = createStore<GridState>((set, get) => {
       const i = Math.min(Math.max(index, 0), tabs.length - 1)
       if (get().edit) get().commitEdit('none')
       saveFilters()
+      // курсор — по вкладкам (novagrid-053): вернувшись на лист, попадаем
+      // туда, где были (нет записи — A1, как раньше)
+      const back = tabCursors.get(tabs[i].id)
       const savedWidths = tabColWidths.get(tabs[i].id)
       set({
         activeTab: i,
         sheet: tabs[i].sheet,
-        selection: selectionOf(0, 0),
+        selection: selectionOf(back?.row ?? 0, back?.col ?? 0),
         edit: null,
         altRange: null,
         filters: tabFilters.get(tabs[i].id) ?? [],
@@ -1182,14 +1219,24 @@ export const gridStore = createStore<GridState>((set, get) => {
       tabFilterAnchors.delete(removed.id)
       tabColWidths.delete(removed.id)
       tabFreeze.delete(removed.id)
+      tabCursors.delete(removed.id)
       const nextActive = index < activeTab ? activeTab - 1 : Math.min(activeTab, next.length - 1)
       if (get().edit) get().cancelEdit()
+      // удалили неактивную — активный лист не меняется, его курсор/фильтры/
+      // ширины живут дальше (раньше сбрасывались); правятся только индексы
+      if (index !== activeTab) {
+        set({ tabs: next, activeTab: nextActive, dirty: true })
+        refreshSearch()
+        return true
+      }
+      // удалили активную — к соседу, с его курсором (novagrid-053)
       const savedWidths = tabColWidths.get(next[nextActive].id)
+      const back = tabCursors.get(next[nextActive].id)
       set({
         tabs: next,
         activeTab: nextActive,
         sheet: next[nextActive].sheet,
-        selection: selectionOf(0, 0),
+        selection: selectionOf(back?.row ?? 0, back?.col ?? 0),
         edit: null,
         altRange: null,
         filters: tabFilters.get(next[nextActive].id) ?? [],

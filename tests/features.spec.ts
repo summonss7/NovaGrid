@@ -427,9 +427,15 @@ test.describe('novagrid-037: заголовок окна, память пози�
     await openDemoBook(page)
     const api = nv(page)
 
+    // на первом листе курсор на A3 — его должны помнить отдельно (novagrid-053)
+    const a1 = await api.cellCenter(0, 0)
+    await page.mouse.click(a1.x, a1.y)
+    for (let i = 0; i < 2; i++) await page.keyboard.press('ArrowDown')
+    await expect.poll(() => api.activeRef()).toBe('A3')
+
     // второй лист фикстуры, курсор на B5
     await page.getByRole('tab', { name: 'Справочник' }).click()
-    const a1 = await api.cellCenter(0, 0)
+    await expect.poll(() => api.activeRef()).toBe('A1') // первый вход — A1
     await page.mouse.click(a1.x, a1.y)
     for (let i = 0; i < 4; i++) await page.keyboard.press('ArrowDown')
     await page.keyboard.press('ArrowRight')
@@ -437,6 +443,11 @@ test.describe('novagrid-037: заголовок окна, память пози�
     await expect
       .poll(() => page.evaluate(() => window.__nv!.book().activeTab))
       .toBe(1)
+    // в той же сессии переключение листов курсор каждого помнит (novagrid-053)
+    await page.getByRole('tab', { name: 'Сотрудники' }).click()
+    await expect.poll(() => api.activeRef()).toBe('A3')
+    await page.getByRole('tab', { name: 'Справочник' }).click()
+    await expect.poll(() => api.activeRef()).toBe('B5')
     // даём дебаунсу записать позицию (при закрытии её дозаписывает pagehide)
     await page.waitForTimeout(1100)
 
@@ -453,6 +464,9 @@ test.describe('novagrid-037: заголовок окна, память пози�
       .poll(() => page.evaluate(() => window.__nv!.book().activeTab))
       .toBe(1)
     await expect.poll(() => api.activeRef()).toBe('B5')
+    // и предыдущий лист помнит свою позицию — A3, без прокрутки к началу
+    await page.getByRole('tab', { name: 'Сотрудники' }).click()
+    await expect.poll(() => api.activeRef()).toBe('A3')
   })
 
   test('строка с формулой «+1» копируется в каждую выделенную строку со сдвигом', async ({

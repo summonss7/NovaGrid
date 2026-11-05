@@ -1,10 +1,11 @@
 /*
  * Память «где я был» в книге (novagrid-037): после закрытия файла программа
  * помнит последний лист и позицию курсора и возвращает туда при повторном
- * открытии. Ключ книги тот же, что у «Недавних» (openingKey). Запись —
- * дебаунсом на смену листа/курсора и немедленно при pagehide/скрытии вкладки
- * (закрытие окна книги в обёртке — тоже pagehide); смена книги сначала
- * досылает позицию предыдущей (beginTracking).
+ * открытии. С novagrid-053 помнит позицию КАЖДОГО листа: вход на лист
+ * возвращает курсор туда, где на нём закончили работу. Ключ книги тот же,
+ * что у «Недавних» (openingKey). Запись — дебаунсом на смену листа/курсора
+ * и немедленно при pagehide/скрытии вкладки (закрытие окна книги в обёртке —
+ * тоже pagehide); смена книги сначала досылает позицию предыдущей (beginTracking).
  *
  * planRestore вынесен чистой функцией — лист ищется по имени (id вкладок
  * пересоздаются при загрузке), координаты клампятся к границам листа.
@@ -29,6 +30,8 @@ function snapshot(): ViewStateRow | null {
     sheetName: st.tabs[st.activeTab]?.name ?? '',
     row: st.selection.active.row,
     col: st.selection.active.col,
+    // курсор каждого листа (novagrid-053): вход на лист возвращает туда, где был
+    sheets: st.tabCursorsWire(),
     updatedAt: Date.now(),
   }
 }
@@ -97,6 +100,8 @@ export function planRestore(
 /**
  * Применить запомненную позицию к загруженной книге: вкладка по имени,
  * затем курсор (goTo прокрутит ячейку в поле зрения — подписка грида).
+ * Позиции остальных листов (novagrid-053) сеются в по-вкладочную память —
+ * вход на любой лист вернёт курсор туда, где на нём были в прошлый раз.
  */
 export function applyViewState(saved: ViewStateRow): void {
   const st = gridStore.getState()
@@ -104,9 +109,11 @@ export function applyViewState(saved: ViewStateRow): void {
     st.tabs.map((t) => ({ name: t.name, rows: t.sheet.rows, cols: t.sheet.cols })),
     saved,
   )
-  if (!plan) return
-  if (plan.tabIndex !== st.activeTab) st.activateTab(plan.tabIndex)
-  if (plan.row !== 0 || plan.col !== 0) gridStore.getState().goTo(plan.row, plan.col)
+  if (plan) {
+    if (plan.tabIndex !== st.activeTab) st.activateTab(plan.tabIndex)
+    if (plan.row !== 0 || plan.col !== 0) gridStore.getState().goTo(plan.row, plan.col)
+  }
+  if (saved.sheets) gridStore.getState().seedTabCursors(saved.sheets)
 }
 
 /** Подписка на позицию + досыл при закрытии. Возвращает отписку. */
