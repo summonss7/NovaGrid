@@ -426,10 +426,10 @@
   );
 }
 
+/* novagrid-054: fixed + координаты от кнопки инлайном — у правого края
+   окна и в мобильной ленте палитра больше не уезжает за край */
 .fmt-palette {
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 0;
+  position: fixed;
   z-index: 45;
   display: flex;
   flex-direction: column;
@@ -514,9 +514,7 @@
 }
 
 .fmt-borders-menu {
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 0;
+  position: fixed;
   z-index: 45;
   display: flex;
   flex-direction: column;

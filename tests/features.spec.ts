@@ -685,3 +685,80 @@ test.describe('novagrid-055: меню «Вид» — панели и вклад�
     await expect(page.locator('.sheets-bar:not(.sheets-bar-multi)')).toBeVisible()
   })
 })
+
+/*
+ * novagrid-054: палитры цветов и меню границ у правого края окна раньше
+ * уезжали за край (а в мобильной ленте обрезались скроллом) — «выбор
+ * цвета не работает, просто добавляют скроллинг справа». Теперь поповеры
+ * fixed и клампятся к вьюпорту. Заодно проверяем подчёркивание (кнопка с
+ * подчёркнутой «А» из пожелания — это выбор цвета текста, Ч работает).
+ */
+test.describe('novagrid-054: палитры форматирования не уезжают за край окна', () => {
+  test.beforeEach(async ({ page }) => {
+    await openDemoBook(page)
+  })
+
+  async function expectInsideViewport(page: Page, selector: string) {
+    const box = await page.locator(selector).boundingBox()
+    expect(box).not.toBeNull()
+    const { innerWidth, innerHeight } = await page.evaluate(() => ({
+      innerWidth: window.innerWidth,
+      innerHeight: window.innerHeight,
+    }))
+    expect(box!.x).toBeGreaterThanOrEqual(0)
+    expect(box!.y).toBeGreaterThanOrEqual(0)
+    expect(box!.x + box!.width).toBeLessThanOrEqual(innerWidth)
+    expect(box!.y + box!.height).toBeLessThanOrEqual(innerHeight)
+    // страница не получает горизонтального скролла от поповера
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth),
+    ).toBeLessThanOrEqual(0)
+  }
+
+  test('узкое окно: палитра цвета текста целиком в поле зрения, скролла справа нет', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 760, height: 600 })
+    const a2 = await nv(page).cellCenter(1, 0)
+    await page.mouse.click(a2.x, a2.y)
+    await page.locator('.fmt-btn[aria-label="Цвет текста"]').click()
+    await expect(page.locator('.fmt-palette')).toBeVisible()
+    await expectInsideViewport(page, '.fmt-palette')
+    // свотч кликабелен и красит: исправное применение цвета текста
+    await page.locator('.fmt-swatch[aria-label="#C00000"]').click()
+    await expect
+      .poll(() => page.evaluate(() => JSON.stringify(window.__nv!.style(1, 0))))
+      .toBe(JSON.stringify({ fg: 'C00000' }))
+  })
+
+  test('мобильная лента: палитра и меню границ видны целиком, лента не растёт', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 480, height: 800 })
+    await page.locator('.fmt-btn[aria-label="Цвет заливки ячейки"]').click()
+    await expect(page.locator('.fmt-palette')).toBeVisible()
+    await expectInsideViewport(page, '.fmt-palette')
+    // палитра закрывается подложкой, открываем меню границ — оно тоже в поле зрения
+    await page.locator('.menu-backdrop').click({ position: { x: 10, y: 10 } })
+    await page.locator('.fmt-btn[aria-label="Границы"]').click()
+    await expect(page.locator('.fmt-borders-menu')).toBeVisible()
+    await expectInsideViewport(page, '.fmt-borders-menu')
+  })
+
+  test('подчёркивание из панели применяется и снимается повторным кликом', async ({ page }) => {
+    const a1 = await nv(page).cellCenter(1, 0)
+    await page.mouse.click(a1.x, a1.y)
+    await page.locator('.fmt-btn[aria-label="Подчёркнутый (Ctrl+U)"]').click()
+    await expect
+      .poll(() => page.evaluate(() => JSON.stringify(window.__nv!.style(1, 0))))
+      .toBe(JSON.stringify({ underline: true }))
+    await expect(page.locator('.fmt-btn[aria-label="Подчёркнутый (Ctrl+U)"]')).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+    await page.locator('.fmt-btn[aria-label="Подчёркнутый (Ctrl+U)"]').click()
+    await expect
+      .poll(() => page.evaluate(() => window.__nv!.style(1, 0) === null))
+      .toBe(true)
+  })
+})

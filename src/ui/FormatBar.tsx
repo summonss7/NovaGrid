@@ -12,7 +12,7 @@ import {
   Underline,
   WrapText,
 } from 'lucide-react'
-import { useState } from 'react'
+import { type MouseEvent, useState } from 'react'
 import { useStore } from 'zustand'
 import { type BorderKind } from '../core/borders'
 import { mergeLosesData } from '../core/merges'
@@ -78,6 +78,11 @@ export function FormatBar() {
   const t = useT()
   const [palette, setPalette] = useState<'fg' | 'bg' | null>(null)
   const [borderMenu, setBorderMenu] = useState(false)
+  // якорь всплывающих панелей (novagrid-054): fixed-координаты от кнопки-
+  // триггера; палитра у правого края окна раньше уезжала за край (а в
+  // мобильной ленте — обрезалась скроллом): «выбор цвета не работает,
+  // только скроллинг справа»
+  const [anchor, setAnchor] = useState<{ x: number; y: number } | null>(null)
   const borderLabels: Record<BorderKind, string> = {
     all: t.formatBorderAll,
     outer: t.formatBorderOuter,
@@ -150,6 +155,31 @@ export function FormatBar() {
     gridStore.getState().applyStyle(palette === 'fg' ? { fg: hex } : { bg: hex })
     setPalette(null)
   }
+
+  // открытие у кнопки: запоминаем её экранные координаты, дальше CSS fixed
+  const openAt = (e: MouseEvent<HTMLButtonElement>) => {
+    const r = e.currentTarget.getBoundingClientRect()
+    setAnchor({ x: r.left, y: r.bottom + 6 })
+  }
+  const togglePalette = (which: 'fg' | 'bg') => (e: MouseEvent<HTMLButtonElement>) => {
+    if (palette === which) setPalette(null)
+    else {
+      openAt(e)
+      setPalette(which)
+    }
+  }
+  const toggleBorderMenu = (e: MouseEvent<HTMLButtonElement>) => {
+    if (borderMenu) setBorderMenu(false)
+    else {
+      openAt(e)
+      setBorderMenu(true)
+    }
+  }
+
+  // кламп к вьюпорту как у контекстного меню: палитра/меню границ не шире
+  // ~230px, у правого края сдвигаем панель влево, чтобы вся была видна
+  const popLeft = Math.max(8, Math.min(anchor?.x ?? 8, window.innerWidth - 232))
+  const popTop = anchor?.y ?? 8
 
   const fgHex = style?.fg ?? '2B2B2B'
   const bgHex = style?.bg ?? null
@@ -310,7 +340,7 @@ export function FormatBar() {
           title={t.formatBorders}
           aria-haspopup="menu"
           aria-expanded={borderMenu}
-          onClick={() => setBorderMenu((v) => !v)}
+          onClick={toggleBorderMenu}
         >
           <BorderKindIcon kind="all" />
         </button>
@@ -324,7 +354,12 @@ export function FormatBar() {
               }}
               aria-hidden
             />
-            <div className="fmt-borders-menu" role="menu" aria-label={t.formatBorders}>
+            <div
+              className="fmt-borders-menu"
+              role="menu"
+              aria-label={t.formatBorders}
+              style={{ left: popLeft, top: popTop }}
+            >
               {BORDER_KINDS.map((kind) => (
                 <button
                   key={kind}
@@ -355,7 +390,7 @@ export function FormatBar() {
           title={t.formatFgColor}
           aria-haspopup="menu"
           aria-expanded={palette === 'fg'}
-          onClick={() => setPalette(palette === 'fg' ? null : 'fg')}
+          onClick={togglePalette('fg')}
         >
           <Baseline size={15} strokeWidth={2} aria-hidden />
           <span className="fmt-color-chip" style={{ background: `#${fgHex}` }} aria-hidden />
@@ -369,7 +404,7 @@ export function FormatBar() {
           title={t.formatBgColor}
           aria-haspopup="menu"
           aria-expanded={palette === 'bg'}
-          onClick={() => setPalette(palette === 'bg' ? null : 'bg')}
+          onClick={togglePalette('bg')}
         >
           <PaintBucket size={15} strokeWidth={2} aria-hidden />
           {bgHex ? (
@@ -400,7 +435,12 @@ export function FormatBar() {
             }}
             aria-hidden
           />
-          <div className="fmt-palette" role="menu" aria-label={t.formatPaletteLabel}>
+          <div
+            className="fmt-palette"
+            role="menu"
+            aria-label={t.formatPaletteLabel}
+            style={{ left: popLeft, top: popTop }}
+          >
             <button
               type="button"
               role="menuitem"
