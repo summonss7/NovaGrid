@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useStore } from 'zustand'
 import { visibleRowsOf } from '../core/filter'
 import { gridStore } from '../core/store'
-import { useT } from '../i18n'
+import { useSettings, useT } from '../i18n'
 
 interface TabMenu {
   x: number
@@ -22,6 +22,9 @@ export function SheetsBar() {
   const [menu, setMenu] = useState<TabMenu | null>(null)
   const [editing, setEditing] = useState<number | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  // «Вид» → вкладки рядами (novagrid-055): книги с десятками листов — все
+  // вкладки в зоне видимости по ширине окна, без дальнего скролла
+  const multi = useSettings((s) => s.tabsLayout === 'multi')
 
   useEffect(() => {
     if (editing !== null) inputRef.current?.select()
@@ -44,7 +47,7 @@ export function SheetsBar() {
   }
 
   return (
-    <div className="sheets-bar">
+    <div className={`sheets-bar${multi ? ' sheets-bar-multi' : ''}`}>
       <div className="sheets-tabs" role="tablist" aria-label={t.sheetsTabsLabel}>
         {tabs.map((tab, i) => (
           <div key={tab.id} className="sheet-tab-wrap">

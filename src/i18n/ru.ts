@@ -329,6 +329,18 @@ export const ru = {
 
   // настройки (Этап 6.3)
   settingsLabel: 'Настройки',
+  /** слово между версией и датой сборки: «v1.27.0 от 05.11.2026» */
+  versionDateOf: 'от',
+  // меню «Вид» (novagrid-055): показать/скрыть области интерфейса
+  viewMenuLabel: 'Вид',
+  viewPanelFormat: 'Панель форматирования',
+  viewPanelFormula: 'Строка формул',
+  viewPanelFilters: 'Панель фильтров',
+  viewPanelSheets: 'Список листов',
+  viewPanelStatus: 'Строка состояния',
+  viewTabsLayout: 'Вкладки листов',
+  viewTabsSingle: 'Один ряд',
+  viewTabsMulti: 'Рядами',
   fileGroupLabel: 'Файл',
   sheetsTabsLabel: 'Листы книги',
   cellRefLabel: 'Адрес активной ячейки',

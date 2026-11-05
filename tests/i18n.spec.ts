@@ -21,8 +21,11 @@ test.describe('локализация и настройки (6.3)', () => {
     const c2 = await page.evaluate(() => window.__nv!.cellCenter(1, 2))
     await page.mouse.click(c2.x, c2.y)
     // статус-бар слева показывает честную версию программы (novagrid-043):
-    // тот же источник, что у заголовка окна (package.json)
-    await expect(page.locator('.status-phase')).toHaveText(/^NovaGrid v\d+\.\d+\.\d+$/)
+    // тот же источник, что у заголовка окна (package.json); novagrid-055
+    // добавил дату сборки — «NovaGrid v1.27.0 от 05.11.2026»
+    await expect(page.locator('.status-phase')).toHaveText(
+      /^NovaGrid v\d+\.\d+\.\d+ от \d{2}\.\d{2}\.\d{4}$/,
+    )
 
     // настройки: шестерёнка в тулбаре → English
     await page.click('.toolbar-settings')

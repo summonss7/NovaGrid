@@ -6,7 +6,7 @@ import { cellRefName } from '../grid/geometry'
 import { zoomStore } from '../grid/zoom'
 import { useT } from '../i18n'
 import { useMemo } from 'react'
-import { APP_VERSION } from '../app/titleSync'
+import { APP_BUILD_DATE, APP_VERSION } from '../app/titleSync'
 
 /**
  * Статус-бар метрик (§6, Ф4): Σ · n · x̄ по выделению — живьём при любом
@@ -43,8 +43,10 @@ export function StatusBar() {
         </span>
       ) : (
         // версия программы (novagrid-043): тот же источник, что у заголовка
-        // окна — package.json; раньше здесь был захардкоженный «v1.0»
-        <span className="status-phase">NovaGrid v{APP_VERSION}</span>
+        // окна — package.json; novagrid-055 добавил дату сборки «от дд.мм.гггг»
+        <span className="status-phase">
+          NovaGrid v{APP_VERSION} {t.versionDateOf} {APP_BUILD_DATE}
+        </span>
       )}
       <span className="sr-only" aria-live="polite">
         {activeText !== '' ? `${activeRef} · ${activeText}` : activeRef}

@@ -9,12 +9,16 @@
 import pkg from '../../package.json'
 import { gridStore } from '../core/store'
 import { desktopSetTitle, isDesktop } from '../io/desktop'
+import { dict } from '../i18n'
 
 export const APP_VERSION: string = pkg.version
+/** Дата этой сборки (novagrid-55): подставляется vite define при билде. */
+export const APP_BUILD_DATE: string = __NV_BUILD_DATE__
 
-/** Текст заголовка: без открытой книги — только версия. */
+/** Текст заголовка: без открытой книги — только версия с датой (novagrid-055). */
 export function windowTitleOf(fileName: string | null): string {
-  return fileName ? `NovaGrid — ${fileName} — v${APP_VERSION}` : `NovaGrid — v${APP_VERSION}`
+  const v = `v${APP_VERSION} ${dict().versionDateOf} ${APP_BUILD_DATE}`
+  return fileName ? `NovaGrid — ${fileName} — ${v}` : `NovaGrid — ${v}`
 }
 
 function applyTitle(fileName: string | null): void {

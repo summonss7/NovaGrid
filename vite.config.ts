@@ -4,8 +4,18 @@ import { VitePWA } from 'vite-plugin-pwa'
 
 // base './' — относительные пути к ассетам, чтобы сборка отдавалась
 // и с подкаталога GitHub Pages (https://<owner>.github.io/NovaGrid/)
+// Дата сборки (novagrid-055): «v1.27.0 от 05.11.2026» в заголовке окна и
+// статус-баре — дата релизной сборки, а не захардкоженная константа
+const buildDate = new Date()
+const BUILD_DATE = `${String(buildDate.getDate()).padStart(2, '0')}.${String(
+  buildDate.getMonth() + 1,
+).padStart(2, '0')}.${buildDate.getFullYear()}`
+
 export default defineConfig({
   base: './',
+  define: {
+    __NV_BUILD_DATE__: JSON.stringify(BUILD_DATE),
+  },
   plugins: [
     react(),
     // PWA-оболочка (Этап 5.1): precache оболочки приложения — офлайн-работа

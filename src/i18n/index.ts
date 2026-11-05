@@ -24,6 +24,15 @@ export type TableSize = 's' | 'm' | 'l' | 'xl'
 export type ThemePref = 'system' | 'light' | 'dark'
 /** тема после разрешения «Системы» — то, что реально стоит на <html> */
 export type ResolvedTheme = 'light' | 'dark'
+/**
+ * Области интерфейса для меню «Вид» (novagrid-055): показать/скрыть.
+ * format — панель шрифта/форматирования, formula — строка формул,
+ * filters — панель активных фильтров, sheets — список листов,
+ * status — строка состояния.
+ */
+export type PanelKey = 'format' | 'formula' | 'filters' | 'sheets' | 'status'
+/** Вкладки листов (novagrid-055): один горизонтальный ряд или несколько. */
+export type TabsLayout = 'single' | 'multi'
 
 export const TABLE_SIZE_SCALE: Record<TableSize, number> = { s: 0.85, m: 1, l: 1.15, xl: 1.3 }
 
@@ -32,12 +41,18 @@ interface SettingsState {
   tableSize: TableSize
   csvDelimiter: CsvDelimiter
   theme: ThemePref
+  /** видимость областей интерфейса — меню «Вид» (novagrid-055) */
+  panels: Record<PanelKey, boolean>
+  /** раскладка вкладок листов (novagrid-055): ряд или несколько рядов */
+  tabsLayout: TabsLayout
   /** вычисленная тема (runtime, не персистится): на неё подписан канвас-грид */
   resolvedTheme: ResolvedTheme
   setLang: (lang: Lang) => void
   setTableSize: (size: TableSize) => void
   setCsvDelimiter: (d: CsvDelimiter) => void
   setTheme: (theme: ThemePref) => void
+  setPanel: (key: PanelKey, visible: boolean) => void
+  setTabsLayout: (layout: TabsLayout) => void
 }
 
 export const useSettings = create<SettingsState>()(
@@ -47,11 +62,15 @@ export const useSettings = create<SettingsState>()(
       tableSize: 'm',
       csvDelimiter: ';',
       theme: 'system',
+      panels: { format: true, formula: true, filters: true, sheets: true, status: true },
+      tabsLayout: 'single',
       resolvedTheme: 'light',
       setLang: (lang) => set({ lang }),
       setTableSize: (tableSize) => set({ tableSize }),
       setCsvDelimiter: (csvDelimiter) => set({ csvDelimiter }),
       setTheme: (theme) => set({ theme }),
+      setPanel: (key, visible) => set((s) => ({ panels: { ...s.panels, [key]: visible } })),
+      setTabsLayout: (tabsLayout) => set({ tabsLayout }),
     }),
     {
       name: 'novagrid-settings',
@@ -61,6 +80,8 @@ export const useSettings = create<SettingsState>()(
         tableSize: s.tableSize,
         csvDelimiter: s.csvDelimiter,
         theme: s.theme,
+        panels: s.panels,
+        tabsLayout: s.tabsLayout,
       }),
     },
   ),

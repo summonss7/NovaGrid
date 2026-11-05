@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useStore } from 'zustand'
 import { gridStore } from '../core/store'
 import { printStore } from '../core/print'
-import { TABLE_SIZE_SCALE, useDocumentLang, useSettings, useT } from '../i18n'
+import { TABLE_SIZE_SCALE, useDocumentLang, useSettings, useT, type PanelKey } from '../i18n'
 import { installAutosave } from '../storage/autosave'
 import { OPENING_BYTES_LIMIT, openingKey, recordOpening, type SessionRow } from '../storage/db'
 import type { OpeningRow } from '../storage/recents'
@@ -116,6 +116,9 @@ export default function App() {
   const [swReload, setSwReload] = useState<(() => void) | null>(null)
   const printOpen = useStore(printStore, (s) => s.dialogOpen)
   const updOpen = useStore(useUpdaterStore, (s) => s.dialogOpen)
+  // «Вид» (novagrid-055): видимость областей — персист из настроек
+  const panels = useSettings((s) => s.panels)
+  const showPanel = (key: PanelKey) => panels[key]
   const bootedRef = useRef(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const toastTimer = useRef(0)
@@ -815,12 +818,12 @@ export default function App() {
               onSave={() => void save()}
               onSaveAs={() => setSaveAsOpen(true)}
             />
-            <FilterBar />
-            <FormulaBar />
-            <FormatBar />
+            {showPanel('filters') && <FilterBar />}
+            {showPanel('formula') && <FormulaBar />}
+            {showPanel('format') && <FormatBar />}
             <GridCanvas />
-            <SheetsBar />
-            <StatusBar />
+            {showPanel('sheets') && <SheetsBar />}
+            {showPanel('status') && <StatusBar />}
             <MobileBar
             onOpen={() => void onOpenClicked()}
             onOpenRecent={(row) => void openRecent(row)}

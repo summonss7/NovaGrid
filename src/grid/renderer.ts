@@ -67,6 +67,32 @@ export function cellPxOf(style: CellStyle | undefined, theme: GridTheme): number
   return style?.size ? Math.round(((style.size * 4) / 3) * 10) / 10 : theme.cellPx
 }
 
+/** Относительная яркость sRGB (WCAG) — для автоконтраста текста на заливке. */
+function relLuma(hex: string): number {
+  const n = parseInt(hex, 16)
+  if (!Number.isFinite(n)) return 1
+  const ch = [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255]
+  const lin = (v: number): number => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4)
+  return 0.2126 * lin(ch[0]) + 0.7152 * lin(ch[1]) + 0.0722 * lin(ch[2])
+}
+
+/**
+ * Цвет текста ячейки (novagrid-055): явный fg файла/пользователя неприкосновенен;
+ * без него на залитой ячейке текст берётся контрастным к заливке — светлая
+ * заливка (D9E1F2 шапки прайсов) получает тёмный текст и в тёмной теме,
+ * тёмная — светлый; порог 0.18 — точка равной контрастности чёрного и белого.
+ * Без заливки — чернила темы (как раньше).
+ */
+export function inkForCell(
+  fg: string | undefined,
+  bg: string | undefined,
+  theme: GridTheme,
+): string {
+  if (fg) return `#${fg}`
+  if (!bg) return theme.ink
+  return relLuma(bg) > 0.18 ? '#2b2b2b' : '#e8eae7'
+}
+
 /** Тема из CSS-токенов; scale = зум таблицы — шрифты масштабируются вместе
  *  с ячейками (Этап 5.3), иначе отдалённые ячейки рваные, а приближённые пустые. */
 export function themeFromCSS(scale = 1): GridTheme {
@@ -441,9 +467,10 @@ export function drawGrid(input: DrawInput): VisibleRegion {
         const numeric = cellNumber(sheet, r, c) !== null
         const err = isFormula ? cellError(sheet, r, c) : null
         const frozenCell = isFormula ? cellIsFrozen(sheet, r, c) : false
-        // шрифт собирается из стиля ячейки: гарнитура/размер/Ж/К (novagrid-039)
+        // шрифт собирается из стиля ячейки: гарнитура/размер/Ж/К (novagrid-039);
+        // цвет текста — контрастный к заливке ячейки (novagrid-055), ошибки — как прежде
         ctx.font = cellFontOf(style, theme)
-        ctx.fillStyle = style?.fg ? `#${style.fg}` : err ? theme.errInk : theme.ink
+        ctx.fillStyle = err ? theme.errInk : inkForCell(style?.fg, style?.bg, theme)
         const align = style?.align ?? (numeric ? 'right' : 'left')
         /** строка текста на своей вертикали: выравнивание + подчёркивание */
         const drawLine = (line: string, lineY: number) => {

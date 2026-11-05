@@ -1,5 +1,6 @@
 import {
   ChevronDown,
+  Eye,
   FileDown,
   FolderOpen,
   HelpCircle,
@@ -23,6 +24,7 @@ import { OpenMenu } from './OpenMenu'
 import { SearchBox } from './SearchBox'
 import { SettingsDialog } from './SettingsDialog'
 import { SumCard } from './SumCard'
+import { ViewMenu } from './ViewMenu'
 
 /**
  * Тулбар (DESIGN-SYSTEM §6): лого · Открыть · Сохранить · Сохранить как… ·
@@ -48,6 +50,7 @@ export function Toolbar(props: {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
   const [openMenu, setOpenMenu] = useState(false)
+  const [viewOpen, setViewOpen] = useState(false)
 
   // F1 открывает справочник — как в настольных офисных приложениях
   useEffect(() => {
@@ -206,6 +209,23 @@ export function Toolbar(props: {
       <span className="toolbar-sep" aria-hidden />
 
       <SearchBox />
+
+      {/* «Вид» (novagrid-055): показать/скрыть области интерфейса и раскладка
+          вкладок листов — рядом со справкой и настройками */}
+      <div className="toolbar-view">
+        <button
+          type="button"
+          className="btn btn-ghost btn-icon"
+          aria-label={t.viewMenuLabel}
+          title={t.viewMenuLabel}
+          aria-haspopup="menu"
+          aria-expanded={viewOpen}
+          onClick={() => setViewOpen((v) => !v)}
+        >
+          <Eye size={18} strokeWidth={1.5} aria-hidden />
+        </button>
+        {viewOpen && <ViewMenu onClose={() => setViewOpen(false)} />}
+      </div>
 
       <button
         type="button"

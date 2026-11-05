@@ -410,17 +410,21 @@ test.describe('Alt-выделение (Ф4): живая сумма крупно 
  * с формулой «+1 день» в несколько выделенных строк.
  */
 const APP_VERSION = JSON.parse(readFileSync('package.json', 'utf8')).version
+/* novagrid-055: в заголовке и статус-баре версия с датой сборки «v… от дд.мм.гггг» */
+const VD = `v${APP_VERSION} от \\d{2}\\.\\d{2}\\.\\d{4}`
 
 test.describe('novagrid-037: заголовок окна, память позиции, мозаичная вставка', () => {
   test('заголовок: старт — версия, открытая книга — имя файла и версия', async ({ page }) => {
     await page.goto('/?testui=1')
-    await expect.poll(() => page.title()).toBe(`NovaGrid — v${APP_VERSION}`)
+    await expect.poll(() => page.title()).toMatch(new RegExp(`^NovaGrid — ${VD}$`))
 
     await page.setInputFiles('#nv-file-input', 'public/fixtures/demo-book.xlsx')
     await expect
       .poll(() => page.evaluate(() => window.__nv?.cell(1, 0) ?? ''), { timeout: 5000 })
       .toBe('Иванов')
-    await expect.poll(() => page.title()).toBe(`NovaGrid — demo-book.xlsx — v${APP_VERSION}`)
+    await expect
+      .poll(() => page.title())
+      .toMatch(new RegExp(`^NovaGrid — demo-book\\.xlsx — ${VD}$`))
   })
 
   test('программа помнит лист и строку курсора после закрытия файла', async ({ page }) => {
@@ -626,5 +630,58 @@ test.describe('novagrid-039: панель форматирования ячее�
     await expect
       .poll(() => page.evaluate(() => JSON.stringify(window.__nv!.style(1, 0))))
       .toBe(JSON.stringify({ bold: true, fg: 'C00000', bg: 'FFFF00' }))
+  })
+})
+
+/*
+ * Меню «Вид» (novagrid-055): показать/скрыть области интерфейса и раскладка
+ * вкладок листов рядами — по желанию Артёма (книги прайсов с ~20 листами).
+ * Настройки персистятся (novagrid-settings) — проверяем перезагрузкой.
+ */
+test.describe('novagrid-055: меню «Вид» — панели и вкладки рядами', () => {
+  test('скрывает панели, вкладки листов — рядами, персист после перезагрузки', async ({
+    page,
+  }) => {
+    await openDemoBook(page)
+
+    // по умолчанию все области на месте
+    await expect(page.locator('.formula-bar')).toBeVisible()
+    await expect(page.locator('.status-bar')).toBeVisible()
+
+    await page.click('.toolbar-view')
+    await expect(page.locator('.view-menu')).toBeVisible()
+
+    // снять «Строка формул» и «Строка состояния» — меню не закрывается на тогглах
+    await page.click('.view-menu [role="menuitemcheckbox"] >> text=Строка формул')
+    await page.click('.view-menu [role="menuitemcheckbox"] >> text=Строка состояния')
+    await expect(page.locator('.formula-bar')).toHaveCount(0)
+    await expect(page.locator('.status-bar')).toHaveCount(0)
+    // грид и панель форматирования остались
+    await expect(page.locator('.format-bar')).toBeVisible()
+
+    // вкладки листов рядами: панель получает класс, вкладки переносятся
+    await page.click('.view-menu .settings-seg >> text=Рядами')
+    await expect(page.locator('.sheets-bar-multi')).toBeVisible()
+    await page.keyboard.press('Escape')
+
+    // персист: перезагрузка сбрасывает книгу на стартовый экран, но настройки
+    // «Вида» живут в localStorage — переоткрываем книгу и видим их действие
+    await page.reload()
+    await page.setInputFiles('#nv-file-input', 'public/fixtures/demo-book.xlsx')
+    await expect
+      .poll(() => page.evaluate(() => window.__nv?.cell(1, 0) ?? ''), { timeout: 5000 })
+      .toBe('Иванов')
+    await expect(page.locator('.formula-bar')).toHaveCount(0)
+    await expect(page.locator('.sheets-bar-multi')).toBeVisible()
+
+    // вернуть как было: панели и один ряд — настройка общая, не тестовая
+    await page.click('.toolbar-view')
+    await page.click('.view-menu [role="menuitemcheckbox"] >> text=Строка формул')
+    await page.click('.view-menu [role="menuitemcheckbox"] >> text=Строка состояния')
+    await page.click('.view-menu .settings-seg >> text=Один ряд')
+    await page.keyboard.press('Escape')
+    await expect(page.locator('.formula-bar')).toBeVisible()
+    await expect(page.locator('.status-bar')).toBeVisible()
+    await expect(page.locator('.sheets-bar:not(.sheets-bar-multi)')).toBeVisible()
   })
 })

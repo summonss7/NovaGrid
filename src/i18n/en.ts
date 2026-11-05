@@ -329,6 +329,18 @@ const en: RuDict = {
 
   // настройки (Этап 6.3)
   settingsLabel: 'Settings',
+  /** слово между версией и датой сборки: «v1.27.0 of 05.11.2026» */
+  versionDateOf: 'of',
+  // меню «Вид» (novagrid-055): показать/скрыть области интерфейса
+  viewMenuLabel: 'View',
+  viewPanelFormat: 'Formatting panel',
+  viewPanelFormula: 'Formula bar',
+  viewPanelFilters: 'Filter panel',
+  viewPanelSheets: 'Sheet list',
+  viewPanelStatus: 'Status bar',
+  viewTabsLayout: 'Sheet tabs',
+  viewTabsSingle: 'Single row',
+  viewTabsMulti: 'Wrap rows',
   fileGroupLabel: 'File',
   sheetsTabsLabel: 'Book sheets',
   cellRefLabel: 'Active cell address',

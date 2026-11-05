@@ -683,6 +683,32 @@
   color: var(--nv-ink-soft);
 }
 
+/* novagrid-055: вкладки листов рядами — «Вид → Вкладки листов: Рядами»;
+   книги с десятками листов раскладывают вкладки в несколько рядов по ширине
+   окна (до ~4 видимых, дальше вертикальная прокрутка внутри панели) */
+.sheets-bar-multi {
+  align-items: flex-start;
+}
+
+.sheets-bar-multi .sheets-tabs {
+  flex-wrap: wrap;
+  row-gap: 4px;
+  max-height: 118px; /* ~4 ряда вкладок */
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+/* «приклейка» активной вкладки к гриду уместна только в один ряд */
+.sheets-bar-multi .sheet-tab-active {
+  margin-bottom: 0;
+  border-bottom-color: var(--nv-grid-line);
+}
+
+.sheets-bar-multi .sheets-note {
+  flex: none;
+  padding-top: 7px;
+}
+
 /* ── Статус-бар ──────────────────────────────────────────────────────── */
 .status-bar {
   display: flex;
@@ -815,6 +841,7 @@
 
 /* ── Меню «Открыть» в режиме книги (novagrid-030): пикер + недавние ─── */
 .toolbar-open,
+.toolbar-view,
 .mobile-bar-open {
   position: relative;
 }
@@ -852,6 +879,37 @@
   background: var(--nv-surface);
   font-family: var(--nv-font-text);
   font-size: 11px;
+  color: var(--nv-ink-soft);
+}
+
+/* ── Меню «Вид» (novagrid-055): после .open-menu — узкая ширина чек-листа ── */
+.view-menu {
+  min-width: 260px;
+}
+
+.view-check {
+  display: inline-flex;
+  width: 18px;
+  flex: none;
+  color: var(--nv-primary-text);
+}
+
+.view-menu-sep {
+  height: 1px;
+  margin: 5px 8px;
+  background: var(--nv-grid-line);
+}
+
+.view-menu-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 8px;
+}
+
+.view-menu-name {
+  font-size: 13px;
   color: var(--nv-ink-soft);
 }
 
