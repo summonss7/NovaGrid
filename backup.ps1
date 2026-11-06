@@ -3,7 +3,9 @@
 #
 #  В архив (ZIP): код, документация, карточки CARDS и всё
 #  незаменимое вне git (promt.txt, дизайн-макеты).
-#  НЕ кладётся: .git, backups/, node_modules/, dist/.
+#  НЕ кладётся: .git, backups/, node_modules/, dist/, builds/,
+#  test-results/ и сборочные кэши Gradle в desktop/gen/android
+#  (.gradle, build — регенерируются, как и desktop/target).
 #  После создания архив проверяется на читаемость (tar -tf).
 #  Держатся последние 8 архивов, более старые удаляются.
 #
@@ -25,7 +27,12 @@ New-Item -ItemType Directory -Path $temp | Out-Null
 # Копируем всё, кроме служебных папок. desktop/target — кэш cargo (гигабайты,
 # регенерируется сборкой обёртки) и в git не входит (novagrid-024: архивы
 # с ним переполнили диск D:).
+# /XD с простыми именами матчит каталоги с таким именем на любой глубине:
+# build/.gradle — кэши Gradle gen/android (появились с Android-обёрткой,
+# novagrid-058; 1+ ГБ и глубины путей, от которых падает Compress-Archive),
+# builds/test-results — рантайм-артефакты (в git не входят).
 $excludeDirs = @('.git', 'backups', 'node_modules', 'dist', '.zcode',
+    'builds', 'test-results', 'build', '.gradle',
     (Join-Path $PSScriptRoot 'desktop\target'))
 robocopy $PSScriptRoot $temp /E /XD $excludeDirs `
     /XF '*.log' '.visible-*' /NFL /NDL /NJH /NJS /NC /NS /NP | Out-Null

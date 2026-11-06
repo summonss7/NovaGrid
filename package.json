@@ -15,7 +15,10 @@
     "e2e": "playwright test",
     "desktop:icons": "node scripts/make-desktop-icons.mjs",
     "desktop:dev": "bash scripts/desktop-dev.sh",
-    "desktop:build": "bash scripts/desktop-build.sh"
+    "desktop:build": "bash scripts/desktop-build.sh",
+    "android:icons": "node scripts/make-android-icons.mjs",
+    "android:dev": "bash scripts/android-dev.sh",
+    "android:build": "bash scripts/android-build.sh"
   },
   "dependencies": {
     "dexie": "^4.4.6",

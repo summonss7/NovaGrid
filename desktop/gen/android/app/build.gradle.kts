@@ -14,6 +14,19 @@ val tauriProperties = Properties().apply {
     }
 }
 
+// Release signing (novagrid-059): keystore + credentials live in the project
+// root of the android scaffold (desktop/gen/android) — keystore.properties is
+// gitignored on purpose (secret), the keystore itself is committed (private
+// repo; losing it would orphan published updates). No keystore.properties →
+// unsigned APK (installable nowhere but the emulator, script warns).
+val keystoreProperties = Properties().apply {
+    val propFile = rootProject.file("keystore.properties")
+    if (propFile.exists()) {
+        propFile.inputStream().use { load(it) }
+    }
+}
+val releaseKeystoreFile = rootProject.file(keystoreProperties.getProperty("storeFile", "novagrid-release.keystore"))
+
 android {
     compileSdk = 37
     namespace = "app.novagrid.mobile"
@@ -39,6 +52,14 @@ android {
             }
         }
         getByName("release") {
+            if (keystoreProperties.isNotEmpty() && releaseKeystoreFile.exists()) {
+                signingConfig = signingConfigs.maybeCreate("release").apply {
+                    storeFile = releaseKeystoreFile
+                    storePassword = keystoreProperties.getProperty("password")
+                    keyAlias = keystoreProperties.getProperty("keyAlias")
+                    keyPassword = keystoreProperties.getProperty("password")
+                }
+            }
             optimization {
                enable = true
             }

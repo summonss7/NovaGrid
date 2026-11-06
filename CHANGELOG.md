@@ -2447,3 +2447,40 @@ Deploy to GitHub Pages ран 38018213931 success (шаги деплоя кор�
   (строка формул + клавиатура), сохранение через SAF → файл в Download с правкой и формулами
   (проверено exceljs); повторный полный смоук на финальной структуре крейта — тоже зелёный.
 - Коммит: см. ниже (этап 1 цепочки novagrid-057).
+
+## 07.11.2026, 00:04 — Параллельная поддержка платформ: скрипты, версии, подпись APK, документация (novagrid-059, этап 2/3 мобильной линии novagrid-057)
+- Начало работы: 06.11.2026, 23:30
+- Окончание работы: 07.11.2026, 00:04
+- Что сделано:
+  - scripts/android-build.sh: сверка версий package.json / desktop/tauri.conf.json / desktop/Cargo.toml
+    (+ tauri.android.conf.json, если там задана) — рассинхрон = отказ до сборки; фронтенд → tauri android build →
+    APK в builds/novagrid-<версия>-android-<тип>/; release проверяет подпись apksigner verify, без keystore —
+    честный *-unsigned.apk с предупреждением. npm-скрипты: android:icons / android:dev / android:build.
+  - scripts/android-dev.sh: тулчейн-дефолты (ANDROID_HOME/NDK_HOME/JAVA_HOME — env переопределяет), автодетект
+    устройства по adb (без устройства CLI виснет в интерактивном выборе), vite на 0.0.0.0:5173 (эмулятор не видит
+    localhost хоста — tauri адресует devUrl на LAN-IP и иначе вечно ждёт), tauri android dev <device>; на Windows
+    финальный запуск CLI делегирует Android Studio (▶ Run; поведение cargo-mobile2, tauri-apps/tauri#6098) —
+    в WRAPPER.md задокументировано + headless-петля (android:build debug + adb install + am start).
+  - Подпись release-APK: novagrid-release.keystore (keytool, RSA-2048, 10000 дней, alias NovaGrid) в
+    desktop/gen/android/ (закоммичен — репозиторий приватный, утеря keystore = осиротевшие обновления),
+    пароль в gitignored keystore.properties (gen/android/.gitignore прячет из git; backup.ps1 копирует в архивы),
+    signingConfig в app/build.gradle.kts. Попутно: kotlin.compiler.execution.strategy=in-process в gradle.properties
+    (Kotlin-демон падал о разные диски — cargo-реестр C: vs проект D: — и шумил fallback-ом).
+  - Артефакт: builds/novagrid-1.28.0-android-release/NovaGrid-1.28.0-android-release.apk (aarch64, 8.6 МБ);
+    подпись CN=NovaGrid, versionCode 1028000 / versionName 1.28.0 подтверждены apksigner/aapt.
+  - Документация: WRAPPER.md — шапка/таблица/пререквизиты Android (SDK/NDK/JDK, rust-таргеты), команды android:*,
+    раздел «Android и iOS» вместо устаревшего Capacitor (отвергнут в novagrid-057); README — матрица платформ
+    (веб/PWA/Windows/Android/iOS), «Технология», строка WRAPPER; ROADMAP — платформенная линия 057→058/059/060
+    и запись в истории.
+  - Попутные фиксы: desktop:build debug был сломан (cargo build --debug — флага нет; флаг только --release);
+    backup.ps1 падал на Compress-Archive с приходом gen/android (1.1 ГБ gradle-кэшей build/.gradle, глубины
+    путей) — исключения расширены (build, .gradle, builds, test-results — регенерируемые, как desktop/target),
+    архив теперь ~38 МБ; temp-остатки упавших бэкапов (2×1.9 ГБ) вычищены.
+- Как проверено: юнит 468 passed (vitest), tsc/lint чисто, e2e 135 passed (Playwright); сборки одной версии
+  одним поездом: desktop debug (builds/novagrid-1.28.0-portable-debug) + android release (подписанный APK) —
+  обе команды со сверкой версий; живая проверка release-APK на эмуляторе (AVD lecards_test): установка поверх
+  debug требовала смены подписи (uninstall → install — штатно Android), запуск, стартовый экран рендерится
+  (release с proguard-минификацией; скриншот test-results/novagrid-059/); android:dev проверен до хэндоффа
+  в Android Studio (Rust dev-сборка, jniLibs, vite 0.0.0.0, автодетект устройства); backup.ps1 — новый архив
+  OK после фикса.
+- Коммит: см. ниже (этап 2 цепочки novagrid-057).

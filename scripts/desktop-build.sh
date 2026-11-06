@@ -41,7 +41,10 @@ npm run build
 #    `tauri build` does); without it the window would wait for a dev server.
 export PATH="/c/Users/CUSTOM/msys64/ucrt64/bin:$PATH"
 echo "==> Building desktop shell ($TYPE)..."
-(cd desktop && cargo +stable-x86_64-pc-windows-gnu build --"$TYPE" --bin novagrid --features custom-protocol)
+# debug — режим cargo по умолчанию, отдельный флаг есть только у release
+# (--debug cargo не знает — тип debug был сломан, починено в novagrid-059)
+TYPE_FLAG=(); [ "$TYPE" = "release" ] && TYPE_FLAG=(--release)
+(cd desktop && cargo +stable-x86_64-pc-windows-gnu build "${TYPE_FLAG[@]}" --bin novagrid --features custom-protocol)
 
 # 3) version + type -> builds/ (portable: папка exe+DLL, упаковывается в zip;
 #    голый exe рядом — OTA-ассет центра обновлений, novagrid-036)

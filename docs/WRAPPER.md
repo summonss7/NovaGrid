@@ -1,21 +1,31 @@
-# Десктоп-обёртка NovaGrid (Этап 7.5, карточка novagrid-018)
+# Десктоп- и Android-обёртки NovaGrid (Этап 7.5 novagrid-018; мобильная линия novagrid-057)
 
-Нативная оболочка **Tauri 2** поверх веб-приложения: значок в меню «Пуск»,
-нативное меню «Файл», диалоги открытия/сохранения и файловые ассоциации
-.xlsx/.xls/.ods/.csv/.nvgridx без браузера. Веб-часть не меняется — обёртка
-грузит ту же production-сборку (`dist/`), что и PWA; в браузере/PWA всё
-работает как раньше.
+Нативные оболочки **Tauri 2** поверх одного веб-приложения. Десктоп: значок в
+меню «Пуск», нативное меню «Файл», диалоги открытия/сохранения и файловые
+ассоциации .xlsx/.xls/.ods/.csv/.nvgridx без браузера. Android: APK из того же
+Rust-крейта `desktop/` (мобильная ветка `lib.rs` + `gen/android`), файлы —
+системные пикеры SAF. Веб-часть не меняется — обе обёртки грузят ту же
+production-сборку (`dist/`), что и PWA; в браузере/PWA всё работает как раньше.
+iOS — та же мобильная ветка, сборка требует macOS/Xcode (раздел «Android и iOS»
+ниже). Параллельная поддержка платформ («меняется что-то → во всех версиях»):
+один фронтенд, один крейт, версия из `package.json` проверяется перед каждой
+сборкой обеими build-скриптами.
 
 ## Что внутри
 
 | Путь | Роль |
 |---|---|
-| `desktop/` | Rust-каркас Tauri: `src/main.rs` (окно, меню, IPC-команды, доп. окна книг novagrid-023), `src/updater.rs` (OTA из центра Aila, novagrid-036), `tauri.conf.json` (окно 1280×800, мин. 960×600, иконки, CSP), `Cargo.toml`, `installer.iss` (Inno Setup), `icons/` (знак приложения), `lib/WebView2Loader.dll` |
-| `scripts/desktop-build.sh` | Сборка: фронтенд → exe (frontend внутри) → портабельная папка+zip+голый OTA-exe в `builds/` → установщик Inno Setup в `builds/` (release) → публикация релиза в центр обновлений Aila (novagrid-036) → автообновление развёрнутой копии `C:\NovaGrid` (release) |
+| `desktop/` | Rust-крейт Tauri 2 в lib-паттерне (novagrid-058): `src/main.rs` — тонкий бин винды; `src/lib.rs` — развилка `run()`: `#[cfg(desktop)]` → модуль `desktop_app` (вся прежняя логика: окно, нативное меню, rfd-диалоги, IPC, доп. окна книг novagrid-023, OTA `updater.rs` из центра Aila novagrid-036), `#[cfg(mobile)]` → мобильный WebView-билдер с плагинами dialog+fs; `tauri.conf.json` (окно 1280×800, CSP), `tauri.android.conf.json` (оверлей: identifier `app.novagrid.mobile`), `Cargo.toml` (виндо-крейты — в desktop-секции target.cfg), `installer.iss` (Inno Setup), `icons/`, `lib/WebView2Loader.dll` |
+| `desktop/gen/android/` | Android-проект (`tauri android init`), коммитится (каркас правится руками); кэши сборки (`build`, `.gradle`) исключает его собственный .gitignore. `buildSrc/.../BuildTask.kt` запатчен на переносимый вызов CLI (`node ../node_modules/@tauri-apps/cli/tauri.js`), иначе генератор печёт абсолютный путь машины сборки. Подпись release: `novagrid-release.keystore` (закоммичен — репозиторий приватный, утеря keystore = осиротевшие обновления) + `keystore.properties` (пароль; в git НЕ входит, в backups/ попадает) |
+| `scripts/desktop-build.sh` | Сборка десктопа: фронтенд → exe (frontend внутри) → портабельная папка+zip+голый OTA-exe в `builds/` → установщик Inno Setup в `builds/` (release) → публикация релиза в центр обновлений Aila (novagrid-036) → автообновление развёрнутой копии `C:\NovaGrid` (release) |
+| `scripts/android-build.sh` | Сборка APK (novagrid-059): сверка версий → фронтенд → `tauri android build` → подписанный APK в `builds/novagrid-<ver>-android-<тип>/` |
 | `scripts/deploy-portable.sh` | Обновление развёрнутой портативной копии в `C:\NovaGrid` (novagrid-021): копирует exe+DLL из портабельной сборки и сверяет md5; вызывается релизной desktop-build.sh и годится для ручного запуска |
 | `scripts/desktop-dev.sh` | Dev-режим: vite devserver :5173 + `cargo run` без встраивания (окно грузит dev-сервер, HMR живой) |
+| `scripts/android-dev.sh` | Dev-режим Android: vite на 0.0.0.0:5173 + `tauri android dev <device>` (сборка либы; на Windows финальный запуск — ▶ Run в Android Studio, которую открывает CLI; headless-петля — через android:build debug + adb, см. раздел «Android и iOS») |
 | `scripts/make-desktop-icons.mjs` | Иконки из `public/favicon.svg` (растеризация playwright-chromium, многослойный .ico); перегенерация лишь при смене знака — иконки закоммичены |
-| `src/io/desktop.ts` | Мост фронтенда: всё за `isDesktop()` (признак `window.__TAURI__`), браузерная сборка ни одного вызова не выполняет; npm-пакеты `@tauri-apps` сознательно не подключаются |
+| `scripts/make-android-icons.mjs` | Иконки Android из того же знака (`tauri icon` → mipmap в `gen/android`) |
+| `src/io/desktop.ts` | Мост фронтенда: всё за `isDesktop()` (признак `window.__TAURI__` без `.dialog`), браузерная сборка ни одного вызова не выполняет; npm-пакеты `@tauri-apps` сознательно не подключаются |
+| `src/io/mobile.ts` | Мост мобильной обёртки (novagrid-058): `isTauriMobile()` по `window.__TAURI__.dialog`, `mobilePickSavePath`/`mobileWriteFile` — SAF-диалог + запись `content://`; в Android WebView веб-пути сохранения не работают (FSA-пикер висит, `a[download]` и `navigator.share` нет); capability `desktop/capabilities/mobile.json` (android+iOS) |
 
 Интеграция в `App.tsx`: нативный «Файл → Открыть» (мультивыбор с v1.7) → тот
 же конвейер `openFile`; `Ctrl+S` — прямая запись по пути (`desktopPath`
@@ -79,6 +89,13 @@ Tauri не переносит `document.title` в нативный заголо�
    на Windows 10/11 уже есть.
 5. **Inno Setup 6** (только для установщика, per-user): `winget install --id JRSoftware.InnoSetup --scope user`.
    Нет — скрипт честно соберёт только портабельную сборку.
+6. **Android SDK** (только для APK): `%LOCALAPPDATA%\Android\Sdk` (проще всего —
+   Android Studio; нужны platform-tools, platforms android-36+, build-tools, ndk,
+   emulator). JDK — из комплекта (`C:\Program Files\Android\Android Studio\jbr`,
+   OpenJDK 21). Скрипты android-* сами ставят `ANDROID_HOME`/`NDK_HOME`/`JAVA_HOME`
+   по этим путям (env-переменные имеют приоритет) и сами выбирают свежий NDK.
+7. **Rust-таргеты Android** (однократно): `rustup target add aarch64-linux-android
+   armv7-linux-androideabi i686-linux-android x86_64-linux-android`.
 
 Ограничение версии: `tauri = "=2.12.1"` — 2.12.3+ тянет из loader-архива MSVC-объекты
 с зависимостями от MSVC-CRT, которые не собираются GNU-тулчейном (подробности —
@@ -92,6 +109,12 @@ npm run desktop:dev     # окно + vite devserver (HMR)
 npm run desktop:build           # release: dist/ → exe → builds/novagrid-<ver>-portable-release(.zip) → setup.exe → обновить C:\NovaGrid
 npm run desktop:build debug     # debug: только портабельная папка+zip
 scripts/deploy-portable.sh      # вручную обновить C:\NovaGrid (по умолчанию — свежая release-папка текущей версии)
+
+npm run android:icons           # иконки Android из знака (tauri icon → gen/android)
+npm run android:dev             # dev: vite 0.0.0.0:5173 + tauri android dev (запуск — ▶ Run в Android Studio)
+npm run android:build           # release APK (aarch64) → builds/novagrid-<ver>-android-release/
+npm run android:build debug     # debug APK (aarch64+x86_64 — телефон и эмулятор)
+npm run android:build -- release aarch64 x86_64   # свои таргеты
 ```
 
 Версия берётся из `package.json` (единый источник с веб-приложением), тип —
@@ -207,11 +230,59 @@ WebView2 не конфликтует). Первый файл открывает�
    «Сохранить перед закрытием?» → «Не сохранять» закрывает, «Отмена»
    оставляет; чистое окно закрывается без вопросов.
 
-## Capacitor (Android)
+## Android и iOS (мобильная линия novagrid-057)
 
-По плану Этапа 7.5 — только если Tauri-ветка закрыта быстро и Android-база
-уже стоит. В этой сессии не собиралась: Tauri-ветка закрыла этап, отдельной
-инструментальной базы Android под установщик не выделялось. Документируется
-здесь, чтобы следующая итерация знала входную точку: PWA уже проходит
-Lighthouse PWA 100/100 mobile ([LIGHTHOUSE-REPORT](LIGHTHOUSE-REPORT.md)),
-Capacitor-обёртка — отдельная карточка при появлении запроса.
+Мобильная версия — не отдельное приложение, а ещё один выход того же кода:
+фронтенд один (мобильная раскладка ≤760px давно в вебе), Rust-крейт `desktop/`
+один (развилка `#[cfg(mobile)]` в `lib.rs`: WebView-билдер + плагины
+`tauri-plugin-dialog`/`tauri-plugin-fs` вместо нативного меню и rfd),
+генерат `desktop/gen/android` коммитится, как и остальной каркас. Capacitor
+рассматривался и отвергнут (второй стек/мост рядом с Tauri ломает требование
+«меняется что-то → во всех версиях»); чистая PWA отвергнута (нужен именно APK).
+
+**Отличия мобильного рантайма** (выяснены живой проверкой на эмуляторе,
+novagrid-058): файловые операции в Android WebView проходят только через
+системные пикеры SAF — открытие через `input[type=file]` (пикер от wry),
+сохранение через плагин dialog (`ACTION_CREATE_DOCUMENT`) + запись `content://`
+плагином fs. Веб-пути (FSA-пикер, `a[download]`, `navigator.share`) в WebView
+не работают — фронтенд различает среду по `window.__TAURI__.dialog`
+(`src/io/mobile.ts`), пути/хэндлы на мобильных не персистятся, каждое
+сохранение — SAF-диалог.
+
+**Подпись release** (novagrid-059): keystore `novagrid-release.keystore` создан
+keytool (RSA 2048, 10000 дней, alias `NovaGrid`), лежит в `desktop/gen/android/`
+и закоммичен — репозиторий приватный, а утеря keystore осиротила бы все
+обновления приложения. Пароль — в `desktop/gen/android/keystore.properties`,
+который .gitignore gen/android сознательно прячет из git, но backup.ps1
+копирует в архивы (секрет незаменим). Сборка без keystore.properties даёт
+`*-unsigned.apk` с предупреждением (не встанет на телефон). Подпись проверяет
+`apksigner verify` из build-tools — скрипт.
+
+**Сборка**: `scripts/android-build.sh [debug|release] [targets…]` — версии
+package.json / tauri.conf.json / Cargo.toml сверены (расхождение = отказ),
+фронтенд собран, APK положен в `builds/novagrid-<ver>-android-<тип>/`.
+versionCode/versionName в `gen/android/app/tauri.properties` CLI перегенерит
+из версии конфига (1.28.0 → 1028000). Проверено headless, без IDE.
+
+**Dev-режим**: `npm run android:dev [-- <устройство>]` — сначала запустить
+эмулятор (`emulator -avd lecards_test`); скрипт поднимает vite на `:5173`
+**с `--host 0.0.0.0`** (эмулятор не видит localhost хоста, tauri адресует
+devUrl на LAN-IP — иначе вечно «Waiting for your frontend dev server»),
+определяет устройство (первый `adb devices`, иначе аргумент — без устройства
+CLI виснет в интерактивном выборе) и запускает `tauri android dev <device>`:
+Rust-либа собирается, jniLibs ссылаются, и **на Windows CLI открывает проект
+в Android Studio** — финальный запуск через кнопку ▶ Run в IDE (поведение
+cargo-mobile2, tauri-apps/tauri#6098); веб-правки подхватываются live из
+dev-сервера, Rust-правки — пересборкой. Headless-альтернатива без IDE
+(проверена в novagrid-058): `npm run android:build debug x86_64` →
+`adb install -r <apk>` → `adb shell am start -n app.novagrid.mobile/.MainActivity`.
+
+**Живой смоук на эмуляторе** (как в novagrid-058): установить APK
+(`adb install -r <apk>`), запустить → «Открыть файл…» → системный пикер →
+книга открылась (листы, формулы) → правка ячейки через строку формул →
+«⋯ → Сохранить как…» → SAF-диалог SAVE → файл в `/sdcard/Download`;
+вытащить `adb pull` и проверить exceljs (значение правки, формулы, листы).
+
+**iOS**: та же мобильная ветка `lib.rs` и capability `mobile.json` (в них
+платформа уже учтена), но `tauri ios init` и сборка требуют macOS/Xcode —
+на Windows готовится только конфиг/инструкция (novagrid-060).
