@@ -2421,3 +2421,29 @@ Deploy to GitHub Pages ран 38018213931 success (шаги деплоя кор�
 - Как проверено: vitest 465 passed (31 файл); tsc -b green; eslint green; сборка успешна (exit 0); md5 сверка builds/novagrid-1.28.0-portable-release/novagrid.exe и C:\NovaGrid\NovaGrid.exe — совпали (e546aece…); OTA-манифест отдаёт versionName 1.28.0; живые запуски обоих бинарников (builds portable и C:\NovaGrid) — окно «NovaGrid — v1.28.0 от 05.11.2026» в обоих случаях.
 - Документация: README (шапка статуса — v1.28.0 с перечнем содержимого выпуска); ROADMAP (запись novagrid-056 в «Обновлено»); карточка novagrid-056 закрыта (status: done, критерии отмечены).
 - Коммит: (следующим коммитом после записи — см. git log).
+
+## 06.11.2026, 20:30 — Android-обёртка на Tauri 2 (novagrid-058, этап 1/3 мобильной версии novagrid-057)
+- Начало работы: 06.11.2026 19:20
+- Окончание работы: 06.11.2026 20:30
+- Что сделано:
+  - desktop/ перестроен для мобильных: main.rs+desktop_app — виндовый бин (меню, rfd-диалоги,
+    доп. окна, OTA), lib.rs (novagrid_lib) — мобильная обёртка с плагинами tauri-plugin-dialog
+    + tauri-plugin-fs; десктоп-крейты (rfd/reqwest/sha2/futures-util/tokio) перенесены в
+    десктоп-секцию Cargo.toml, десктоп-скрипты собирают --bin novagrid (cdylib винде не нужен).
+  - gen/android (tauri android init, identifier app.novagrid.mobile через tauri.android.conf.json);
+    BuildTask.kt генератора запатчен на переносимый вызов CLI; .gitignore сужен до gen/schemas.
+  - Мобильное сохранение: веб-пути в Android WebView не работают (FSA-пикер висит без UI,
+    a[download] игнорируется, navigator.share нет) → мост SAF: plugin-dialog (ACTION_CREATE_DOCUMENT)
+    + plugin-fs (content://), capability mobile.json (android+iOS); фронтенд — src/io/mobile.ts
+    (isTauriMobile по window.__TAURI__.dialog, mobilePickSavePath/mobileWriteFile), ветки в App.tsx
+    (открытие мимо FSA — сразу input; любое сохранение и .nvgridx — через SAF-диалог).
+  - Попутный фикс веб-бага: в ленте ≤760px файловая группа тулбара не скрывалась (поздний
+    app.css перебивал медиа-правило ui.css) и уезжала за край — селектор .toolbar .toolbar-group.
+  - Иконки Android: scripts/make-android-icons.mjs (favicon.svg → source-1024.png) + tauri icon.
+  - Артефакт: builds/novagrid-1.28.0-android-debug/NovaGrid-1.28.0-android-debug.apk (debug, x86_64).
+- Как проверено: юнит 468 (+3 теста платформенной развилки), tsc/lint зелёные, e2e Playwright
+  118 passed (chromium+firefox); виндовая debug-сборка крейта проходит; живая проверка на
+  эмуляторе (AVD android-36 x86_64): запуск, открытие xlsx системным пикером, правка ячейки
+  (строка формул + клавиатура), сохранение через SAF → файл в Download с правкой и формулами
+  (проверено exceljs); повторный полный смоук на финальной структуре крейта — тоже зелёный.
+- Коммит: см. ниже (этап 1 цепочки novagrid-057).

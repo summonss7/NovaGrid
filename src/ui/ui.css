@@ -2357,7 +2357,11 @@
     padding: 6px 10px;
   }
 
-  .toolbar-group,
+  /* тонкая верхняя строка: лого · «⋯» · имя файла. Селектор .toolbar
+     .toolbar-group специфичнее базового .toolbar-group { display:flex } в
+     app.css (позднего в бандле) — без этого файловая группа не скрывалась
+     на мобильных и уезжала за край (найдено на Android-обёртке, novagrid-058) */
+  .toolbar .toolbar-group,
   .toolbar-sep,
   .toolbar-help,
   .toolbar-sum,

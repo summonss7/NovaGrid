@@ -1,8 +1,20 @@
 [package]
 name = "novagrid"
 version = "1.28.0"
-description = "NovaGrid — таблицы без изучения Excel (десктоп-оболочка)"
+description = "NovaGrid — таблицы без изучения Excel (обёртка: Windows + Android)"
 edition = "2021"
+
+# Развалка бин/lib (novagrid-057/058): десктоп собирается бином novagrid
+# (main.rs → desktop_app) и lib НЕ зависит — cdylib/staticlib нужны только
+# мобильным таргетам (Android .so через JNI, iOS .a), а MinGW-линкер винды
+# огромный cdylib-экспорт не тянет. `tauri android build` строит только --lib.
+[lib]
+name = "novagrid_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "novagrid"
+path = "src/main.rs"
 
 [features]
 # production build: serve the frontend from the assets embedded in the exe
@@ -18,17 +30,31 @@ tauri-build = { version = "2.7.1", features = [] }
 # =2.12.1: точная версия, проверенная связкой GNU+статический WebView2Loader
 # (2.12.3 тянет из loader-архива MSVC-объекты с зависимостями от MSVC-CRT)
 tauri = { version = "=2.12.1", features = [] }
-# нативные диалоги «Файл → Открыть/Сохранить как» (синхронные, Windows)
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Десктоп-только (модуль desktop_app, cfg(desktop) в lib.rs): нативные
+# диалоги rfd и OTA из центра Aila (reqwest 0.13 native-tls = schannel —
+# системный TLS Windows без openssl/C-сборки на GNU-тулчейне; sha2 и
+# futures-util — сверка и стриминг). На Android/iOS этих путей нет — пикеры
+# файлов даёт системный WebView (input[type=file]), самообновление exe
+# бессмысленно (APK ставится стором/руками) — крейты не собираются вовсе.
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 rfd = "0.15.4"
-# OTA из центра обновлений Aila (novagrid-036, паттерн alnavi-039): reqwest
-# уже был в lock (0.13.x); native-tls = schannel — системный TLS Windows без
-# openssl/C-сборки на GNU-тулчейне; sha2 и futures-util — сверка и стриминг
 reqwest = { version = "0.13", default-features = false, features = ["native-tls", "stream"] }
 sha2 = "0.10"
 futures-util = "0.3"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
 tokio = { version = "1", features = ["fs", "io-util"] }
+
+# Мобильные обёртки (novagrid-058): сохранение книг — системный SAF-диалог
+# (ACTION_CREATE_DOCUMENT) и запись по content:// через ContentResolver —
+# веб-пути в Android WebView не работают (FSA-пикер висит без UI, a[download]
+# игнорируется, navigator.share отсутствует). Открытие остаётся веб-путём
+# input[type=file] (системный выбор файла поддерживает wry). Планируются
+# только в мобильную ветку lib.rs — десктоп их не тянет.
+[target.'cfg(any(target_os = "android", target_os = "ios"))'.dependencies]
+tauri-plugin-dialog = "2"
+tauri-plugin-fs = "2"
 
 [profile.release]
 codegen-units = 1

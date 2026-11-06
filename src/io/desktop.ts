@@ -11,6 +11,12 @@
  *
  * novagrid-036: OTA-обновления из центра Aila — updater_check/download/apply
  * обёртки (манифест v2, sha256, rename-swap exe) и событие прогресса.
+ *
+ * novagrid-057/058 (мобильные обёртки): на Android/iOS этот контракт соблюдён
+ * отсутствием самого моста — tauri.android.conf.json ставит withGlobalTauri:
+ * false, window.__TAURI__ там не определён, isDesktop() === false и фронтенд
+ * целиком работает по браузерным путям (input[type=file], share/download).
+ * Поэтому «десктоп» ниже — именно Windows-обёртка, не «любой Tauri».
  */
 
 /** Цель события Tauri: подписка/отправка адресуется по метке окна. */
@@ -18,6 +24,19 @@ type TauriEventTarget =
   | { kind: 'Any' }
   | { kind: 'AnyLabel'; label: string }
   | { kind: 'WebviewWindow'; label: string }
+
+/** Плагин dialog мобильной обёртки (novagrid-058): SAF-пикер сохранения. */
+type TauriDialogPlugin = {
+  save: (opts?: {
+    defaultPath?: string
+    filters?: { name: string; extensions: string[] }[]
+  }) => Promise<string | null>
+}
+
+/** Плагин fs мобильной обёртки: запись по пути SAF-диалога (content://). */
+type TauriFsPlugin = {
+  writeFile: (path: string, contents: number[]) => Promise<void>
+}
 
 type TauriGlobal = {
   core: { invoke: <T>(cmd: string, args?: Record<string, unknown>) => Promise<T> }
@@ -31,6 +50,9 @@ type TauriGlobal = {
   webview?: {
     getCurrentWebviewWindow?: () => { label: string }
   }
+  /** есть только у мобильной обёртки — признак Android/iOS (см. mobile.ts) */
+  dialog?: TauriDialogPlugin
+  fs?: TauriFsPlugin
 }
 
 declare global {
@@ -39,8 +61,18 @@ declare global {
   }
 }
 
+/**
+ * Признак Windows-обёртки Tauri. Мобильные обёртки Android/iOS тоже дают
+ * window.__TAURI__ (withGlobalTauri), но инжектируют плагин dialog —
+ * его наличие отличает мобильный мост (isTauriMobile в mobile.ts, novagrid-058):
+ * там «десктопных» invoke-команд нет, и фронтенд работает по браузерным путям.
+ */
 export function isDesktop(): boolean {
-  return typeof window !== 'undefined' && window.__TAURI__ !== undefined
+  return (
+    typeof window !== 'undefined' &&
+    window.__TAURI__ !== undefined &&
+    window.__TAURI__.dialog === undefined
+  )
 }
 
 function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {

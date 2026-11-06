@@ -1,0 +1,8 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "mobile",
+  "description": "Мобильная обёртка Android/iOS (novagrid-058): SAF-диалог сохранения книг (plugin-dialog) и запись по пути диалога через ContentResolver (plugin-fs). Десктопную обёртку не касается — capability только мобильных платформ.",
+  "platforms": ["android", "iOS"],
+  "windows": ["*"],
+  "permissions": ["dialog:default", "fs:allow-write-file", "fs:write-all"]
+}

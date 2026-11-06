@@ -13,4 +13,4 @@ VITE_PID=$!
 trap 'kill "$VITE_PID" 2>/dev/null || true' EXIT
 
 export PATH="/c/Users/CUSTOM/msys64/ucrt64/bin:$PATH"
-cd desktop && cargo +stable-x86_64-pc-windows-gnu run
+cd desktop && cargo +stable-x86_64-pc-windows-gnu run --bin novagrid

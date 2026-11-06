@@ -52,6 +52,7 @@ import {
   onDesktopCloseAsk,
   onDesktopMenu,
 } from '../io/desktop'
+import { isTauriMobile, mobilePickSavePath, mobileWriteFile } from '../io/mobile'
 import { useUpdaterStore } from '../io/updater'
 import { CloseAskDialog } from '../ui/CloseAskDialog'
 import { FilterBar } from '../ui/FilterBar'
@@ -295,6 +296,12 @@ export default function App() {
       }
       return
     }
+    if (isTauriMobile()) {
+      // мобильная обёртка (novagrid-058): FSA-пикер Android WebView висит без
+      // системного UI — сразу штатный input, системный выбор файла даёт wry
+      fileInputRef.current?.click()
+      return
+    }
     if (isFsaAvailable()) {
       try {
         const picked = await pickOpenFile()
@@ -338,6 +345,12 @@ export default function App() {
         }
         return
       }
+      setSaveAsOpen(true)
+      return
+    }
+    // мобильная обёртка (novagrid-058): путь/хэндл не персистятся, любое
+    // сохранение — через диалог (SAF) от плагина dialog
+    if (isTauriMobile()) {
       setSaveAsOpen(true)
       return
     }
@@ -414,6 +427,12 @@ export default function App() {
             await desktopWriteFile(path, buffer)
             const name = path.replace(/\\/g, '/').split('/').pop() ?? choice.fileName
             showToast(t.snapshotSavedToast(name), 'ok')
+          } else if (isTauriMobile()) {
+            // мобильная обёртка: SAF-диалог + запись мостом (novagrid-058)
+            const path = await mobilePickSavePath(choice.fileName, 'nvgridx')
+            if (path === null) return
+            await mobileWriteFile(path, buffer)
+            showToast(t.snapshotSavedToast(choice.fileName), 'ok')
           } else {
             downloadBuffer(choice.fileName, buffer, 'application/octet-stream')
             showToast(t.snapshotSavedToast(choice.fileName), 'ok')
@@ -447,6 +466,15 @@ export default function App() {
           // книга сменила путь — позиция дальше помнится по нему (novagrid-037)
           beginViewStateTracking(path.toLowerCase())
           showToast(t.savedToast(name), 'ok')
+        } else if (isTauriMobile()) {
+          // мобильная обёртка (novagrid-058): системный SAF-диалог от плагина
+          // dialog и запись по content:// (plugin-fs); отмена — тихо
+          const path = await mobilePickSavePath(choice.fileName, choice.format)
+          if (path === null) {
+            settleCloseAfterSave(closeAfterSaveRef, false)
+            return
+          }
+          await mobileWriteFile(path, buffer)
         } else if (isFsaAvailable()) {
           const handle = await window.showSaveFilePicker!({
             suggestedName: choice.fileName,
