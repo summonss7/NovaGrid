@@ -3,6 +3,7 @@
  * ↑↓/Home/End ходят по пунктам циклично, Esc закрывает. Паттерн WAI-ARIA
  * role="menu": фокус не уходит из меню, пока оно открыто. itemSelector=null —
  * стрелки не перехватываются (например, когда фокус в поле поиска меню).
+ * Esc закрывает меню из любого места, даже если фокус ушёл из него (novagrid-061).
  */
 
 import { useEffect, type RefObject } from 'react'
@@ -24,10 +25,16 @@ export function useMenuKeys(
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault()
+        // фокус мог уйти из меню (клик по гриду и т.п.) — слушатель живёт
+        // на document; stopPropagation не даёт гриду снять выделение
+        // вместо закрытия меню (novagrid-061)
+        e.stopPropagation()
         onClose()
         return
       }
       if (!itemSelector) return
+      // стрелки ходят по пунктам, только пока фокус внутри меню
+      if (!root.contains(document.activeElement)) return
       const list = bySelector(itemSelector)
       if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key) || list.length === 0) return
       e.preventDefault()
@@ -51,7 +58,9 @@ export function useMenuKeys(
       }
       list[next]?.focus()
     }
-    root.addEventListener('keydown', onKey)
-    return () => root.removeEventListener('keydown', onKey)
+    // document + capture: Esc закрывает меню из любого места, а не только
+    // при фокусе внутри (novagrid-061)
+    document.addEventListener('keydown', onKey, true)
+    return () => document.removeEventListener('keydown', onKey, true)
   }, [rootRef, onClose, itemSelector, autoFocusSelector])
 }

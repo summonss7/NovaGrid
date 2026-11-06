@@ -273,7 +273,10 @@ test.describe('ядро таблицы — демо-лист', () => {
     await clickCell(page, 6, 0, { button: 'right' })
     expect(await api.activeRef()).toBe('A7')
 
-    // клик по шапке колонки B — выделение всей колонки
+    // клик по таблице при открытом меню только гасит его (novagrid-061) —
+    // первый клик по шапке закрывает меню, второй выделяет колонку B
+    await clickCell(page, -1, 1)
+    await expect(page.locator('.ctx-menu')).toBeHidden()
     await clickCell(page, -1, 1)
     const m = await api.metrics()
     expect(m.filled).toBe(7) // B1 «Отдел» + 6 отделов

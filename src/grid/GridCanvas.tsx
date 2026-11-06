@@ -762,10 +762,12 @@ export function GridCanvas() {
   const onPointerDown = (e: React.PointerEvent<HTMLElement>) => {
     if (e.button !== 0) return
     // pointerdown из всплывающих меню/панелей не должен попадать в грид:
-    // иначе setPointerCapture уведёт у кнопки меню её click
+    // иначе setPointerCapture уведёт у кнопки меню её click; то же с фоном
+    // меню (.menu-backdrop) — захват уводил click с фона, и меню не могло
+    // закрыться кликом по таблице (novagrid-061)
     if (
       (e.target as HTMLElement).closest(
-        '.ctx-menu, .col-menu, .search-panel, .sum-card, .tab-menu, .assist-popup',
+        '.ctx-menu, .col-menu, .search-panel, .sum-card, .tab-menu, .assist-popup, .menu-backdrop',
       )
     )
       return

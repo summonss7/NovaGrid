@@ -125,6 +125,33 @@ test.describe('КТ-3: ПКМ-фильтрация сценария ТЗ → 132
     await expect(page.locator('.ctx-menu')).toBeHidden()
   })
 
+  test('меню ПКМ закрывается кликом по таблице и Escape (novagrid-061)', async ({ page }) => {
+    const api = nv(page)
+
+    // 1. клик левой по другой ячейке таблицы закрывает меню; первый клик
+    //    только гасит меню (как в Excel) — выделение под кликом не меняется;
+    //    точка заведомо правее прямоугольника меню, чтобы клик попал в фон
+    await rightClickCell(page, 1, 0)
+    const menu = page.getByRole('menu', { name: 'Меню ячейки' })
+    await expect(menu).toBeVisible()
+    const before = await api.activeRef()
+    const other = await api.cellCenter(8, 4)
+    await page.mouse.click(other.x, other.y)
+    await expect(page.locator('.ctx-menu')).toBeHidden()
+    await expect.poll(() => api.activeRef()).toBe(before)
+
+    // 2. Escape закрывает меню, даже когда фокус не внутри него (клик по
+    //    гриду раньше уводил фокус, и Esc переставал работать)
+    await rightClickCell(page, 2, 0)
+    await expect(menu).toBeVisible()
+    const before2 = await api.activeRef()
+    await page.locator('.grid-area').focus()
+    await page.keyboard.press('Escape')
+    await expect(page.locator('.ctx-menu')).toBeHidden()
+    // Esc закрыл меню, но не снял выделение грида
+    await expect.poll(() => api.activeRef()).toBe(before2)
+  })
+
   test('снятие фильтра возвращает курсор и вид на строку до фильтра (novagrid-034)', async ({
     page,
   }) => {
