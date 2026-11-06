@@ -2484,3 +2484,33 @@ Deploy to GitHub Pages ран 38018213931 success (шаги деплоя кор�
   в Android Studio (Rust dev-сборка, jniLibs, vite 0.0.0.0, автодетект устройства); backup.ps1 — новый архив
   OK после фикса.
 - Коммит: см. ниже (этап 2 цепочки novagrid-057).
+
+## 07.11.2026, 00:53 — iOS-подготовка и выпуск v1.29.0 с Android (novagrid-060, этап 3/3 мобильной линии novagrid-057)
+- Начало работы: 07.11.2026, 00:38 (бэкап NovaGrid-backup-2026-11-07_003814.zip)
+- Окончание работы: 07.11.2026, 00:53
+- Что сделано:
+  - iOS в меру Windows-хоста: `tauri ios init` на Windows невозможен — prebuilt tauri-cli 2.12.4 для Windows
+    вообще не содержит подкоманды `ios` (unrecognized subcommand), gen/apple генерируется только на macOS.
+    Подготовлено всё остальное: overlay `desktop/tauri.ios.conf.json` (identifier app.novagrid.mobile,
+    withGlobalTauri — как у Android; capability mobile.json уже платформонезависима: platforms android+iOS),
+    пошаговая инструкция сборки на Mac в docs/WRAPPER.md (Xcode, rust-таргеты, ios init, иконки из
+    source-1024.png, подпись Team, ipa/TestFlight, dev на симуляторе).
+  - Выпуск v1.29.0 одним поездом: версия бампнута в package.json / desktop/tauri.conf.json / desktop/Cargo.toml
+    (Cargo.lock обновлён сборкой); десктоп release — builds/novagrid-1.29.0-portable-release(.exe/.zip) +
+    setup-release.exe, публикация в центр OTA Aila (манифест 1.29.0, 3 файла sha256), развёрнутая копия
+    C:\NovaGrid обновлена автоматически (md5 3d9fbd01… сверена скриптом); Android release — подписанный
+    keystore’ом APK builds/novagrid-1.29.0-android-release/NovaGrid-1.29.0-android-release.apk (aarch64,
+    8.6 МБ, versionName 1.29.0 / versionCode 1029000, apksigner verify OK, sha256 c977c223…aa10).
+  - Попутный фикс: `npm run android:build` без аргументов молча падал — `shift` при пустых позиционных
+    аргументах возвращает 1 и под `set -euo pipefail` убивал скрипт до первого echo (этап 2 гонял скрипт
+    только с явным аргументом); `shift || true` с комментарием.
+  - Доки: README — статус v1.29.0 и матрица платформ (Android «работает», iOS «код готов, ждёт mac-хост»);
+    ROADMAP — запись закрытия мобильной линии.
+  - Финальный отчёт Артёму отправлен в «Хаб ИИ» (to: summons, wish w_aD6ofgkVGt2gY7rh, id ai_ng057_final);
+    зонтичная карточка novagrid-057 закрыта — все 3 этапа выполнены (058, 059, 060).
+- Как проверено: юнит 468 passed (vitest), tsc/lint чисто; e2e Playwright 134 passed + 1 clipboard-флейк
+  (КТ-3 ПКМ-буфер, features.spec.ts:168) — перезапуск теста в одиночном прогоне зелёный; APK — aapt badging
+  (versionName/versionCode) + apksigner verify; десктоп — живой запуск развёрнутой копии: окно
+  «NovaGrid — v1.29.0 от 07.11.2026», процесс снят после проверки; OTA-манифест прочитан сервером
+  (publish-update.cjs: 3 ассета, sha256 в манифесте).
+- Коммит: см. ниже (этап 3/3, закрытие зонтичной novagrid-057).

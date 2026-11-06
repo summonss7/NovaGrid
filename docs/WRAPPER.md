@@ -283,6 +283,29 @@ dev-сервера, Rust-правки — пересборкой. Headless-ал�
 «⋯ → Сохранить как…» → SAF-диалог SAVE → файл в `/sdcard/Download`;
 вытащить `adb pull` и проверить exceljs (значение правки, формулы, листы).
 
-**iOS**: та же мобильная ветка `lib.rs` и capability `mobile.json` (в них
-платформа уже учтена), но `tauri ios init` и сборка требуют macOS/Xcode —
-на Windows готовится только конфиг/инструкция (novagrid-060).
+**iOS** (novagrid-060): кодовая база готова — мобильная ветка `lib.rs` и
+capability `mobile.json` (`platforms: ["android", "iOS"]`) платформонезависимы,
+overlay `desktop/tauri.ios.conf.json` (тот же `app.novagrid.mobile`,
+`withGlobalTauri`) лежит в репозитории. Windows-хост дальше не продвигается:
+в prebuilt tauri-cli для Windows подкоманды `ios` нет вообще
+(`unrecognized subcommand 'ios'`, проверено на 2.12.4) — codegen Xcode-проекта
+делает только macOS-хост, поэтому `gen/apple` в git отсутствует сознательно.
+Сборка на Mac (пошагово):
+
+1. macOS 13+, Xcode 15+ с CLI-инструментами (`xcode-select --install`),
+   Rust (`rustup target add aarch64-apple-ios aarch64-apple-ios-sim`), Node 20+.
+2. В корне репозитория: `npm ci`.
+3. `npx tauri ios init` — создаст `desktop/gen/apple` (Xcode-проект,
+   identifier подтянется из `tauri.ios.conf.json`).
+4. Иконки: `npx tauri icon desktop/icons/source-1024.png` — разложит знак
+   в `gen/apple/Assets.xcassets` (исходник коммитится, приём тот же, что у
+   Android-иконок).
+5. Подпись: открыть `desktop/gen/apple` в Xcode → таргет NovaGrid →
+   Signing & Capabilities → выбрать свой Team (Apple ID). Для App Store —
+   зарегистрировать Bundle ID `app.novagrid.mobile` на developer.apple.com.
+6. Сборка: `npx tauri ios build` — `.ipa` для устройства (release);
+   `--export-method app-store-connect` + выгрузка Transporter/Xcode —
+   в TestFlight. Dev на симуляторе: `npx tauri ios dev`.
+7. Живой смоук тот же, что на Android (открытие системным пикером → правка →
+   сохранение): файловые операции идут через те же плагины dialog/fs —
+   на iOS это UIDocumentPickerViewController.

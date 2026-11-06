@@ -1,6 +1,6 @@
 [package]
 name = "novagrid"
-version = "1.28.0"
+version = "1.29.0"
 description = "NovaGrid — таблицы без изучения Excel (обёртка: Windows + Android)"
 edition = "2021"
 

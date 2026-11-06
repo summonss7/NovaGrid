@@ -18,7 +18,9 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 TYPE="${1:-release}"
-if [ "$TYPE" = "debug" ] || [ "$TYPE" = "release" ]; then shift; else TYPE=release; fi
+# shift без позиционных аргументов возвращает 1 и под set -e молча ронял
+# скрипт (npm run android:build без аргументов — novagrid-060); || true
+if [ "$TYPE" = "debug" ] || [ "$TYPE" = "release" ]; then shift || true; else TYPE=release; fi
 # таргеты: по умолчанию aarch64 (телефоны) для release; debug — + x86_64 (эмулятор)
 if [ $# -gt 0 ]; then TARGETS=("$@"); else
   if [ "$TYPE" = "debug" ]; then TARGETS=(aarch64 x86_64); else TARGETS=(aarch64); fi
