@@ -1,7 +1,7 @@
 ---
 id: novagrid-063
 title: OTA мобильной NovaGrid — проверка обновлений в android-приложении + APK в канале Aila (пожелание aila-370)
-status: todo
+status: in_progress
 priority: 1
 created: 2026-11-07
 updated: 2026-11-07

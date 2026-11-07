@@ -688,10 +688,12 @@ export default function App() {
 
   // ── OTA-обновления (novagrid-036): тихая проверка раз в сутки ────────
   // только в главном окне — окна книг делят localStorage и молчат, диалог
-  // по тихой проверке не должен открываться в каждом окне разом
+  // по тихой проверке не должен открываться в каждом окне разом.
+  // novagrid-063: мобильная обёртка Android — та же тихая проверка (10 мин),
+  // там одно окно, барьер меток не нужен
   useEffect(() => {
-    if (!isDesktop()) return
-    if (desktopWindowLabel() !== null && desktopWindowLabel() !== 'main') return
+    if (!isDesktop() && !isTauriMobile()) return
+    if (isDesktop() && desktopWindowLabel() !== null && desktopWindowLabel() !== 'main') return
     void useUpdaterStore.getState().init()
   }, [])
 

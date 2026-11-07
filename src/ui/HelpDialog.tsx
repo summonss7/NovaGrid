@@ -5,6 +5,8 @@ import { gridStore } from '../core/store'
 import { FUNCTIONS, fnSignature } from '../formula/functions'
 import { liveExample } from '../formula/example'
 import { useT } from '../i18n'
+import { isTauriMobile } from '../io/mobile'
+import { useUpdaterStore } from '../io/updater'
 
 /*
  * Справочник «?» (Этап 4.5, Ф6): карточки формул — имя, сигнатура,
@@ -224,6 +226,24 @@ export function HelpDialog(props: { onClose: () => void }) {
               ))}
             </div>
           </div>
+        )}
+
+        {/* мобильная обёртка Android (novagrid-063): пункта меню «Справка →
+            Проверить обновления…» нет — кнопка здесь, открывает тот же
+            диалог OTA (manual-проверка показывает любой исход) */}
+        {isTauriMobile() && (
+          <footer className="help-footer">
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={() => {
+                props.onClose()
+                void useUpdaterStore.getState().check(true)
+              }}
+            >
+              ⬆ {t.helpCheckUpdate}
+            </button>
+          </footer>
         )}
       </div>
     </div>

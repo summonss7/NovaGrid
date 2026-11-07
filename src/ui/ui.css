@@ -2028,6 +2028,14 @@
   overflow: hidden;
 }
 
+/* novagrid-063: футер мобильного OTA-входа в справочнике «?» */
+.help-footer {
+  display: flex;
+  justify-content: center;
+  padding: 10px 18px 14px;
+  border-top: 1px solid var(--nv-grid-line);
+}
+
 .help-header {
   display: flex;
   align-items: center;

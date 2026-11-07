@@ -24,14 +24,30 @@ pub fn run() {
     mobile_run();
 }
 
-/// Тонкий WebView + плагины сохранения: меню/окна/OTA десктопа не планируются —
+/// Тонкий WebView + плагины сохранения: меню/окна десктопа не планируются —
 /// событие novagrid:menu и invoke-команды desktop_app на мобильных отсутствуют,
 /// фронтенд работает по браузерным путям и через src/io/mobile.ts.
+/// novagrid-063: OTA мобильной — команды mobile_updater (манифест центра
+/// Aila, скачивание APK, системная установка через JNI) — только Android:
+/// iOS обновления ставит App Store, стор сам ведёт цикл.
+/// Модуль мобильного OTA: компилируется для мобильных таргетов и в тестах
+/// хоста (cfg(test) включает — чистая логика выбора APK/версий покрыта
+/// юнит-тестами без Android-тулчейна), обычная хост-сборка его не берёт.
+#[cfg(any(mobile, test))]
+mod mobile_updater;
+
 #[cfg(mobile)]
 fn mobile_run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_fs::init());
+    #[cfg(target_os = "android")]
+    let builder = builder.invoke_handler(tauri::generate_handler![
+        mobile_updater::updater_check,
+        mobile_updater::updater_download,
+        mobile_updater::updater_install
+    ]);
+    builder
         .run(tauri::generate_context!())
         .expect("не удалось запустить NovaGrid");
 }

@@ -314,6 +314,13 @@ export const ru = {
   updClose: 'Закрыть',
   updSessionNote:
     'Открытые книги закроются; правки сохранятся в сессию — книга вернётся кнопкой «Продолжить» на старте.',
+  // мобильная установка APK (novagrid-063)
+  updInstallerOpened: 'Открыт системный установщик — подтвердите установку, NovaGrid обновится сама.',
+  updPermissionTitle: 'Разрешите установку',
+  updPermissionBody:
+    'Открыты настройки Android — разрешите NovaGrid установку неизвестных приложений и нажмите «Обновить» снова.',
+  updDone: 'Готово',
+  helpCheckUpdate: 'Проверить обновления',
   mobileBarLabel: 'Действия',
   mobileOpen: 'Открыть',
   mobileSearch: 'Поиск',

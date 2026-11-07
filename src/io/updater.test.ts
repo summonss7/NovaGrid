@@ -8,18 +8,29 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+// novagrid-063: платформа переключается переменной — моки обоих мостов
+// живут одновременно, тесты мобильного OTA идут с mobileMode = true
+let mobileMode = false
 vi.mock('./desktop', () => ({
-  isDesktop: () => true,
+  isDesktop: () => !mobileMode,
   onDesktopUpdaterProgress: () => () => undefined,
   desktopUpdateCheck: vi.fn(),
   desktopUpdateDownload: vi.fn(),
   desktopUpdateApply: vi.fn(),
+}))
+vi.mock('./mobile', () => ({
+  isTauriMobile: () => mobileMode,
+  mobileUpdateCheck: vi.fn(),
+  mobileUpdateDownload: vi.fn(),
+  mobileUpdateInstall: vi.fn(),
+  onMobileUpdaterProgress: () => () => undefined,
 }))
 vi.mock('../storage/autosave', () => ({
   flushSession: vi.fn(),
 }))
 
 import { desktopUpdateApply, desktopUpdateCheck, desktopUpdateDownload } from './desktop'
+import { mobileUpdateCheck, mobileUpdateDownload, mobileUpdateInstall } from './mobile'
 import { flushSession } from '../storage/autosave'
 import { shouldSilentCheck, useUpdaterStore } from './updater'
 
@@ -47,6 +58,7 @@ const checkResult = (over: Partial<Awaited<ReturnType<typeof desktopUpdateCheck>
 
 beforeEach(() => {
   ls.clear()
+  mobileMode = false
   vi.clearAllMocks()
   vi.mocked(desktopUpdateCheck).mockResolvedValue(checkResult({}))
   vi.mocked(desktopUpdateDownload).mockResolvedValue('C:\\Temp\\novagrid-update-1.exe')
@@ -79,6 +91,12 @@ describe('shouldSilentCheck', () => {
   it('прошло больше суток — проверяем', () => {
     const now = Date.now()
     expect(shouldSilentCheck(now - DAY_MS - 1000, now)).toBe(true)
+  })
+
+  it('мобильный период 10 минут: 5 минут назад — молчим, 15 — проверяем (novagrid-063)', () => {
+    const now = Date.now()
+    expect(shouldSilentCheck(now - 5 * 60 * 1000, now, 10 * 60 * 1000)).toBe(false)
+    expect(shouldSilentCheck(now - 15 * 60 * 1000, now, 10 * 60 * 1000)).toBe(true)
   })
 })
 
@@ -151,5 +169,65 @@ describe('useUpdaterStore.install', () => {
     expect(useUpdaterStore.getState().status).toBe('error')
     expect(useUpdaterStore.getState().error).toContain('sha256')
     expect(desktopUpdateApply).not.toHaveBeenCalled()
+  })
+})
+
+describe('useUpdaterStore (мобильная Android, novagrid-063)', () => {
+  const setMobileAvailable = () =>
+    useUpdaterStore.setState({
+      status: 'available',
+      asset: { name: 'NovaGrid-1.30.0-android-release.apk', url: 'https://x/n.apk', size: 8192, sha256: 'apk' },
+    })
+
+  beforeEach(() => {
+    mobileMode = true
+    vi.mocked(mobileUpdateCheck).mockResolvedValue(checkResult({ current: '1.29.0' }))
+    vi.mocked(mobileUpdateDownload).mockResolvedValue('/data/user/0/app.novagrid.mobile/cache/updates/n.apk')
+    vi.mocked(mobileUpdateInstall).mockResolvedValue('started')
+  })
+
+  it('тихая проверка с APK-обновлением открывает баннер через мобильный мост', async () => {
+    vi.mocked(mobileUpdateCheck).mockResolvedValue(
+      checkResult({
+        status: 'available',
+        current: '1.29.0',
+        latest: '1.30.0',
+        asset: { name: 'NovaGrid-1.30.0-android-release.apk', url: 'https://x/n.apk', size: 8192, sha256: 'apk' },
+      }),
+    )
+    await useUpdaterStore.getState().check(false)
+    const s = useUpdaterStore.getState()
+    expect(s.status).toBe('available')
+    expect(s.dialogOpen).toBe(true)
+    expect(mobileUpdateCheck).toHaveBeenCalled()
+    expect(desktopUpdateCheck).not.toHaveBeenCalled()
+  })
+
+  it('установка: скачивает APK и открывает системный установщик (installing)', async () => {
+    setMobileAvailable()
+    await useUpdaterStore.getState().install()
+    expect(mobileUpdateDownload).toHaveBeenCalledWith('https://x/n.apk', 'apk', 8192)
+    expect(mobileUpdateInstall).toHaveBeenCalledWith(
+      '/data/user/0/app.novagrid.mobile/cache/updates/n.apk',
+    )
+    // мобильная установка не делает rename-swap и не фиксирует сессию на выход
+    expect(desktopUpdateApply).not.toHaveBeenCalled()
+    expect(flushSession).not.toHaveBeenCalled()
+    expect(useUpdaterStore.getState().status).toBe('installing')
+  })
+
+  it('needs-permission — отдельный статус после открытия настроек источника', async () => {
+    setMobileAvailable()
+    vi.mocked(mobileUpdateInstall).mockResolvedValue('needs-permission')
+    await useUpdaterStore.getState().install()
+    expect(useUpdaterStore.getState().status).toBe('needs-permission')
+  })
+
+  it('ошибка скачивания APK — статус error без вызова установки', async () => {
+    setMobileAvailable()
+    vi.mocked(mobileUpdateDownload).mockRejectedValue(new Error('network: boom'))
+    await useUpdaterStore.getState().install()
+    expect(useUpdaterStore.getState().status).toBe('error')
+    expect(mobileUpdateInstall).not.toHaveBeenCalled()
   })
 })

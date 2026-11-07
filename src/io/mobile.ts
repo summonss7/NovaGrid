@@ -48,3 +48,75 @@ export function mobilePickSavePath(
 export async function mobileWriteFile(path: string, buffer: ArrayBuffer): Promise<void> {
   await window.__TAURI__!.fs!.writeFile(path, Array.from(new Uint8Array(buffer)))
 }
+
+/*
+ * OTA мобильной обёртки (novagrid-063): тот же центр обновлений Aila, что у
+ * десктопа, но ассет — APK (сборка universal aarch64). Команды — в Rust-ветке
+ * lib.rs (mobile_updater): проверка манифеста, скачивание в cacheDir со
+ * сверкой sha256 (событие прогресса — то же «novagrid:updater-progress»)
+ * и системная установка (JNI: FileProvider + ACTION_VIEW). iOS эти команды
+ * не регистрирует — стор обновляет сам.
+ */
+
+/** Ассет манифеста и исход проверки — те же формы, что у десктопного моста. */
+export interface MobileUpdateAsset {
+  name: string
+  url: string
+  size?: number
+  sha256?: string
+}
+
+export interface MobileUpdateCheck {
+  status: 'latest' | 'available' | 'network-error' | 'bad-manifest'
+  current: string
+  latest: string | null
+  notes: string | null
+  publishedAt: string | null
+  asset: MobileUpdateAsset | null
+  error: string | null
+}
+
+function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
+  return window.__TAURI__!.core.invoke<T>(cmd, args)
+}
+
+/** Проверить манифест канала /updates/novagrid (никогда не бросает). */
+export function mobileUpdateCheck(): Promise<MobileUpdateCheck> {
+  return invoke<MobileUpdateCheck>('updater_check')
+}
+
+/** Скачать APK в cacheDir (sha256 сверен в обёртке): путь файла. */
+export function mobileUpdateDownload(url: string, sha256: string, size: number): Promise<string> {
+  return invoke<string>('updater_download', { url, sha256, size })
+}
+
+/**
+ * Системная установка: 'started' — открыт установщик Android, подтвердите
+ * установку; 'needs-permission' — открыты настройки источника, разрешите
+ * и нажмите «Обновить» снова.
+ */
+export function mobileUpdateInstall(path: string): Promise<'started' | 'needs-permission'> {
+  return invoke<'started' | 'needs-permission'>('updater_install', { path })
+}
+
+/** Прогресс скачивания — то же событие, что слушает десктопный диалог. */
+export function onMobileUpdaterProgress(
+  handler: (p: { downloaded: number; total: number }) => void,
+): () => void {
+  let unlisten: (() => void) | null = null
+  let disposed = false
+  void window
+    .__TAURI__!.event.listen('novagrid:updater-progress', (e) => {
+      const p = e.payload as { downloaded: number; total: number } | null
+      if (p && typeof p.downloaded === 'number') handler(p)
+    })
+    .then((fn) => {
+      if (disposed) fn()
+      else unlisten = fn
+    })
+    .catch(() => undefined)
+  return () => {
+    disposed = true
+    unlisten?.()
+  }
+}

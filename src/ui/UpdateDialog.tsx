@@ -4,11 +4,16 @@ import { useT } from '../i18n'
 import { useUpdaterStore } from '../io/updater'
 
 /*
- * Диалог OTA-обновления десктопа (novagrid-036): исход проверки канала Aila
+ * Диалог OTA-обновления (novagrid-036): исход проверки канала Aila
  * («✓ последняя версия» / «⬆ доступна X» + что нового), скачивание с
  * прогрессом и перезапуск после rename-swap. Открывается тихой проверкой
  * при старте (только если есть обновление) или пунктом «Справка →
- * Проверить обновления…». В браузере/PWA не живёт — обновляет Service Worker.
+ * Проверить обновления…» (мобильная — кнопкой в справочнике «?», novagrid-063).
+ * В браузере/PWA не живёт — обновляет Service Worker.
+ *
+ * novagrid-063, мобильная ветка: после скачивания APK — системный установщик
+ * Android (installing — подсказка подтвердить установку; needs-permission —
+ * открытые настройки источника, повтор после разрешения).
  */
 
 const mb = (n: number): string => `${(n / 1048576).toFixed(1)} МБ`
@@ -53,9 +58,11 @@ export function UpdateDialog() {
         }}
       >
         <h2 className="dialog-title">
-          {status === 'available' || status === 'downloading' || status === 'restarting'
+          {status === 'available' || status === 'downloading' || status === 'restarting' || status === 'installing'
             ? t.updAvailableTitle(latest ?? '')
-            : t.updTitle}
+            : status === 'needs-permission'
+              ? t.updPermissionTitle
+              : t.updTitle}
         </h2>
 
         {status === 'checking' && <p className="dialog-note">{t.updChecking}</p>}
@@ -98,6 +105,10 @@ export function UpdateDialog() {
 
         {status === 'restarting' && <p className="dialog-note">{t.updRestarting}</p>}
 
+        {status === 'installing' && <p className="dialog-note">{t.updInstallerOpened}</p>}
+
+        {status === 'needs-permission' && <p className="dialog-note">{t.updPermissionBody}</p>}
+
         {status === 'error' && (
           <>
             <p className="dialog-error">{t.updErrorTitle}</p>
@@ -131,10 +142,22 @@ export function UpdateDialog() {
               </button>
             </>
           )}
-          {(status === 'checking' || status === 'latest') && (
+          {(status === 'checking' || status === 'latest' || status === 'installing') && (
             <button type="button" className="btn btn-primary" onClick={close}>
-              {t.updClose}
+              {status === 'installing' ? t.updDone : t.updClose}
             </button>
+          )}
+          {status === 'needs-permission' && (
+            <>
+              <button type="button" className="btn btn-ghost" onClick={close}>
+                {t.updClose}
+              </button>
+              {/* подсказка просит «нажмите Обновить снова» — сразу ведём
+                  повторной проверкой: канал → «Обновить» → установщик */}
+              <button type="button" className="btn btn-primary" onClick={retry}>
+                {t.updRetry}
+              </button>
+            </>
           )}
           {/* downloading/restarting: кнопок нет — идёт необратимый шаг */}
         </div>

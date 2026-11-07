@@ -314,6 +314,13 @@ const en: RuDict = {
   updClose: 'Close',
   updSessionNote:
     'Open books will close; edits are kept in the session — the book returns via “Continue” on the start screen.',
+  // mobile APK install (novagrid-063)
+  updInstallerOpened: 'System installer opened — confirm the install and NovaGrid will update itself.',
+  updPermissionTitle: 'Allow installs',
+  updPermissionBody:
+    'Android settings opened — allow NovaGrid to install unknown apps, then press “Update” again.',
+  updDone: 'Done',
+  helpCheckUpdate: 'Check for updates',
   mobileBarLabel: 'Actions',
   mobileOpen: 'Open',
   mobileSearch: 'Search',
