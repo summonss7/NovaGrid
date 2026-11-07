@@ -1,4 +1,4 @@
-import { Copy, PenLine, Plus, Trash2 } from 'lucide-react'
+import { Copy, Ellipsis, PenLine, Plus, Rows3, Trash2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useStore } from 'zustand'
 import { visibleRowsOf } from '../core/filter'
@@ -23,8 +23,11 @@ export function SheetsBar() {
   const [editing, setEditing] = useState<number | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   // «Вид» → вкладки рядами (novagrid-055): книги с десятками листов — все
-  // вкладки в зоне видимости по ширине окна, без дальнего скролла
-  const multi = useSettings((s) => s.tabsLayout === 'multi')
+  // вкладки в зоне видимости по ширине окна, без дальнего скролла;
+  // novagrid-062: тот же переключатель — прямо на панели вкладок
+  const tabsLayout = useSettings((s) => s.tabsLayout)
+  const setTabsLayout = useSettings((s) => s.setTabsLayout)
+  const multi = tabsLayout === 'multi'
 
   useEffect(() => {
     if (editing !== null) inputRef.current?.select()
@@ -95,6 +98,30 @@ export function SheetsBar() {
         >
           <Plus size={16} strokeWidth={1.5} aria-hidden />
         </button>
+        {/* novagrid-062: раскладка вкладок — переключатель под рукой, а не
+            только в меню «Вид»: один ряд ↔ рядами по ширине окна */}
+        <span className="sheets-layout" role="group" aria-label={t.viewTabsLayout}>
+          <button
+            type="button"
+            className="sheets-layout-btn"
+            aria-label={t.viewTabsSingle}
+            aria-pressed={tabsLayout === 'single'}
+            title={t.viewTabsSingle}
+            onClick={() => setTabsLayout('single')}
+          >
+            <Ellipsis size={16} strokeWidth={1.5} aria-hidden />
+          </button>
+          <button
+            type="button"
+            className="sheets-layout-btn"
+            aria-label={t.viewTabsMulti}
+            aria-pressed={tabsLayout === 'multi'}
+            title={t.viewTabsMulti}
+            onClick={() => setTabsLayout('multi')}
+          >
+            <Rows3 size={16} strokeWidth={1.5} aria-hidden />
+          </button>
+        </span>
       </div>
       {/* Ф3.5: при активных фильтрах — «Показано 132 из 1 500», иначе габариты */}
       <span className="sheets-note" aria-live="polite">

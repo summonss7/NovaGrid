@@ -714,6 +714,40 @@ test.describe('novagrid-055: меню «Вид» — панели и вклад�
 })
 
 /*
+ * novagrid-062: пожелание «файл selprice — очень много листов, уходят
+ * вправо далеко»: раскладка «рядами» (novagrid-055) теперь не прячет
+ * лишние ряды в скролл панели (~4 ряда), а показывает все ряды вкладок
+ * в видимой зоне; переключатель — прямо на панели вкладок, не только
+ * в меню «Вид».
+ */
+test.describe('novagrid-062: вкладки листов — все ряды в видимой зоне', () => {
+  test('тогглер на панели: рядами — 30 листов видимы без скролла панели', async ({ page }) => {
+    await openDemoBook(page)
+
+    // книга «как selprice»: 29 раз «+» → 30+ листов, в один ряд — далеко вправо
+    const add = page.locator('.sheets-tabs .btn-icon[aria-label="Добавить лист"]')
+    for (let i = 0; i < 29; i++) await add.click()
+
+    // тогглер на панели: «Рядами» — панель переключилась без меню «Вид»
+    await page.click('.sheets-layout [aria-label="Рядами"]')
+    await expect(page.locator('.sheets-bar-multi')).toBeVisible()
+
+    // вкладки разложены в несколько рядов…
+    const tops = await page.$$eval('.sheet-tab-wrap', (els) =>
+      new Set(els.map((e) => Math.round(e.getBoundingClientRect().top))).size,
+    )
+    expect(tops).toBeGreaterThan(1)
+    // …и ВСЕ видимы: панель вкладок не скроллится по вертикали
+    const fits = await page.$eval('.sheets-tabs', (el) => el.scrollHeight <= el.clientHeight + 1)
+    expect(fits).toBe(true)
+
+    // обратно «Один ряд» — тоже тогглером на панели
+    await page.click('.sheets-layout [aria-label="Один ряд"]')
+    await expect(page.locator('.sheets-bar:not(.sheets-bar-multi)')).toBeVisible()
+  })
+})
+
+/*
  * novagrid-054: палитры цветов и меню границ у правого края окна раньше
  * уезжали за край (а в мобильной ленте обрезались скроллом) — «выбор
  * цвета не работает, просто добавляют скроллинг справа». Теперь поповеры

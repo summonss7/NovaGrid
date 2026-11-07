@@ -682,8 +682,10 @@
 }
 
 /* novagrid-055: вкладки листов рядами — «Вид → Вкладки листов: Рядами»;
-   книги с десятками листов раскладывают вкладки в несколько рядов по ширине
-   окна (до ~4 видимых, дальше вертикальная прокрутка внутри панели) */
+   novagrid-062: быстрый тогглер на самой панели, а все ряды — в видимой
+   зоне (до половины окна): книги с десятками листов видны целиком,
+   вертикальная прокрутка внутри панели остаётся только у экстремальных
+   книг, чтобы панель не съедала грид */
 .sheets-bar-multi {
   align-items: flex-start;
 }
@@ -691,9 +693,44 @@
 .sheets-bar-multi .sheets-tabs {
   flex-wrap: wrap;
   row-gap: 4px;
-  max-height: 118px; /* ~4 ряда вкладок */
+  max-height: 50vh;
   overflow-y: auto;
   padding-right: 4px;
+}
+
+/* компактнее вкладки — больше листов в каждом ряду */
+.sheets-bar-multi .sheet-tab {
+  padding: 4px 10px;
+}
+
+/* тогглер раскладки вкладок на панели листов (novagrid-062) */
+.sheets-layout {
+  display: flex;
+  gap: 2px;
+  margin-left: 4px;
+}
+
+.sheets-layout-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: 1px solid transparent;
+  border-radius: var(--nv-radius-btn);
+  background: none;
+  color: var(--nv-ink-soft);
+  cursor: pointer;
+}
+
+.sheets-layout-btn:hover {
+  color: var(--nv-ink);
+}
+
+.sheets-layout-btn[aria-pressed='true'] {
+  color: var(--nv-primary);
+  border-color: var(--nv-grid-line);
+  background: var(--nv-bg);
 }
 
 /* «приклейка» активной вкладки к гриду уместна только в один ряд */
