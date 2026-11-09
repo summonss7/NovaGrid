@@ -2,5 +2,8 @@
     <!-- Base application theme. -->
     <style name="Theme.novagrid" parent="Theme.Material3.DayNight.NoActionBar">
         <!-- Customize your theme here. -->
+        <!-- novagrid-064: фон окна = фон приложения (переменная nv-bg из tokens.css),
+             чтобы полосы за статус-баром/навигацией не отличались от контента -->
+        <item name="android:windowBackground">@color/novagrid_window_bg</item>
     </style>
 </resources>

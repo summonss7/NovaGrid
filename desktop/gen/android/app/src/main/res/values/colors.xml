@@ -7,4 +7,6 @@
     <color name="teal_700">#FF018786</color>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+    <!-- novagrid-064: фон окна = светлый фон приложения (переменная nv-bg, tokens.css) -->
+    <color name="novagrid_window_bg">#FFFFFFFF</color>
 </resources>

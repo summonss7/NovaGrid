@@ -286,6 +286,16 @@ novagrid-058): файловые операции в Android WebView проход
 (`src/io/mobile.ts`), пути/хэндлы на мобильных не персистятся, каждое
 сохранение — SAF-диалог.
 
+**Строки состояния и edge-to-edge** (novagrid-064): MainActivity вызывал
+`enableEdgeToEdge()`, а с targetSdk 35+ Android сам принудительно рисует окно
+на весь экран — контент заходил под статус-бар (часы, настройки) и навигационную
+панель. Откатить edge-to-edge на новых Android нельзя — вместо этого
+`MainActivity` сдвигает контейнер `android.R.id.content` (куда wry кладёт
+WebView) на insets системных панелей (`ViewCompat.setOnApplyWindowInsetsListener`),
+а фон окна в `themes.xml` (values / values-night) = фон приложения из
+`tokens.css` (белый / #191C1E) — полосы сверху/снизу выглядят продолжением
+приложения, окно лежит строго между панелями.
+
 **Подпись release** (novagrid-059): keystore `novagrid-release.keystore` создан
 keytool (RSA 2048, 10000 дней, alias `NovaGrid`), лежит в `desktop/gen/android/`
 и закоммичен — репозиторий приватный, а утеря keystore осиротила бы все
