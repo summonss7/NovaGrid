@@ -55,6 +55,7 @@ const en: RuDict = {
   searchCaseSensitive: 'Match case',
   searchWholeCell: 'Match entire cell',
   searchClose: 'Close search',
+  searchSmartHint: 'Rows with all words · "phrase" — exact · -word — exclude',
   searchNoMatches: 'No matches',
   searchResultsLabel: 'Search results',
   searchMoreResults: (n: number) => `… ${n.toLocaleString('en-US')} more`,

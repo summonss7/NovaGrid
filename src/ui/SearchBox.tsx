@@ -2,6 +2,7 @@ import { ChevronDown, ChevronUp, Replace, Search, Settings, X } from 'lucide-rea
 import { useEffect, useRef, useState } from 'react'
 import { useStore } from 'zustand'
 import { gridStore } from '../core/store'
+import { parseQueryTerms } from '../core/search'
 import { cellRefName } from '../grid/geometry'
 import { getCell } from '../core/sheet'
 import { useT } from '../i18n'
@@ -57,6 +58,9 @@ export function SearchBox() {
       ? search.hits.slice(0, RESULTS_CAP)
       : []
   const moreResults = Math.max(0, search.hits.length - results.length)
+
+  // умный поиск (novagrid-065): подсказка про слова/фразы/исключения
+  const smart = !search.wholeCell && parseQueryTerms(search.query, search.caseSensitive).length > 1
 
   return (
     <div className={`search-wrap${search.open ? ' is-open' : ''}`}>
@@ -165,6 +169,8 @@ export function SearchBox() {
               <X size={15} strokeWidth={1.5} aria-hidden />
             </button>
           </div>
+
+          {smart && <div className="search-smart-hint">{t.searchSmartHint}</div>}
 
           {optionsOpen && (
             <div className="search-options">

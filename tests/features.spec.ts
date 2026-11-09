@@ -302,6 +302,29 @@ test.describe('поиск (Ф2): инкрементальный, лист/кни
     expect((await api.searchInfo()).count).toBe(0)
   })
 
+  test('умный поиск: «Иванов 10000» — строки, где есть оба слова', async ({ page }) => {
+    const api = nv(page)
+
+    await page.keyboard.press('Control+f')
+    const input = page.getByLabel('Поиск по таблице')
+
+    // подсказка умного режима появляется от второго слова
+    await page.keyboard.type('Иванов')
+    await expect(page.locator('.search-smart-hint')).toBeHidden()
+    await page.keyboard.type(' 10000')
+    await expect(page.locator('.search-smart-hint')).toBeVisible()
+
+    // 132 строки «Иванов + 10 000»; в каждой совпали колонки A и C → 264 ячейки
+    await expect(page.locator('.search-counter')).toHaveText('1 / 264')
+    expect((await api.searchInfo()).count).toBe(264)
+
+    // исключение «-Продажи» убирает строки отдела продаж — совпадений меньше
+    await input.fill('Иванов 10000 -Продажи')
+    const info = await api.searchInfo()
+    expect(info.count).toBeGreaterThan(0)
+    expect(info.count).toBeLessThan(264)
+  })
+
   test('поиск по всем листам находит совпадения на втором листе и переключает вкладку', async ({
     page,
   }) => {

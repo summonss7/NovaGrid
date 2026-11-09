@@ -201,6 +201,15 @@
   cursor: pointer;
 }
 
+/* подсказка умного поиска (несколько слов в запросе) */
+.search-smart-hint {
+  margin-top: 8px;
+  font-family: var(--nv-font-text);
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--nv-ink-soft);
+}
+
 .search-results {
   max-height: 320px;
   overflow: auto;

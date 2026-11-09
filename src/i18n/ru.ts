@@ -40,6 +40,7 @@ export const ru = {
   searchCaseSensitive: 'Учитывать регистр',
   searchWholeCell: 'Ячейка целиком',
   searchClose: 'Закрыть поиск',
+  searchSmartHint: 'Строка, где есть все слова · «"фраза"» — точная · «-слово» — исключить',
   searchNoMatches: 'Совпадений нет',
   searchResultsLabel: 'Результаты поиска',
   searchMoreResults: (n: number) => `… ещё ${n.toLocaleString('ru-RU')}`,
