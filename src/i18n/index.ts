@@ -45,6 +45,8 @@ interface SettingsState {
   panels: Record<PanelKey, boolean>
   /** раскладка вкладок листов (novagrid-055): ряд или несколько рядов */
   tabsLayout: TabsLayout
+  /** автоширина колонок по тексту (novagrid-067): режим вида, не данные */
+  autoFitCols: boolean
   /** вычисленная тема (runtime, не персистится): на неё подписан канвас-грид */
   resolvedTheme: ResolvedTheme
   setLang: (lang: Lang) => void
@@ -53,6 +55,7 @@ interface SettingsState {
   setTheme: (theme: ThemePref) => void
   setPanel: (key: PanelKey, visible: boolean) => void
   setTabsLayout: (layout: TabsLayout) => void
+  setAutoFitCols: (on: boolean) => void
 }
 
 export const useSettings = create<SettingsState>()(
@@ -64,6 +67,7 @@ export const useSettings = create<SettingsState>()(
       theme: 'system',
       panels: { format: true, formula: true, filters: true, sheets: true, status: true },
       tabsLayout: 'single',
+      autoFitCols: false,
       resolvedTheme: 'light',
       setLang: (lang) => set({ lang }),
       setTableSize: (tableSize) => set({ tableSize }),
@@ -71,6 +75,7 @@ export const useSettings = create<SettingsState>()(
       setTheme: (theme) => set({ theme }),
       setPanel: (key, visible) => set((s) => ({ panels: { ...s.panels, [key]: visible } })),
       setTabsLayout: (tabsLayout) => set({ tabsLayout }),
+      setAutoFitCols: (autoFitCols) => set({ autoFitCols }),
     }),
     {
       name: 'novagrid-settings',
@@ -82,6 +87,7 @@ export const useSettings = create<SettingsState>()(
         theme: s.theme,
         panels: s.panels,
         tabsLayout: s.tabsLayout,
+        autoFitCols: s.autoFitCols,
       }),
     },
   ),

@@ -8,6 +8,8 @@ import { useMenuKeys } from './menuKeys'
  * форматирования (шрифт), строку формул, панель фильтров, список листов,
  * строку состояния — и раскладка вкладок листов: один ряд или несколькими
  * рядами по ширине окна (книги с десятками листов — без дальнего скролла).
+ * novagrid-067 добавляет режим автоширины: колонки по самому широкому
+ * тексту в них (ручные ширины и перетаскивание границ не действуют).
  * Меню не закрывается на переключении: несколько галочек ставятся подряд,
  * закрытие — кликом по фону или Esc. Персист — novagrid-settings.
  */
@@ -15,8 +17,10 @@ export function ViewMenu(props: { onClose: () => void }) {
   const t = useT()
   const panels = useSettings((s) => s.panels)
   const tabsLayout = useSettings((s) => s.tabsLayout)
+  const autoFit = useSettings((s) => s.autoFitCols)
   const setPanel = useSettings((s) => s.setPanel)
   const setTabsLayout = useSettings((s) => s.setTabsLayout)
+  const setAutoFit = useSettings((s) => s.setAutoFitCols)
   const ref = useRef<HTMLDivElement>(null)
   useMenuKeys(ref, props.onClose, { itemSelector: '[role="menuitemcheckbox"]' })
 
@@ -51,6 +55,18 @@ export function ViewMenu(props: { onClose: () => void }) {
             {it.label}
           </button>
         ))}
+        <button
+          type="button"
+          role="menuitemcheckbox"
+          aria-checked={autoFit}
+          className="tab-menu-item"
+          onClick={() => setAutoFit(!autoFit)}
+        >
+          <span className="view-check" aria-hidden>
+            {autoFit && <Check size={14} strokeWidth={1.7} />}
+          </span>
+          {t.viewAutoFit}
+        </button>
         <div className="view-menu-sep" aria-hidden />
         <div className="view-menu-row">
           <span className="view-menu-name">{t.viewTabsLayout}</span>

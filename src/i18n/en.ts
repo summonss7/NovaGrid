@@ -351,6 +351,8 @@ const en: RuDict = {
   viewTabsLayout: 'Sheet tabs',
   viewTabsSingle: 'Single row',
   viewTabsMulti: 'Wrap rows',
+  /** автоширина колонок (novagrid-067): колонка — по самому широкому тексту */
+  viewAutoFit: 'Fit columns to text',
   fileGroupLabel: 'File',
   sheetsTabsLabel: 'Book sheets',
   cellRefLabel: 'Active cell address',

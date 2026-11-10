@@ -352,6 +352,8 @@ export const ru = {
   viewTabsLayout: 'Вкладки листов',
   viewTabsSingle: 'Один ряд',
   viewTabsMulti: 'Рядами',
+  /** автоширина колонок (novagrid-067): колонка — по самому широкому тексту */
+  viewAutoFit: 'Колонки по тексту',
   fileGroupLabel: 'Файл',
   sheetsTabsLabel: 'Листы книги',
   cellRefLabel: 'Адрес активной ячейки',

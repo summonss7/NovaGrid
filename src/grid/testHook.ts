@@ -16,7 +16,6 @@ import { useSettings, type ResolvedTheme, type ThemePref } from '../i18n'
 import {
   cellRefName,
   cellRect,
-  colLayoutOf,
   METRICS,
   zoomOf,
   type ColLayout,
@@ -241,8 +240,8 @@ export function installTestHook(refs: TestHookRefs): void {
     zoom: () => zoomOf(),
     cellMetrics: () => ({ ...METRICS }),
     colWidth: (col) => {
-      const st = gridStore.getState()
-      return colLayoutOf(st.sheet.cols, st.colWidths).width(col)
+      // действующие ширины: автоширина по тексту или ручные (novagrid-067)
+      return refs.cols().width(col)
     },
     theme: () => {
       const { theme, resolvedTheme } = useSettings.getState()

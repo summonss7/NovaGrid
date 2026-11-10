@@ -51,6 +51,7 @@ import {
   type RowLayout,
 } from './geometry'
 import { zoomStore } from './zoom'
+import { autoColWidths } from './autofit'
 import {
   cellFontOf,
   cellPxOf,
@@ -150,6 +151,9 @@ export function GridCanvas() {
   const rows = useStore(gridStore, (s) => s.sheet.rows)
   const cols = useStore(gridStore, (s) => s.sheet.cols)
   const colWidths = useStore(gridStore, (s) => s.colWidths)
+  // автоширина колонок по тексту (novagrid-067): режим меняет действующие
+  // ширины везде — раскладку, автовысоты переноса, спейсер и редактор
+  const autoFitCols = useSettings((s) => s.autoFitCols)
 
   // ── раскладка строк (фильтры + закрепление, novagrid-044) ─────────────
   // sheet и filters иммутабельны по ссылке — кэш пересчитывается только
@@ -251,7 +255,7 @@ export function GridCanvas() {
   const axisOfState = (st: ReturnType<typeof gridStore.getState>): RowAxis =>
     rowsAxisFor(
       layoutFor(st.sheet, st.filters, st.freeze.rows),
-      wrapHeightsFor(st.sheet, st.colWidths),
+      wrapHeightsFor(st.sheet, effWidthsOf(st)),
     )
 
   // ── раскладка колонок (переменные ширины, novagrid-020) ───────────────
@@ -274,6 +278,50 @@ export function GridCanvas() {
     return colLayout
   }
 
+  // ── автоширина колонок по тексту (novagrid-067) ──────────────────────
+  // Режим вида: ширины — из самого широкого отображаемого текста колонки,
+  // в базовых единицах (зум 100 %) — зум масштабирует их в colLayoutOf,
+  // пересчёт при зуме не нужен. Кэш живёт по листу и локали; подгрузка
+  // переменных шрифтов меняет метрики — сбрасывает fonts.ready ниже.
+  const autoFitRef = useRef<{
+    sheet: SheetModel
+    locale: string
+    widths: ReadonlyMap<number, number> | null
+  } | null>(null)
+  const autoWidthsFor = (sh: SheetModel): ReadonlyMap<number, number> | null => {
+    const theme = themeRef.current
+    const canvas = canvasRef.current
+    if (!theme || !canvas) return null
+    const cur = autoFitRef.current
+    if (cur && cur.sheet === sh && cur.locale === t.localeTag) return cur.widths
+    // шрифты базового масштаба (зум 100 %): measured px = базовые единицы
+    const base = { ...theme, cellPx: 13.5 }
+    const ctx = canvas.getContext('2d')
+    const widths = ctx
+      ? autoColWidths(sh, {
+          measure: (text, font) => {
+            ctx.font = font
+            return ctx.measureText(text).width
+          },
+          fontOf: (style) => cellFontOf(style, base),
+          pxOf: (style) => cellPxOf(style, base),
+          locale: t.localeTag,
+        })
+      : new Map<number, number>()
+    autoFitRef.current = {
+      sheet: sh,
+      locale: t.localeTag,
+      widths: widths.size > 0 ? widths : null,
+    }
+    return autoFitRef.current.widths
+  }
+  /** Действующие ширины колонок: автоширина по тексту или ручные переопределения. */
+  const effWidthsOf = (st: {
+    sheet: SheetModel
+    colWidths: ReadonlyMap<number, number> | null
+  }): ReadonlyMap<number, number> | null =>
+    useSettings.getState().autoFitCols ? autoWidthsFor(st.sheet) : st.colWidths
+
   // ── рендер ────────────────────────────────────────────────────────────
   const draw = () => {
     const canvas = canvasRef.current
@@ -295,7 +343,7 @@ export function GridCanvas() {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     const state = gridStore.getState()
     const lay = layoutFor(state.sheet, state.filters, state.freeze.rows)
-    const colLay = colsLayoutFor(state.sheet.cols, state.colWidths)
+    const colLay = colsLayoutFor(state.sheet.cols, effWidthsOf(state))
     const rowAx = axisOfState(state)
     const hit = state.search.hits[state.search.index]
     // подсветка ссылок редактируемой формулы (novagrid-041): прямоугольники
@@ -352,7 +400,7 @@ export function GridCanvas() {
       layoutFor(st.sheet, st.filters, st.freeze.rows).count,
       st.sheet.cols,
       undefined,
-      colsLayoutFor(st.sheet.cols, st.colWidths),
+      colsLayoutFor(st.sheet.cols, effWidthsOf(st)),
       axisOfState(st),
     )
     spacer.style.width = `${size.w}px`
@@ -419,6 +467,16 @@ export function GridCanvas() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resolvedTheme])
 
+  // смена режима автоширины (novagrid-067): колонки встают по тексту (или
+  // обратно по ручным ширинам) — новый кадр, спейсер и редактор на месте
+  useEffect(() => {
+    resizeSpacer()
+    positionEditor()
+    ensureActiveVisible()
+    scheduleDraw()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoFitCols])
+
   // смена фильтров (novagrid-034): раскладка строк и спейсер пересобраны
   // рендером (эффект бежит после DOM-обновления) — вернуть активную строку
   // в поле зрения, чтобы фильтрация не «теряла» место, где стоит курсор
@@ -436,7 +494,7 @@ export function GridCanvas() {
     if (!el) return
     const st = gridStore.getState()
     const lay = layoutFor(st.sheet, st.filters, st.freeze.rows)
-    const colLay = colsLayoutFor(st.sheet.cols, st.colWidths)
+    const colLay = colsLayoutFor(st.sheet.cols, effWidthsOf(st))
     const rowAx = axisOfState(st)
     const fz = {
       rows: Math.min(st.freeze.rows, st.sheet.rows),
@@ -466,7 +524,7 @@ export function GridCanvas() {
     if (!el) return base
     const st = gridStore.getState()
     const lay = layoutFor(st.sheet, st.filters, st.freeze.rows)
-    const colLay = colsLayoutFor(st.sheet.cols, st.colWidths)
+    const colLay = colsLayoutFor(st.sheet.cols, effWidthsOf(st))
     const rowAx = axisOfState(st)
     const fz = {
       rows: Math.min(st.freeze.rows, st.sheet.rows),
@@ -513,7 +571,7 @@ export function GridCanvas() {
       },
       cols: () => {
         const st = gridStore.getState()
-        return colsLayoutFor(st.sheet.cols, st.colWidths)
+        return colsLayoutFor(st.sheet.cols, effWidthsOf(st))
       },
       rows: () => axisOfState(gridStore.getState()),
     })
@@ -555,6 +613,7 @@ export function GridCanvas() {
     // после загрузки шрифтов изменились ширины текста — высоты пересчитать
     void document.fonts.ready.then(() => {
       wrapRef.current = null
+      autoFitRef.current = null
       draw()
     })
 
@@ -611,7 +670,7 @@ export function GridCanvas() {
       el.scrollLeft,
       el.scrollTop,
       undefined,
-      colsLayoutFor(st.sheet.cols, st.colWidths),
+      colsLayoutFor(st.sheet.cols, effWidthsOf(st)),
       {
         rows: Math.min(st.freeze.rows, st.sheet.rows),
         cols: Math.min(st.freeze.cols, st.sheet.cols),
@@ -637,7 +696,7 @@ export function GridCanvas() {
     const el = scrollRef.current
     if (!el) return null
     const st = gridStore.getState()
-    const colLay = colsLayoutFor(st.sheet.cols, st.colWidths)
+    const colLay = colsLayoutFor(st.sheet.cols, effWidthsOf(st))
     const fc = Math.min(st.freeze.cols, st.sheet.cols)
     const fx = fc > 0 ? colLay.x0(fc) : 0
     // закреплённые колонки не прокручиваются — scrollX только правее закрепа
@@ -694,7 +753,7 @@ export function GridCanvas() {
       layoutFor(st.sheet, st.filters, st.freeze.rows).count,
       st.sheet.cols,
       undefined,
-      colsLayoutFor(st.sheet.cols, st.colWidths),
+      colsLayoutFor(st.sheet.cols, effWidthsOf(st)),
       axisOfState(st),
     )
     let rows = st.sheet.rows
@@ -783,8 +842,9 @@ export function GridCanvas() {
     if (hit.kind === 'colHeader') {
       mainRef.current?.focus({ preventScroll: true })
       // перетаскивание границы колонок — изменение ширины (novagrid-020);
-      // зона захвата у края важнее кнопки ▾, как в Excel
-      const border = isTouch ? null : colBorderAt(x)
+      // зона захвата у края важнее кнопки ▾, как в Excel;
+      // в режиме автоширины границы не тянутся — ширину держит текст
+      const border = isTouch || useSettings.getState().autoFitCols ? null : colBorderAt(x)
       if (border) {
         e.preventDefault()
         mainRef.current?.setPointerCapture(e.pointerId)
@@ -797,7 +857,7 @@ export function GridCanvas() {
       // закреплённая колонка не прокручивается — scrollX только правее закрепа
       const scrollEl = scrollRef.current
       const scrollX = scrollEl?.scrollLeft ?? 0
-      const colLay = colsLayoutFor(st.sheet.cols, st.colWidths)
+      const colLay = colsLayoutFor(st.sheet.cols, effWidthsOf(st))
       const fcHeader = Math.min(st.freeze.cols, st.sheet.cols)
       const scrollOfs = hit.col < fcHeader ? 0 : scrollX
       const headerRight =
@@ -942,7 +1002,10 @@ export function GridCanvas() {
       const el = mainRef.current
       if (el) {
         const { x, y } = localPoint(e.clientX, e.clientY)
-        const want = y >= 0 && y < METRICS.headerH && colBorderAt(x) !== null ? 'col-resize' : ''
+        const want =
+          y >= 0 && y < METRICS.headerH && !useSettings.getState().autoFitCols && colBorderAt(x) !== null
+            ? 'col-resize'
+            : ''
         if (el.style.cursor !== want) el.style.cursor = want
       }
     }
@@ -1098,7 +1161,7 @@ export function GridCanvas() {
               el.scrollLeft,
               el.scrollTop,
               undefined,
-              colsLayoutFor(st.sheet.cols, st.colWidths),
+              colsLayoutFor(st.sheet.cols, effWidthsOf(st)),
               {
                 rows: Math.min(st.freeze.rows, st.sheet.rows),
                 cols: Math.min(st.freeze.cols, st.sheet.cols),
@@ -1289,12 +1352,14 @@ export function GridCanvas() {
     return { left: r.x - 1, top: r.y - 1, width: r.w + 1, height: r.h + 1 }
   })()
 
+  // действующие ширины рендера: автоширина по тексту или ручные (novagrid-067)
+  const effWidths = autoFitCols ? autoWidthsFor(sheet) : colWidths
   const size = totalSize(
     layout.count,
     cols,
     undefined,
-    colsLayoutFor(cols, colWidths),
-    rowsAxisFor(layout, wrapHeightsFor(sheet, colWidths)),
+    colsLayoutFor(cols, effWidths),
+    rowsAxisFor(layout, wrapHeightsFor(sheet, effWidths)),
   )
 
   return (
