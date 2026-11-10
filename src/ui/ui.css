@@ -755,6 +755,7 @@
 
 /* ── Статус-бар ──────────────────────────────────────────────────────── */
 .status-bar {
+  position: relative; /* якорь карточки метрик (novagrid-066) */
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -771,10 +772,24 @@
   font-weight: 600;
 }
 
+/* метрики — кнопка: клик/тап открывает карточку (novagrid-066; на мобильном
+   шеврон тулбара скрыт — это единственный вход в полную карточку) */
 .status-metrics {
   display: flex;
   gap: 16px;
+  padding: 4px 8px;
+  margin: -4px -8px; /* компенсация паддинга тап-зоны — вёрстка прежняя */
+  border: none;
+  border-radius: var(--nv-radius-btn);
+  background: transparent;
+  font: inherit;
+  color: inherit;
   font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.status-metrics:hover {
+  background: rgba(58, 223, 99, 0.14);
 }
 
 .status-metric {
@@ -2526,9 +2541,22 @@
     display: none;
   }
 
+  /* подсказка автосуммы Σ видна и на мобильном (novagrid-066): без неё
+     тап по «Сумма» включает режим выбора молча — «не могу понять, как
+     делать сумму»; версия программы остаётся скрытой */
+  .status-phase.status-sum-pick {
+    display: block;
+    flex: 1 1 100%;
+    font-size: 13px;
+    color: var(--nv-accent-deep, #c95510);
+  }
+
   .status-metrics {
     flex: 1;
+    justify-content: center;
     gap: 12px;
+    margin: 0;
+    padding: 6px 4px;
     font-size: 15px;
     font-weight: 600;
     color: var(--nv-ink);
@@ -2584,8 +2612,16 @@
     color: var(--nv-accent-deep);
   }
 
+  /* Σ выбрала ячейку-приёмник и ждёт касаний по ячейкам (novagrid-066):
+     подсветка — единственный заметный отклик тапа, статус-бар далеко */
+  .mobile-bar-sum.is-active {
+    background: var(--nv-accent);
+    color: var(--nv-bg);
+  }
+
   /* карточка метрик из нижней панели — крупнее и почти во всю ширину */
-  .mobile-bar .sum-card {
+  .mobile-bar .sum-card,
+  .status-bar .sum-card {
     right: 4px;
     left: 4px;
     width: auto;
@@ -2594,16 +2630,19 @@
     padding: 10px;
   }
 
-  .mobile-bar .sum-card-row {
+  .mobile-bar .sum-card-row,
+  .status-bar .sum-card-row {
     padding: 12px 12px;
     font-size: 15px;
   }
 
-  .mobile-bar .sum-card-row-strong .sum-card-value {
+  .mobile-bar .sum-card-row-strong .sum-card-value,
+  .status-bar .sum-card-row-strong .sum-card-value {
     font-size: 21px;
   }
 
-  .mobile-bar .sum-card-hint {
+  .mobile-bar .sum-card-hint,
+  .status-bar .sum-card-hint {
     font-size: 12.5px;
   }
 

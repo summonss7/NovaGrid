@@ -23,7 +23,7 @@ iOS — та же мобильная ветка, сборка требует mac
 | `scripts/desktop-dev.sh` | Dev-режим: vite devserver :5173 + `cargo run` без встраивания (окно грузит dev-сервер, HMR живой) |
 | `scripts/android-dev.sh` | Dev-режим Android: vite на 0.0.0.0:5173 + `tauri android dev <device>` (сборка либы; на Windows финальный запуск — ▶ Run в Android Studio, которую открывает CLI; headless-петля — через android:build debug + adb, см. раздел «Android и iOS») |
 | `scripts/make-desktop-icons.mjs` | Иконки из `public/favicon.svg` (растеризация playwright-chromium, многослойный .ico); перегенерация лишь при смене знака — иконки закоммичены |
-| `scripts/make-android-icons.mjs` | Иконки Android из того же знака (`tauri icon` → mipmap в `gen/android`) |
+| `scripts/make-android-icons.mjs` | Иконки Android из того же знака: сам пишет mipmap в `gen/android` (novagrid-066: адаптивная маска лаунчера — знак в безопасной зоне 72%, фон #000000, legacy как плитка винды; `tauri icon` больше не используется — он растягивал знак на весь слой и маска резала углы) |
 | `src/io/desktop.ts` | Мост фронтенда: всё за `isDesktop()` (признак `window.__TAURI__` без `.dialog`), браузерная сборка ни одного вызова не выполняет; npm-пакеты `@tauri-apps` сознательно не подключаются |
 | `src/io/mobile.ts` | Мост мобильной обёртки (novagrid-058): `isTauriMobile()` по `window.__TAURI__.dialog`, `mobilePickSavePath`/`mobileWriteFile` — SAF-диалог + запись `content://`; в Android WebView веб-пути сохранения не работают (FSA-пикер висит, `a[download]` и `navigator.share` нет); capability `desktop/capabilities/mobile.json` (android+iOS) |
 
@@ -110,7 +110,7 @@ npm run desktop:build           # release: dist/ → exe → builds/novagrid-<ve
 npm run desktop:build debug     # debug: только портабельная папка+zip
 scripts/deploy-portable.sh      # вручную обновить C:\NovaGrid (по умолчанию — свежая release-папка текущей версии)
 
-npm run android:icons           # иконки Android из знака (tauri icon → gen/android)
+npm run android:icons           # иконки Android из знака → gen/android (маска лаунчера учтена)
 npm run android:dev             # dev: vite 0.0.0.0:5173 + tauri android dev (запуск — ▶ Run в Android Studio)
 npm run android:build           # release APK (aarch64) → builds/novagrid-<ver>-android-release/
 npm run android:build debug     # debug APK (aarch64+x86_64 — телефон и эмулятор)

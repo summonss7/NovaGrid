@@ -92,6 +92,13 @@ test.describe('КТ-3: ПКМ-фильтрация сценария ТЗ → 132
     await expect(card).toContainText('Кол-во чисел')
     await expect(card).toContainText('Среднее')
 
+    // 4b. метрики Σ · n · x̄ в статус-баре — тоже кнопка (novagrid-066):
+    // на мобильном это единственный вход в карточку
+    await page.keyboard.press('Escape') // закрыть карточку
+    await page.locator('.status-metrics').click()
+    await expect(card).toBeVisible()
+    await expect(card).toContainText(/1[\s\u00a0\u202f]320[\s\u00a0\u202f]000/)
+
     // 5. «Сбросить всё» возвращает все строки
     await page.keyboard.press('Escape') // закрыть карточку
     await page.getByRole('button', { name: 'Сбросить всё' }).click()

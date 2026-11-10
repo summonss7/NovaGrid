@@ -1,5 +1,6 @@
 import { FolderOpen, HelpCircle, Search, Sigma } from 'lucide-react'
 import { useState } from 'react'
+import { useStore } from 'zustand'
 import { gridStore } from '../core/store'
 import { useT } from '../i18n'
 import type { OpeningRow } from '../storage/recents'
@@ -23,6 +24,9 @@ export function MobileBar(props: {
   const t = useT()
   const [helpOpen, setHelpOpen] = useState(false)
   const [openMenu, setOpenMenu] = useState(false)
+  // Σ в режиме выбора: кнопка подсвечена (novagrid-066) — иначе тап выглядит
+  // бездействием и режим непонятен
+  const sumPick = useStore(gridStore, (s) => s.sumPick)
 
   return (
     <nav className="mobile-bar" aria-label={t.mobileBarLabel}>
@@ -56,9 +60,10 @@ export function MobileBar(props: {
       </button>
       <button
         type="button"
-        className="mobile-bar-btn mobile-bar-sum"
+        className={'mobile-bar-btn mobile-bar-sum' + (sumPick ? ' is-active' : '')}
         aria-label={t.sumAutosum}
         title={t.sumAutosumTitle}
+        aria-pressed={!!sumPick}
         onClick={() => {
           const st = gridStore.getState()
           if (st.sumPick) st.cancelSumPick()

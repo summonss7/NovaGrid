@@ -30,10 +30,12 @@ const en: RuDict = {
   helpLabel: 'Help (?)',
   sumLabel: 'SUM',
   sumTitle: 'Sum of selection',
+  statusMetricsTitle: 'Selection metrics (Σ, n, x̄) — card',
   sumAutosum: 'AutoSum',
   sumAutosumTitle:
     'AutoSum: stand on a cell, press Σ and select cells — =SUM is inserted into that cell',
   sumPickHint: (ref: string) => `Select cells to sum into ${ref} · Esc to cancel`,
+  sumPickHintTouch: (ref: string) => `Tap cells to sum into ${ref} · tap “Sum” again to cancel`,
   formulaLabel: 'fx',
   formulaBarLabel: 'Formula bar',
   formulaPlaceholder: 'Value or formula — start with =',

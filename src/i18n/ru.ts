@@ -13,9 +13,12 @@ export const ru = {
   helpLabel: 'Справка (?)',
   sumLabel: 'СУММА',
   sumTitle: 'Сумма выделенного',
+  statusMetricsTitle: 'Метрики выделения (Σ, n, x̄) — карточка',
   sumAutosum: 'Автосумма',
   sumAutosumTitle: 'Автосумма: встаньте на ячейку, нажмите Σ и выберите ячейки — в ячейку вставится =СУММ',
   sumPickHint: (ref: string) => `Выберите ячейки для суммы — она вставится в ${ref} · Esc — отмена`,
+  sumPickHintTouch: (ref: string) =>
+    `Коснитесь ячеек для суммы — она вставится в ${ref} · ещё раз «Сумма» — отмена`,
   formulaLabel: 'fx',
   formulaBarLabel: 'Строка формул',
   formulaPlaceholder: 'Значение или формула — начните с =',

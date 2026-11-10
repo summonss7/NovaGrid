@@ -124,9 +124,14 @@ test.describe('@mobile Android-эмуляция Pixel 7 (6.4)', () => {
     const b2 = await cellCenter(page, 1, 1)
     await tapAt(b2)
     await page.locator('.mobile-bar-sum').tap()
+    // режим выбора виден: кнопка Σ подсвечена, в статус-баре подсказка
+    // с ячейкой-приёмником и отменой повторным тапом (novagrid-066)
+    await expect(page.locator('.mobile-bar-sum.is-active')).toBeVisible()
     await expect(page.locator('.status-sum-pick')).toContainText('B2')
+    await expect(page.locator('.status-sum-pick')).toContainText('Сумма')
     const c2 = await cellCenter(page, 1, 2)
     await tapAt(c2)
+    await expect(page.locator('.mobile-bar-sum.is-active')).toHaveCount(0)
     await expect
       .poll(() => page.evaluate(() => window.__nv!.cell(1, 1)))
       .toBe('=SUM(C2)')
