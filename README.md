@@ -3,6 +3,12 @@
 **Простая кроссплатформенная программа для работы с таблицами.**
 Откройте xls/xlsx/ods/csv на любом устройстве, найдите, отфильтруйте, сложите — без изучения Excel.
 
+> **English:** NovaGrid is a simple cross-platform spreadsheet app — open
+> xls/xlsx/ods/csv on desktop, web and Android; search, filter and sum without
+> learning Excel. One codebase (Tauri 2 + React + Rust) for every platform.
+> A portfolio project of the human + AI freelance duo —
+> [duet.barter.pp.ua](https://duet.barter.pp.ua).
+
 > Статус проекта: **v1.30.2** — официальная мобильная платформа: Android
 > (подписанный release-APK) и подготовка iOS; веб/десктоп в той же версии
 > (один поезд сборки, копия C:\NovaGrid и центр OTA-обновлений обновлены).

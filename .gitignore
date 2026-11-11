@@ -35,3 +35,7 @@ desktop/target/
 # коммитится (каркас из `tauri android init`, правится руками) — его сборочные
 # артефакты исключает сгенерированный gen/android/.gitignore (novagrid-058)
 desktop/gen/schemas/
+
+# Подписи release-APK — секрет, в git не попадает (duet-010)
+desktop/gen/android/*.keystore
+*.jks
