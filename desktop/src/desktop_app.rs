@@ -90,12 +90,16 @@ fn confirm_close(window: tauri::WebviewWindow) -> Result<(), String> {
 
 /// Нативный диалог «Открыть книгу» с мультивыбором: пути (пусто — отмена).
 /// .nvgridx — зашифрованная капсула-снапшот (Этап 7.6): открывается тем же
-/// конвейером, фразу спросит веб-диалог.
+/// конвейером, фразу спросит веб-диалог. .docx/.doc — документы Word
+/// (novagrid-068): таблицы документа тем же конвейером, без формул.
 #[tauri::command]
 fn pick_open_books() -> Vec<String> {
     rfd::FileDialog::new()
         .set_title("Открыть книги")
-        .add_filter("Таблицы", &["xlsx", "xlsm", "xls", "ods", "csv", "tsv", "nvgridx"])
+        .add_filter(
+            "Таблицы и документы",
+            &["xlsx", "xlsm", "xls", "ods", "csv", "tsv", "docx", "doc", "nvgridx"],
+        )
         .pick_files()
         .map(|paths| paths.into_iter().map(path_string).collect())
         .unwrap_or_default()

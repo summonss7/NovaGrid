@@ -52,7 +52,13 @@ import {
   onDesktopCloseAsk,
   onDesktopMenu,
 } from '../io/desktop'
-import { isTauriMobile, mobilePickSavePath, mobileWriteFile } from '../io/mobile'
+import {
+  androidTakeOpenFile,
+  isTauriMobile,
+  mobilePickSavePath,
+  mobileWriteFile,
+  onAndroidOpenPush,
+} from '../io/mobile'
 import { useUpdaterStore } from '../io/updater'
 import { CloseAskDialog } from '../ui/CloseAskDialog'
 import { FilterBar } from '../ui/FilterBar'
@@ -640,6 +646,28 @@ export default function App() {
     }
   }, [openFile, openRestInWindows, showToast, t])
 
+  // ── мобильная обёртка Android: системное «Открыть с помощью» (novagrid-068)
+  // intent-filter на xlsx/doc/… запускает обёртку; холодный старт — pull
+  // ждущего файла после загрузки, тёплое открытие — толчок из Kotlin
+  useEffect(() => {
+    if (!isTauriMobile()) return
+    const alive = true
+    const take = async () => {
+      try {
+        const file = await androidTakeOpenFile()
+        if (alive && file) await openFile(new File([file.bytes], file.name))
+      } catch (err) {
+        if (alive)
+          showToast(
+            `${t.openErrorTitle}: ${err instanceof Error ? err.message : String(err)}`,
+            'error',
+          )
+      }
+    }
+    void take()
+    return onAndroidOpenPush(() => void take())
+  }, [openFile, showToast, t])
+
   // ── десктоп-обёртка: окно доп. книги (novagrid-023) ───────────────────
   // открыто с ?file=<путь> (книги с диска) или staged=<id>&name=<имя>
   // (перетащенные — у HTML5 File нет пути); главное окно параметров не имеет
@@ -815,7 +843,7 @@ export default function App() {
         id="nv-file-input"
         type="file"
         hidden
-        accept=".xlsx,.xlsm,.xls,.ods,.csv,.tsv,.nvgridx"
+        accept=".xlsx,.xlsm,.xls,.ods,.csv,.tsv,.docx,.doc,.nvgridx"
         aria-label={t.fileInputLabel}
         onChange={(e) => {
           const file = e.target.files?.[0]
@@ -907,7 +935,13 @@ export default function App() {
           suggestedName={suggestedName}
           defaultFormat={defaultFormat}
           defaultDelimiter={gridStore.getState().csvDelimiter}
-          convertNote={gridStore.getState().fileFormat === 'xls' ? t.xlsSaveNote : null}
+          convertNote={
+            gridStore.getState().fileFormat === 'xls'
+              ? t.xlsSaveNote
+              : gridStore.getState().fileFormat === 'doc'
+                ? t.docSaveNote
+                : null
+          }
           onConfirm={(choice) => void saveAsChosen(choice)}
           onCancel={() => setSaveAsOpen(false)}
         />

@@ -416,7 +416,7 @@ mod jni_install {
 use jni_install as jni_impl;
 
 #[cfg(target_os = "android")]
-fn android_cache_dir() -> Result<PathBuf, String> {
+pub(crate) fn android_cache_dir() -> Result<PathBuf, String> {
     jni_impl::cache_dir()
 }
 

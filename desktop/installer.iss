@@ -48,7 +48,7 @@ Name: "ru"; MessagesFile: "compiler:Languages\Russian.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
-Name: "fileassoc"; Description: "Добавить NovaGrid в «Открыть с помощью» для .xlsx, .xls, .ods, .csv и .nvgridx"; GroupDescription: "Файловые ассоциации:"
+Name: "fileassoc"; Description: "Добавить NovaGrid в «Открыть с помощью» для .xlsx, .xls, .ods, .csv, .docx, .doc и .nvgridx"; GroupDescription: "Файловые ассоциации:"
 
 [Files]
 Source: "target\release\novagrid.exe"; DestDir: "{app}"; DestName: "NovaGrid.exe"; Flags: ignoreversion
@@ -71,6 +71,9 @@ Root: HKCU; Subkey: "Software\Classes\.xlsx\OpenWithProgids"; ValueType: string;
 Root: HKCU; Subkey: "Software\Classes\.xls\OpenWithProgids"; ValueType: string; ValueName: "NovaGrid.Book"; ValueData: ""; Flags: uninsdeletevalue; Tasks: fileassoc
 Root: HKCU; Subkey: "Software\Classes\.ods\OpenWithProgids"; ValueType: string; ValueName: "NovaGrid.Book"; ValueData: ""; Flags: uninsdeletevalue; Tasks: fileassoc
 Root: HKCU; Subkey: "Software\Classes\.csv\OpenWithProgids"; ValueType: string; ValueName: "NovaGrid.Book"; ValueData: ""; Flags: uninsdeletevalue; Tasks: fileassoc
+; документы Word (novagrid-068): открываются сеткой таблиц (без формул)
+Root: HKCU; Subkey: "Software\Classes\.docx\OpenWithProgids"; ValueType: string; ValueName: "NovaGrid.Book"; ValueData: ""; Flags: uninsdeletevalue; Tasks: fileassoc
+Root: HKCU; Subkey: "Software\Classes\.doc\OpenWithProgids"; ValueType: string; ValueName: "NovaGrid.Book"; ValueData: ""; Flags: uninsdeletevalue; Tasks: fileassoc
 ; .nvgridx — зашифрованный снапшот книги (Этап 7.6): двойной клик в облачной
 ; папке открывает капсулу, фразу спросит приложение
 Root: HKCU; Subkey: "Software\Classes\.nvgridx\OpenWithProgids"; ValueType: string; ValueName: "NovaGrid.Book"; ValueData: ""; Flags: uninsdeletevalue; Tasks: fileassoc

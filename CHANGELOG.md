@@ -2742,3 +2742,40 @@ Deploy to GitHub Pages ран 38018213931 success (шаги деплоя кор�
   перезапуск зелёный — известный класс); tsc -b и eslint чистые; npm run build (web)
   собирается.
 - Коммит: ea69dff (фикс+тесты+доки; отчёт и карточка — следующим коммитом).
+
+## 2026-11-11 23:02 — novagrid-068: Word-документы (.docx/.doc) + системные ассоциации файлов (v1.31.0)
+- Начало работы: 2026-11-11 22:16
+- Окончание работы: 2026-11-11 23:02
+- Что сделано:
+  - Поддержка документов Word (wish Артёма, карточка novagrid-068): новый модуль
+    src/io/docx.ts. .docx — свой разбор word/document.xml регэкспами (как ods.ts,
+    без DOM): каждая таблица документа → лист «Таблица N», текст вне таблиц → лист
+    «Текст»; переносятся объединения (gridSpan/vMerge → MergeRect), стили ячеек
+    (жирность/курсив/подчёрк, размер, цвет, заливка, выравнивание), таб/переносы
+    внутри абзацев. .doc (Word 6/95/97-2003) — мини-ридер OLE (FAT+miniFAT) + piece
+    table (fcClx/1Table|0Table, юникод/cp1252), таблицы восстанавливаются по маркерам
+    0x07/0x0D — значения без геометрии объединений; шифрованные/битые файлы дают
+    понятную ошибку с советом пересохранить в .docx.
+  - Конвейер: FileFormat += 'doc' (только чтение, как .xls: Ctrl+S → «Сохранить как…»
+    с подсказкой docSaveNote ru/en); ioWorker ветки docx/doc; фильтры открытия —
+    FSA-пикер, input accept, экран «Файлы .xlsx/…/.docx откроются здесь», справка F1
+    (новый совет «Документы Word»).
+  - Ассоциации Windows: installer.iss — .docx/.doc в задаче fileassoc (ProgId
+    NovaGrid.Book, HKCU OpenWithProgids) + описание задачи; фильтр нативного диалога
+    «Открыть» (Rust pick_open_books) — docx/doc; bundle.fileAssociations в
+    tauri.conf.json.
+  - Ассоциации Android: intent-filter ACTION_VIEW по MIME xlsx/xls/ods/csv/doc/docx в
+    манифесте; MainActivity копирует content:// в cacheDir/nv-open.tmp и держит имя
+    (JS-мост __NovaGridAndroid.takePending + толчок evaluateJavascript
+    window.__nvAndroidOpen); Rust-команда mobile_read_open_intent (lib.rs, бинарный
+    IPC, капсула одноразовая); фронтенд — androidTakeOpenFile/onAndroidOpenPush
+    (mobile.ts), boot-эффект App.tsx: холодный старт — pull, тёплое открытие — push.
+  - Доки: README (статус v1.31.0, заголовок, принципы), docs/WRAPPER.md (ассоциации
+    Win+Android, мост), ROADMAP. Версия 1.31.0 (package.json, tauri.conf.json,
+    Cargo.toml).
+- Как проверено: +11 юнит (docx.test.ts: .docx таблицы/текст/объединения/стили/
+  многоабзацные ячейки/битый zip; .doc — OLE-фикстура собственной сборки: маркеры
+  таблиц, кириллица/€, пустой документ, не-OLE), всего 511 юнит зелёные; tsc -b и
+  eslint чистые; сборка android:build release — подписанный APK 1.31.0 в builds/
+  (Котлин/Rust мобильные компилируются); e2e и desktop:build — см. следующие записи.
+- Коммит: в конце сеанса (код+тесты+доки одним коммитом с карточкой).

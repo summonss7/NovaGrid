@@ -90,8 +90,10 @@ import {
 
 export type EditMove = 'down' | 'up' | 'right' | 'left' | 'none'
 
-/** Формат файла на диске — определяет поведение «Сохранить». */
-export type FileFormat = 'xlsx' | 'csv' | 'xls' | 'ods'
+/** Формат файла на диске — определяет поведение «Сохранить».
+ * 'doc' — документы Word (novagrid-068): только чтение, как .xls — «Сохранить
+ * как…» с конвертацией в .xlsx/.csv/.ods. */
+export type FileFormat = 'xlsx' | 'csv' | 'xls' | 'ods' | 'doc'
 
 const MOVE_DELTA: Record<EditMove, [number, number]> = {
   down: [1, 0],

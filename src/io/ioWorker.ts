@@ -8,6 +8,7 @@
 import { csvToSheet } from './csv'
 import { type SheetWire, odsToSheets, xlsToSheets, xlsxToSheets, sheetsToXlsx } from './excel'
 import { sheetsToOds } from './ods'
+import { docToSheets, docxToSheets } from './docx'
 import { sheetToCsv } from './csv'
 import type { SheetModel } from '../core/sheet'
 
@@ -46,6 +47,13 @@ async function handle(msg: IoRequest): Promise<IoResponse> {
     }
     if (ext === 'ods') {
       return { id: msg.id, ok: true, kind: 'read', sheets: await odsToSheets(msg.buffer) }
+    }
+    // документы Word (novagrid-068): таблицы документа → листы, без формул
+    if (ext === 'docx') {
+      return { id: msg.id, ok: true, kind: 'read', sheets: await docxToSheets(msg.buffer) }
+    }
+    if (ext === 'doc') {
+      return { id: msg.id, ok: true, kind: 'read', sheets: docToSheets(msg.buffer) }
     }
     // .xlsx / .xlsm и всё zip-подобное — ExcelJS
     return { id: msg.id, ok: true, kind: 'read', sheets: await xlsxToSheets(msg.buffer) }

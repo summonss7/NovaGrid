@@ -26,6 +26,37 @@
                 <!-- AndroidTV support -->
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
             </intent-filter>
+            <!-- novagrid-068: система предлагает NovaGrid в «Открыть с помощью»
+                 для таблиц и документов Word (content:// от файловых менеджеров);
+                 сам файл MainActivity передаёт фронтенду через JS-мост -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="application/vnd.ms-excel" />
+                <data android:mimeType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />
+                <data android:mimeType="application/vnd.oasis.opendocument.spreadsheet" />
+                <data android:mimeType="text/csv" />
+                <data android:mimeType="text/comma-separated-values" />
+                <data android:mimeType="application/msword" />
+                <data android:mimeType="application/vnd.openxmlformats-officedocument.wordprocessingml.document" />
+            </intent-filter>
+            <!-- tauri-file-associations. AUTO-GENERATED. DO NOT REMOVE. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:pathPattern=".*\\.xlsx" />
+                <data android:pathPattern=".*\\.xlsm" />
+                <data android:pathPattern=".*\\.xls" />
+                <data android:pathPattern=".*\\.ods" />
+                <data android:pathPattern=".*\\.csv" />
+                <data android:pathPattern=".*\\.tsv" />
+                <data android:pathPattern=".*\\.docx" />
+                <data android:pathPattern=".*\\.doc" />
+                <data android:pathPattern=".*\\.nvgridx" />
+            </intent-filter>
+            
+            <!-- tauri-file-associations. AUTO-GENERATED. DO NOT REMOVE. -->
         </activity>
 
         <provider

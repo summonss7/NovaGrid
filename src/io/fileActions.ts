@@ -16,6 +16,8 @@ export function extToFormat(name: string): FileFormat | null {
   if (ext === 'csv' || ext === 'tsv') return 'csv'
   if (ext === 'xls') return 'xls'
   if (ext === 'ods') return 'ods'
+  // документы Word (novagrid-068): открытие без записи — «Сохранить как…»
+  if (ext === 'docx' || ext === 'doc') return 'doc'
   return null
 }
 
@@ -25,7 +27,7 @@ export async function readBookFile(file: File): Promise<void> {
   const format = extToFormat(file.name)
   if (!format) {
     throw new Error(
-      `Формат «${file.name.split('.').pop()}» не поддерживается: откройте .xlsx, .xls, .ods, .csv или .tsv`,
+      `Формат «${file.name.split('.').pop()}» не поддерживается: откройте .xlsx, .xls, .ods, .csv, .tsv, .docx или .doc`,
     )
   }
   const { sheets, csvDelimiter } = await readFileBuffer(file.name, buffer)
@@ -124,6 +126,8 @@ export async function pickOpenFile(): Promise<PickedFile | null> {
             'application/vnd.ms-excel': ['.xls'],
             'application/vnd.oasis.opendocument.spreadsheet': ['.ods'],
             'text/csv': ['.csv', '.tsv'],
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
+            'application/msword': ['.doc'],
             'application/octet-stream': ['.nvgridx'],
           },
         },

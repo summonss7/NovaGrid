@@ -2,9 +2,10 @@
 
 Нативные оболочки **Tauri 2** поверх одного веб-приложения. Десктоп: значок в
 меню «Пуск», нативное меню «Файл», диалоги открытия/сохранения и файловые
-ассоциации .xlsx/.xls/.ods/.csv/.nvgridx без браузера. Android: APK из того же
-Rust-крейта `desktop/` (мобильная ветка `lib.rs` + `gen/android`), файлы —
-системные пикеры SAF. Веб-часть не меняется — обе обёртки грузят ту же
+ассоциации .xlsx/.xls/.ods/.csv/.docx/.doc/.nvgridx без браузера. Android: APK
+из того же Rust-крейта `desktop/` (мобильная ветка `lib.rs` + `gen/android`),
+файлы — системные пикеры SAF и «Открыть с помощью» (intent-filter на
+Excel/Word/CSV, novagrid-068). Веб-часть не меняется — обе обёртки грузят ту же
 production-сборку (`dist/`), что и PWA; в браузере/PWA всё работает как раньше.
 iOS — та же мобильная ветка, сборка требует macOS/Xcode (раздел «Android и iOS»
 ниже). Параллельная поддержка платформ («меняется что-то → во всех версиях»):
@@ -223,16 +224,29 @@ npm run android:build -- release aarch64 x86_64   # свои таргеты
 ## Файловые ассоциации
 
 Inno Setup (`desktop/installer.iss`) регистрирует ProgId `NovaGrid.Book`
-и добавляет NovaGrid в «Открыть с помощью» для `.xlsx/.xls/.ods/.csv/.nvgridx`
-(`OpenWithProgids`, HKCU). Владелец по умолчанию (Excel/LibreOffice)
-**не перехватывается** — пользователь назначает NovaGrid приложением по
-умолчанию сам, если хочет. Открытие: Explorer запускает
-`NovaGrid.exe "<путь к книге>"` — аргументы читаются на старте
-(IPC `startup_books`, однократно) и книги открываются тем же конвейером,
+и добавляет NovaGrid в «Открыть с помощью» для
+`.xlsx/.xls/.ods/.csv/.docx/.doc/.nvgridx` (`OpenWithProgids`, HKCU); Word
+появился в v1.31 (novagrid-068) вместе с чтением .docx/.doc. Владелец по
+умолчанию (Excel/LibreOffice/Word) **не перехватывается** — пользователь
+назначает NovaGrid приложением по умолчанию сам, если хочет. Открытие:
+Explorer запускает `NovaGrid.exe "<путь к книге>"` — аргументы читаются на
+старте (IPC `startup_books`, однократно) и книги открываются тем же конвейером,
 что и drag-and-drop в веб-версии. `.nvgridx` (v1.8, Этап 7.6) — зашифрованная
 капсула-снапшот книги: двойной клик в облачной папке открывает её в NovaGrid,
 парольную фразу спросит веб-диалог; нативные диалоги открытия/сохранения
 знают фильтр `nvgridx`.
+
+Android (v1.31, novagrid-068): в манифесте у `MainActivity` — intent-filter
+`ACTION_VIEW` по MIME-типам Excel/ODS/CSV/Word (без scheme — ловит любые
+`content://` с нужным типом). `MainActivity` копирует поток URI в
+`cacheDir/nv-open.tmp` и держит имя файла; фронтенд забирает файл двумя
+путями: холодный старт — pull после загрузки (JS-мост
+`__NovaGridAndroid.takePending()` + Rust-команда `mobile_read_open_intent`
+в `lib.rs`, бинарный IPC), тёплое открытие в живом окне — толчок
+`evaluateJavascript` в `window.__nvAndroidOpen` (подписка `onAndroidOpenPush`
+в `src/io/mobile.ts`). Капсула одноразовая — повторное чтение не
+переоткрывает файл; `launchMode=singleTask` доставляет повторные открытия
+через `onNewIntent`.
 
 ## Несколько книг одновременно (v1.7, novagrid-023)
 

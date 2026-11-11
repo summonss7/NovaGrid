@@ -27,7 +27,7 @@ export const ru = {
   altSum: 'Σ',
   sheet: 'Лист 1',
   addSheetLabel: 'Добавить лист',
-  sheetsEmpty: 'Файлы .xlsx/.xls/.ods/.csv откроются здесь',
+  sheetsEmpty: 'Файлы .xlsx/.xls/.ods/.csv/.docx откроются здесь',
   /** число в текущей локали словаря (Этап 6.3) */
   num: (n: number) => n.toLocaleString('ru-RU'),
   /** BCP-47 тег локали словаря — печать чисел/дат (Этап 7.4) */
@@ -189,6 +189,7 @@ export const ru = {
   tabDeleteConfirm: (name: string) => `Удалить лист «${name}»? Отменить будет нельзя.`,
   tabMenuLabel: 'Меню листа',
   xlsSaveNote: 'Файл .xls сохранится как .xlsx (современный формат)',
+  docSaveNote: 'Документ Word доступен только для чтения — сохранится как .xlsx',
   saveAsFormatOds: '.ods (OpenDocument, LibreOffice)',
 
   // закрытие с несохранёнными правками (novagrid-033): десктоп — диалог

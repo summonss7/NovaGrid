@@ -120,3 +120,57 @@ export function onMobileUpdaterProgress(
     unlisten?.()
   }
 }
+
+/*
+ * Системное «Открыть с помощью» (novagrid-068): Android запускает обёртку
+ * по intent-filter на xlsx/doc/…, MainActivity кладёт байты в cacheDir и
+ * держит имя (JS-мост __NovaGridAndroid), Rust-команда mobile_read_open_intent
+ * отдаёт буфер. Холодный старт — pull после загрузки (boot-эффект App),
+ * тёплое открытие в живом окне — толчок window.__nvAndroidOpen из Kotlin.
+ */
+
+/** JS-мост MainActivity (addJavascriptInterface), только Android-обёртка. */
+interface AndroidOpenBridge {
+  takePending(): string
+}
+
+declare global {
+  interface Window {
+    __NovaGridAndroid?: AndroidOpenBridge
+    /** толчок из Kotlin при тёплом открытии (evaluateJavascript) */
+    __nvAndroidOpen?: () => void
+  }
+}
+
+export interface AndroidOpenFile {
+  name: string
+  bytes: ArrayBuffer
+}
+
+/**
+ * Ждущий файл системного «Открыть с помощью» — одноразово: null, когда моста
+ * нет (браузер/iOS/десктоп) или ничего не ждёт. Имя берёт Kotlin-мост, байты —
+ * Rust-команда обёртки (бинарный IPC, без JSON-оверхеда).
+ */
+export async function androidTakeOpenFile(): Promise<AndroidOpenFile | null> {
+  const bridge = typeof window !== 'undefined' ? window.__NovaGridAndroid : undefined
+  if (!bridge || !isTauriMobile()) return null
+  let raw = ''
+  try {
+    raw = bridge.takePending()
+  } catch {
+    return null
+  }
+  if (!raw) return null
+  const name = (JSON.parse(raw) as { name?: string }).name ?? 'document'
+  const bytes = await window.__TAURI__!.core.invoke<ArrayBuffer>('mobile_read_open_intent')
+  return { name, bytes }
+}
+
+/** Подписка на толчок Kotlin (файл открыт в уже живом окне). */
+export function onAndroidOpenPush(handler: () => void): () => void {
+  window.__nvAndroidOpen = handler
+  return () => {
+    window.__nvAndroidOpen = undefined
+  }
+}

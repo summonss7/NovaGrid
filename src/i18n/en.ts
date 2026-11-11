@@ -44,7 +44,7 @@ const en: RuDict = {
   altSum: 'Σ',
   sheet: 'Sheet 1',
   addSheetLabel: 'Add sheet',
-  sheetsEmpty: '.xlsx/.xls/.ods/.csv files open here',
+  sheetsEmpty: '.xlsx/.xls/.ods/.csv/.docx files open here',
   num: (n: number) => n.toLocaleString('en-US'),
   localeTag: 'en-US',
 
@@ -198,6 +198,7 @@ const en: RuDict = {
   tabDeleteConfirm: (name: string) => `Delete sheet "${name}"? This cannot be undone.`,
   tabMenuLabel: 'Sheet menu',
   xlsSaveNote: '.xls files are saved as .xlsx (the modern format)',
+  docSaveNote: 'Word documents are read-only — they will be saved as .xlsx',
   saveAsFormatOds: '.ods (OpenDocument, LibreOffice)',
 
   // closing with unsaved changes (novagrid-033): desktop shows the dialog

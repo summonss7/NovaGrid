@@ -36,6 +36,23 @@ pub fn run() {
 #[cfg(any(mobile, test))]
 mod mobile_updater;
 
+/// novagrid-068: файл системного «Открыть с помощью» (ACTION_VIEW на xlsx/
+/// doc/… — intent-filter в манифесте). Kotlin (MainActivity) копирует байты
+/// в cacheDir/nv-open.tmp и держит имя в companion; команда читает капсулу
+/// однократно (и удаляет) — фронтенд строит File и открывает общим конвейером
+/// (JS-мост __NovaGridAndroid передаёт имя, см. mobile.ts).
+#[cfg(target_os = "android")]
+#[tauri::command]
+fn mobile_read_open_intent() -> Result<tauri::ipc::Response, String> {
+    let path = mobile_updater::android_cache_dir()
+        .map_err(|e| format!("cache: {e}"))?
+        .join("nv-open.tmp");
+    let bytes = std::fs::read(&path).map_err(|e| format!("open-intent: {e}"))?;
+    // капсула одноразовая: повторное чтение не переоткроет тот же файл
+    let _ = std::fs::remove_file(&path);
+    Ok(tauri::ipc::Response::new(bytes))
+}
+
 #[cfg(mobile)]
 fn mobile_run() {
     let builder = tauri::Builder::default()
@@ -45,7 +62,8 @@ fn mobile_run() {
     let builder = builder.invoke_handler(tauri::generate_handler![
         mobile_updater::updater_check,
         mobile_updater::updater_download,
-        mobile_updater::updater_install
+        mobile_updater::updater_install,
+        mobile_read_open_intent
     ]);
     builder
         .run(tauri::generate_context!())

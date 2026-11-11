@@ -2341,7 +2341,7 @@ checksum = "650eef8c711430f1a879fdd01d4745a7deea475becfb90269c06775983bbf086"
 
 [[package]]
 name = "novagrid"
-version = "1.30.2"
+version = "1.31.0"
 dependencies = [
  "futures-util",
  "jni 0.21.1",
