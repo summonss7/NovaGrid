@@ -384,6 +384,39 @@ test.describe('меню колонки ▾ (Ф3.7 + Ф8): галочки зна�
     await expect.poll(() => api.filters().then((f) => f.length)).toBe(0)
   })
 
+  test('фильтр по слову в колонке: подстрока без регистра (novagrid-069)', async ({ page }) => {
+    const api = nv(page)
+
+    const center = await api.cellCenter(-1, 0) // колонка A — фамилии
+    await page.mouse.click(center.x + 34, center.y)
+    const menu = page.locator('.col-menu')
+    await expect(menu).toBeVisible()
+
+    // «нов» есть в «Иванов» и «Смирнов» — считаем ожидание по данным, без хардкода
+    const needle = 'нов'
+    const expected = await page.evaluate((q) => {
+      let n = 0
+      for (let r = 0; r <= 500; r++) if (window.__nv!.cell(r, 0).toLowerCase().includes(q)) n++
+      return n
+    }, needle)
+    expect(expected).toBeGreaterThan(0)
+
+    await menu.getByLabel('Фильтр по слову…').fill(needle)
+    await page.keyboard.press('Enter')
+    await expect
+      .poll(() => api.visibleRows().then((r) => r?.length ?? 0))
+      .toBe(expected)
+    const filters = await api.filters()
+    expect(filters[0].text).toBe(needle)
+    await expect(page.locator('.filter-chip')).toHaveCount(1)
+    await expect(page.locator('.filter-chip')).toContainText('нов')
+
+    // пустое слово снимает фильтр
+    await menu.getByLabel('Фильтр по слову…').fill('')
+    await page.keyboard.press('Enter')
+    await expect.poll(() => api.filters().then((f) => f.length)).toBe(0)
+  })
+
   test('сортировка по возрастанию с подтверждением, Ctrl+Z возвращает', async ({ page }) => {
     const api = nv(page)
 

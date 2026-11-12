@@ -1843,6 +1843,31 @@
   color: var(--nv-ink-soft);
 }
 
+/* фильтр «содержит слово» (novagrid-069): поле + кнопка над списком значений */
+.col-menu-word {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.col-menu-word input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 9px;
+  border: 1.5px solid var(--nv-grid-line);
+  border-radius: var(--nv-radius-btn);
+  outline: none;
+  background: transparent;
+  font-family: var(--nv-font-text);
+  font-size: 12.5px;
+  color: var(--nv-ink);
+}
+
+.col-menu-word input:focus {
+  border-color: var(--nv-accent);
+}
+
 .col-menu-footer {
   display: flex;
   justify-content: space-between;

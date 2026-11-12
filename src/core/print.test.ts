@@ -22,6 +22,8 @@ const ru: PrintLocale = {
   date: (iso) => formatIsoDate(iso, 'ru-RU'),
   filterBlanks: '(пустые)',
   filterChipMore: (n) => `+${n}`,
+  filterChipContains: (s) => `содержит «${s}»`,
+  filterChipNotContains: (s) => `не содержит «${s}»`,
 }
 
 /** Лист из строк-массивов (как демо-данные store). */
@@ -181,6 +183,11 @@ describe('filterChipLabel', () => {
     expect(filterChipLabel(0, 'include', ['Иванов', 'Петров', 'Сидоров'], ru)).toBe(
       'A = Иванов +2',
     )
+  })
+
+  it('текстовый фильтр: «содержит слово» / «не содержит» (novagrid-069)', () => {
+    expect(filterChipLabel(1, 'include', [], ru, 'патрубок')).toBe('B: содержит «патрубок»')
+    expect(filterChipLabel(2, 'exclude', [], ru, 'патрубок')).toBe('C: не содержит «патрубок»')
   })
 })
 

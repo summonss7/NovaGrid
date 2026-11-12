@@ -126,6 +126,12 @@ const en: RuDict = {
   sortConfirm: 'Rows will be reordered. You can undo with Ctrl+Z. Continue?',
   columnValuesLabel: 'Values',
   columnValuesSearch: 'Search values…',
+  filterByWord: 'Filter by word…',
+  filterByWordHint:
+    'Shows rows where this column contains the word: "hose" matches "air filter hose". Empty word clears the filter.',
+  filterWordApply: 'Find',
+  filterChipContains: (s: string) => `contains "${s}"`,
+  filterChipNotContains: (s: string) => `doesn't contain "${s}"`,
   columnValuesShown: (shown: number, total: number) =>
     `Showing first ${shown.toLocaleString('en-US')} of ${total.toLocaleString('en-US')}`,
   columnSelectAll: 'Select all',

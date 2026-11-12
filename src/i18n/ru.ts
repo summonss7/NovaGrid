@@ -115,6 +115,12 @@ export const ru = {
   sortConfirm: 'Строки перемешаются. Отменить можно будет Ctrl+Z. Продолжить?',
   columnValuesLabel: 'Значения',
   columnValuesSearch: 'Поиск по значениям…',
+  filterByWord: 'Фильтр по слову…',
+  filterByWordHint:
+    'Покажет строки, где в этой колонке есть слово: «патрубок» найдёт «патрубок воздушного фильтра». Пустое слово снимает фильтр.',
+  filterWordApply: 'Найти',
+  filterChipContains: (s: string) => `содержит «${s}»`,
+  filterChipNotContains: (s: string) => `не содержит «${s}»`,
   columnValuesShown: (shown: number, total: number) =>
     `Показаны первые ${shown.toLocaleString('ru-RU')} из ${total.toLocaleString('ru-RU')}`,
   columnSelectAll: 'Выбрать все',

@@ -19,14 +19,30 @@ export interface ColumnFilter {
   mode: FilterMode
   /** значения ячеек; '' — пустая ячейка */
   values: string[]
+  /**
+   * Текстовое условие «содержит слово» (novagrid-069): задано — ячейка
+   * проходит по вхождению подстроки (без учёта регистра), values игнорируются.
+   * Фильтр по слову из длинных значений: «патрубок» найдёт «патрубок
+   * воздушного фильтра». undefined — обычный фильтр по значениям.
+   */
+  text?: string
 }
 
-/** Фильтр с пустым списком значений ничего не делает (вырожденный). */
+/** Фильтр с пустым списком значений и без слова ничего не делает (вырожденный). */
 export function isActiveFilter(f: ColumnFilter): boolean {
-  return f.values.length > 0
+  return isTextFilter(f) ? f.text.trim() !== '' : f.values.length > 0
+}
+
+/** Текстовый фильтр («содержит слово») — поле text задано. */
+export function isTextFilter(f: ColumnFilter): f is ColumnFilter & { text: string } {
+  return f.text !== undefined
 }
 
 export function valuePasses(f: ColumnFilter, raw: string): boolean {
+  if (isTextFilter(f)) {
+    const hit = raw.toLowerCase().includes(f.text.trim().toLowerCase())
+    return f.mode === 'include' ? hit : !hit
+  }
   const hit = f.values.includes(raw)
   return f.mode === 'include' ? hit : !hit
 }
@@ -42,14 +58,24 @@ export function visibleRowsOf(
   const active = filters.filter(isActiveFilter)
   if (active.length === 0) return null
   // значения — в Set: список из сотен галочек меню колонки не должен делать
-  // каждую из 100k строк линейным сканом (Этап 6.1)
-  const prepared = active.map((f) => ({ f, set: f.values.length > 8 ? new Set(f.values) : null }))
+  // каждую из 100k строк линейным сканом (Этап 6.1); слово — заранее в нижнем
+  // регистре, чтобы не приводить его на каждой строке
+  const prepared = active.map((f) => ({
+    f,
+    needle: isTextFilter(f) ? f.text.trim().toLowerCase() : null,
+    set: !isTextFilter(f) && f.values.length > 8 ? new Set(f.values) : null,
+  }))
   const out: number[] = []
   for (let r = 0; r <= sheet.maxRow; r++) {
     let ok = true
-    for (const { f, set } of prepared) {
+    for (const { f, needle, set } of prepared) {
       const raw = cellText(sheet, r, f.col)
-      const hit = set ? set.has(raw) : f.values.includes(raw)
+      const hit =
+        needle !== null
+          ? raw.toLowerCase().includes(needle)
+          : set
+            ? set.has(raw)
+            : f.values.includes(raw)
       if (f.mode === 'include' ? !hit : hit) {
         ok = false
         break

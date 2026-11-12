@@ -65,6 +65,8 @@ export function PrintView() {
       date: (iso) => formatIsoDate(iso, t.localeTag),
       filterBlanks: t.filterBlanks,
       filterChipMore: t.filterChipMore,
+      filterChipContains: t.filterChipContains,
+      filterChipNotContains: t.filterChipNotContains,
     }),
     [t],
   )

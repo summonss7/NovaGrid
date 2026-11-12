@@ -34,7 +34,7 @@ export function FilterBar() {
               setMenu({ col: f.col, x: r.left, y: r.bottom + 4 })
             }}
           >
-            {filterChipLabel(f.col, f.mode, f.values, t)}
+            {filterChipLabel(f.col, f.mode, f.values, t, f.text)}
           </button>
           <button
             type="button"

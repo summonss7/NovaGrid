@@ -29,7 +29,7 @@ export function ColumnMenu(props: { x: number; y: number; col: number; onClose: 
   // фокус в поиск при открытии; стрелки не перехватываем — они нужны каретке
   useMenuKeys(menuRef, onClose, {
     itemSelector: null,
-    autoFocusSelector: '.col-menu-search input',
+    autoFocusSelector: '.col-menu-word input',
   })
 
   const letter = colName(col)
@@ -40,11 +40,26 @@ export function ColumnMenu(props: { x: number; y: number; col: number; onClose: 
 
   // невыбранные значения: из текущего фильтра (include) или пусто (всё видно);
   // набор живёт на монтировании меню, поэтому экземпляр рендерится с key={col}
+  // (текстовый фильтр «по слову» набора не задаёт — галочки трогаем отдельно)
   const [unchecked, setUnchecked] = useState<Set<string>>(() => {
     const current = gridStore.getState().filters.find((f) => f.col === col)
-    if (!current || current.mode !== 'include') return new Set()
+    if (!current || current.mode !== 'include' || current.text !== undefined) return new Set()
     return new Set(all.map((v) => v.value).filter((v) => !current.values.includes(v)))
   })
+
+  // фильтр «содержит слово» (novagrid-069): «патрубок» найдёт «патрубок
+  // воздушного фильтра»; применяется по Enter/кнопке, пустое слово снимает
+  const [word, setWord] = useState(
+    () => gridStore.getState().filters.find((f) => f.col === col)?.text ?? '',
+  )
+  const applyWord = () => {
+    const w = word.trim()
+    if (w === '') {
+      gridStore.getState().clearColumnFilter(col)
+      return
+    }
+    gridStore.getState().setColumnFilter({ col, mode: 'include', values: [], text: w })
+  }
 
   const apply = (next: Set<string>) => {
     setUnchecked(next)
@@ -171,6 +186,27 @@ export function ColumnMenu(props: { x: number; y: number; col: number; onClose: 
           </button>
         )}
         <div className="ctx-sep" aria-hidden />
+
+        <div className="col-menu-word">
+          <input
+            type="search"
+            value={word}
+            placeholder={t.filterByWord}
+            aria-label={t.filterByWord}
+            title={t.filterByWordHint}
+            onChange={(e) => setWord(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                applyWord()
+              }
+            }}
+            spellCheck={false}
+          />
+          <button type="button" className="col-menu-link" onClick={applyWord}>
+            {t.filterWordApply}
+          </button>
+        </div>
 
         <div className="col-menu-search">
           <Search size={13} strokeWidth={1.5} aria-hidden />

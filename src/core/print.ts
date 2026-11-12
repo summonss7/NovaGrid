@@ -46,6 +46,9 @@ export interface PrintLocale {
   /** подпись пустого значения в чипе фильтра — та же, что в ленте фильтров */
   filterBlanks: string
   filterChipMore: (n: number) => string
+  /** чип текстового фильтра: «содержит «слово»» / «не содержит» (novagrid-069) */
+  filterChipContains: (s: string) => string
+  filterChipNotContains: (s: string) => string
 }
 
 export interface PrintCell {
@@ -79,8 +82,17 @@ export function filterChipLabel(
   col: number,
   mode: FilterMode,
   values: string[],
-  locale: Pick<PrintLocale, 'filterBlanks' | 'filterChipMore'>,
+  locale: Pick<
+    PrintLocale,
+    'filterBlanks' | 'filterChipMore' | 'filterChipContains' | 'filterChipNotContains'
+  >,
+  text?: string,
 ): string {
+  if (text !== undefined) {
+    const label =
+      mode === 'include' ? locale.filterChipContains(text) : locale.filterChipNotContains(text)
+    return `${colName(col)}: ${label}`
+  }
   const first = values[0] === '' ? locale.filterBlanks : values[0]
   const more = values.length > 1 ? ` ${locale.filterChipMore(values.length - 1)}` : ''
   return `${colName(col)} ${mode === 'include' ? '=' : '≠'} ${first}${more}`
@@ -149,7 +161,7 @@ export function buildPrintData(
     rows,
     filterChips:
       scope === 'visible'
-        ? active.map((f) => filterChipLabel(f.col, f.mode, f.values, locale))
+        ? active.map((f) => filterChipLabel(f.col, f.mode, f.values, locale, f.text))
         : [],
     shownOf:
       scope === 'visible' && active.length > 0

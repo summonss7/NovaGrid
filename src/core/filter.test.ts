@@ -41,6 +41,7 @@ describe('filter: видимые строки', () => {
   it('без активных фильтров — null (все видны, без аллокаций)', () => {
     expect(visibleRowsOf(demoSheet(), [])).toBeNull()
     expect(visibleRowsOf(demoSheet(), [{ col: 0, mode: 'include', values: [] }])).toBeNull()
+    expect(visibleRowsOf(demoSheet(), [{ col: 0, mode: 'include', values: [], text: '  ' }])).toBeNull()
   })
 
   it('один фильтр: A = Иванов → строки 1 и 3 (шапка скрыта)', () => {
@@ -76,6 +77,52 @@ describe('filter: видимые строки', () => {
     expect(nearestVisibleRow(vis, 0, -1)).toBe(1) // раньше первой — сама первая
     expect(nearestVisibleRow(vis, 9, 1)).toBe(7) // позже последней — сама последняя
     expect(nearestVisibleRow(null, 42, 1)).toBe(42)
+  })
+})
+
+describe('filter: по слову (novagrid-069)', () => {
+  /** Лист с длинными названиями запчастей — сценарий пожелания. */
+  function partsSheet() {
+    let sheet = createSheet()
+    const rows = [
+      ['Наименование', 'Кол-во'],
+      ['Патрубок воздушного фильтра', '2'],
+      ['Фильтр воздушный', '1'],
+      ['Патрубок гидравлики', '4'],
+      ['Ремень привода', '1'],
+    ]
+    rows.forEach((cells, r) => cells.forEach((v, c) => (sheet = withCell(sheet, r, c, v))))
+    return sheet
+  }
+
+  it('вхождение подстроки без учёта регистра: «патрубок» по длинным названиям', () => {
+    const f = { col: 0, mode: 'include' as const, values: [], text: 'Патрубок' }
+    expect(valuePasses(f, 'Патрубок воздушного фильтра')).toBe(true)
+    expect(valuePasses(f, 'патрубок гидравлики')).toBe(true)
+    expect(valuePasses(f, 'Фильтр воздушный')).toBe(false)
+    expect(valuePasses(f, '')).toBe(false)
+    expect(visibleRowsOf(partsSheet(), [f])).toEqual([1, 3])
+  })
+
+  it('подстрока в середине значения находится; частичное слово матчится', () => {
+    const f = { col: 0, mode: 'include' as const, values: [], text: 'воздушн' }
+    // «воздушн» есть и в «Патрубок воздушного фильтра», и в «Фильтр воздушный»
+    expect(visibleRowsOf(partsSheet(), [f])).toEqual([1, 2])
+    const exact = { col: 0, mode: 'include' as const, values: [], text: 'воздушного' }
+    expect(visibleRowsOf(partsSheet(), [exact])).toEqual([1])
+  })
+
+  it('exclude по слову: все строки, где слова нет', () => {
+    const f = { col: 0, mode: 'exclude' as const, values: [], text: 'Патрубок' }
+    expect(visibleRowsOf(partsSheet(), [f])).toEqual([0, 2, 4])
+  })
+
+  it('слово в одной колонке + значения в другой объединяются по «И»', () => {
+    const vis = visibleRowsOf(partsSheet(), [
+      { col: 0, mode: 'include', values: [], text: 'патрубок' },
+      { col: 1, mode: 'include', values: ['4'] },
+    ])
+    expect(vis).toEqual([3])
   })
 })
 

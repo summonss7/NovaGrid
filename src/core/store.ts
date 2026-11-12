@@ -1903,8 +1903,10 @@ export const gridStore = createStore<GridState>((set, get) => {
     setColumnFilter: (filter) => {
       const { sheet, filters } = get()
       let next = filters.filter((f) => f.col !== filter.col)
-      // «выбраны все значения» == фильтра нет: иначе новые значения скроются
-      if (filter.mode === 'include') {
+      // «выбраны все значения» == фильтра нет: иначе новые значения скроются;
+      // текстовый фильтр («содержит слово») под правило не попадает — у него
+      // values пусты по определению (novagrid-069)
+      if (filter.mode === 'include' && filter.text === undefined) {
         const distinct = new Set(columnValueCounts(sheet, filter.col).map((v) => v.value))
         const covers =
           filter.values.length >= distinct.size && filter.values.every((v) => distinct.has(v))
@@ -1928,7 +1930,7 @@ export const gridStore = createStore<GridState>((set, get) => {
     },
 
     addValueToFilter: (col, value) => {
-      const ex = get().filters.find((f) => f.col === col && f.mode === 'include')
+      const ex = get().filters.find((f) => f.col === col && f.mode === 'include' && f.text === undefined)
       if (!ex) {
         get().filterByValue(col, value)
         return
