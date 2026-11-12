@@ -39,3 +39,6 @@ desktop/gen/schemas/
 # Подписи release-APK — секрет, в git не попадает (duet-010)
 desktop/gen/android/*.keystore
 *.jks
+promt.txt
+promt_done.txt
+CARDS/
