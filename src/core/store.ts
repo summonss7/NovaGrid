@@ -674,6 +674,19 @@ function clearHistories(): void {
 
 const initialTab = createTab(DEFAULT_SHEET_NAME)
 
+/** Равенство списков фильтров (порядок стабилен — setColumnFilter сортирует по col). */
+function sameFilters(a: readonly ColumnFilter[], b: readonly ColumnFilter[]): boolean {
+  if (a.length !== b.length) return false
+  return a.every(
+    (f, i) =>
+      f.col === b[i].col &&
+      f.mode === b[i].mode &&
+      f.text === b[i].text &&
+      f.values.length === b[i].values.length &&
+      f.values.every((v, j) => v === b[i].values[j]),
+  )
+}
+
 const EMPTY_SEARCH: SearchState = {
   open: false,
   query: '',
@@ -831,6 +844,23 @@ export const gridStore = createStore<GridState>((set, get) => {
   }
 
   /**
+   * Смена фильтров — отменяемая транзакция (novagrid-071): запись в историю
+   * (Ctrl+Z вернёт прежние фильтры, Ctrl+Y — снова применит) + якорь курсора
+   * (novagrid-034) и пересчёт поиска. «Ничего не изменилось» — не пишется.
+   */
+  const commitFilterChange = (prev: ColumnFilter[], next: ColumnFilter[]) => {
+    if (sameFilters(prev, next)) return
+    const { tabs, activeTab } = get()
+    historyOf(tabs[activeTab].id).push({
+      label: 'filter',
+      changes: [],
+      filters: { before: prev, after: next },
+    })
+    set({ filters: next, ...applyFilterAnchor(prev, next) })
+    refreshSearch()
+  }
+
+  /**
    * Пересчёт совпадений поиска — инкрементальность Ф2: после каждой правки,
    * смены листа, фильтра и параметров. Скрытые фильтром строки не ищутся.
    */
@@ -917,7 +947,8 @@ export const gridStore = createStore<GridState>((set, get) => {
    * Применить записи истории к вкладкам в направлении before/after
    * (undo/redo): пересчёт формул инкрементальный, вкладки могут быть
    * неактивными. Одна сквозная транзакция снимается целиком (Этап 7).
-   * Стилевые правки (novagrid-039) применяются тем же проходом.
+   * Стилевые правки (novagrid-039) и смены фильтров (novagrid-071) — тем же
+   * проходом; фильтровая транзакция данных не трогает — только фильтры вкладки.
    */
   const applyHistoryEntries = (
     targets: readonly { index: number; entry: HistoryEntry }[],
@@ -927,7 +958,17 @@ export const gridStore = createStore<GridState>((set, get) => {
     const activeTab = get().activeTab
     let tabsArr = get().tabs
     let activeSheet: SheetModel | null = null
+    let sheetTouched = false
+    let activeFilters: ColumnFilter[] | null = null
     for (const { index, entry } of targets) {
+      if (entry.filters) {
+        const nextFilters = direction === 'before' ? entry.filters.before : entry.filters.after
+        tabFilters.set(tabsArr[index].id, nextFilters)
+        if (index === activeTab) activeFilters = nextFilters
+      }
+      const hasSheetPatch =
+        !!entry.layout || entry.changes.length > 0 || !!entry.styleChanges?.length
+      if (!hasSheetPatch) continue
       const prev = tabsArr[index].sheet
       // вставка/удаление строк/колонок (novagrid-045): снимок целиком; пустой
       // список правок уводит движок в полный пересчёт формул
@@ -950,13 +991,17 @@ export const gridStore = createStore<GridState>((set, get) => {
       applyFormulaChanges(prev, next, entry.changes)
       tabsArr = tabsArr.map((t, i) => (i === index ? { ...t, sheet: next } : t))
       if (index === activeTab) activeSheet = next
+      sheetTouched = true
     }
     set({
       tabs: tabsArr,
       ...(activeSheet ? { sheet: activeSheet } : {}),
+      ...(activeFilters !== null
+        ? { filters: activeFilters, ...applyFilterAnchor(get().filters, activeFilters) }
+        : {}),
       edit: null,
       altRange: null,
-      dirty: true,
+      ...(sheetTouched ? { dirty: true } : {}),
     })
     refreshSearch()
     refreshReplace()
@@ -1911,14 +1956,12 @@ export const gridStore = createStore<GridState>((set, get) => {
         const covers =
           filter.values.length >= distinct.size && filter.values.every((v) => distinct.has(v))
         if (covers) {
-          set({ filters: next, ...applyFilterAnchor(filters, next) })
-          refreshSearch()
+          commitFilterChange(filters, next)
           return
         }
       }
       next = [...next, filter].sort((a, b) => a.col - b.col)
-      set({ filters: next, ...applyFilterAnchor(filters, next) })
-      refreshSearch()
+      commitFilterChange(filters, next)
     },
 
     filterByValue: (col, value) => {
@@ -1943,16 +1986,13 @@ export const gridStore = createStore<GridState>((set, get) => {
     clearColumnFilter: (col) => {
       const { filters } = get()
       if (!filters.some((f) => f.col === col)) return
-      const next = filters.filter((f) => f.col !== col)
-      set({ filters: next, ...applyFilterAnchor(filters, next) })
-      refreshSearch()
+      commitFilterChange(filters, filters.filter((f) => f.col !== col))
     },
 
     clearAllFilters: () => {
       const { filters } = get()
       if (filters.length === 0) return
-      set({ filters: [], ...applyFilterAnchor(filters, []) })
-      refreshSearch()
+      commitFilterChange(filters, [])
     },
 
     sortColumn: (col, dir) => {

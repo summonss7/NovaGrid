@@ -199,6 +199,41 @@ test.describe('КТ-3: ПКМ-фильтрация сценария ТЗ → 132
     await expect.poll(() => rowInView(400)).toBe(true)
   })
 
+  test('фильтр — шаг истории: Ctrl+Z снимает, Ctrl+Shift+Z возвращает (novagrid-071)', async ({
+    page,
+  }) => {
+    const api = nv(page)
+    const focusGrid = async () => {
+      const c = await api.cellCenter(1, 0)
+      await page.mouse.click(c.x, c.y)
+    }
+
+    // 1. фильтр A = Иванов
+    await rightClickCell(page, 1, 0)
+    await page.getByRole('menuitem', { name: 'Фильтровать: A = «Иванов»' }).click()
+    await expect.poll(() => api.visibleRows().then((r) => r?.length ?? 0)).toBe(IVANOV_TOTAL)
+    await expect(page.locator('.filter-chip')).toHaveCount(1)
+
+    // 2. Ctrl+Z снимает фильтр: видны все (visibleRows() === null), чип исчез
+    await focusGrid()
+    await page.keyboard.press('Control+z')
+    await expect.poll(() => api.visibleRows().then((r) => r === null)).toBe(true)
+    await expect(page.locator('.filter-chip')).toHaveCount(0)
+
+    // 3. Ctrl+Shift+Z ставит фильтр обратно
+    await page.keyboard.press('Control+Shift+z')
+    await expect.poll(() => api.visibleRows().then((r) => r?.length ?? 0)).toBe(IVANOV_TOTAL)
+    await expect(page.locator('.filter-chip')).toHaveCount(1)
+
+    // 4. «Сбросить всё» — тоже шаг истории: Ctrl+Z возвращает фильтр
+    await page.getByRole('button', { name: 'Сбросить всё' }).click()
+    await expect.poll(() => api.visibleRows().then((r) => r === null)).toBe(true)
+    await focusGrid()
+    await page.keyboard.press('Control+z')
+    await expect.poll(() => api.visibleRows().then((r) => r?.length ?? 0)).toBe(IVANOV_TOTAL)
+    await expect(page.locator('.filter-chip')).toHaveCount(1)
+  })
+
   test('основные операции в меню ПКМ: копировать/вставить/удалить/вырезать (novagrid-032)', async ({
     page,
   }) => {

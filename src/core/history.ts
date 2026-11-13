@@ -5,6 +5,7 @@
  * ячейки — на листе 100k×30 шаг истории весит байты, а не копию всей Map.
  */
 
+import type { ColumnFilter } from './filter'
 import type { CellStyle, SheetModel } from './sheet'
 
 export interface CellChange {
@@ -42,6 +43,12 @@ export interface HistoryEntry {
    * хранятся по ссылке. undo/redo подставляет снимок целиком; changes пуст.
    */
   layout?: { before: SheetModel; after: SheetModel }
+  /**
+   * Смена фильтров колонок (novagrid-071): установка/снятие фильтра —
+   * отменяемое действие; before/after — списки фильтров вкладки целиком.
+   * Данных не трогает, changes пуст.
+   */
+  filters?: { before: ColumnFilter[]; after: ColumnFilter[] }
 }
 
 const DEFAULT_LIMIT = 100

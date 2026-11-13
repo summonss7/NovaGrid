@@ -509,6 +509,74 @@ describe('store: фильтры (Этап 3, Ф3)', () => {
     expect(s().filters).toEqual([])
   })
 
+  it('установка фильтра откатывается Ctrl+Z и возвращается Ctrl+Y (novagrid-071)', () => {
+    s().filterByValue(0, 'Иванов')
+    expect(s().filters).toHaveLength(1)
+    s().undo()
+    expect(s().filters).toEqual([])
+    expect(visibleRowsOf(s().sheet, s().filters)).toBeNull() // видны все
+    s().redo()
+    expect(s().filters).toEqual([{ col: 0, mode: 'include', values: ['Иванов'] }])
+  })
+
+  it('снятие фильтра тоже отменяемо: undo возвращает фильтр', () => {
+    s().filterByValue(0, 'Иванов')
+    s().clearColumnFilter(0)
+    expect(s().filters).toEqual([])
+    s().undo()
+    expect(s().filters).toEqual([{ col: 0, mode: 'include', values: ['Иванов'] }])
+    s().clearAllFilters()
+    s().undo()
+    expect(s().filters).toEqual([{ col: 0, mode: 'include', values: ['Иванов'] }])
+    // «все значения» == снятие — тоже шаг истории
+    s().setColumnFilter({
+      col: 0,
+      mode: 'include',
+      values: ['Фамилия', 'Иванов', 'Петров', 'Сидоров', 'Кузнецова', 'Смирнов', 'Волкова'],
+    })
+    expect(s().filters).toEqual([])
+    s().undo()
+    expect(s().filters).toEqual([{ col: 0, mode: 'include', values: ['Иванов'] }])
+  })
+
+  it('undo фильтра возвращает курсор на якорь, redo — не теряет', () => {
+    s().goTo(5, 1)
+    s().filterByValue(0, 'Петров')
+    expect(visibleRowsOf(s().sheet, s().filters)!).not.toContain(5) // строка якоря скрыта
+    s().goTo(1, 0) // ушли с якоря к видимым
+    s().undo()
+    expect(s().filters).toEqual([])
+    expect(s().selection.active).toEqual({ row: 5, col: 1 }) // вернулись, где были до фильтра
+    s().redo()
+    expect(s().filters).toHaveLength(1)
+  })
+
+  it('фильтр в общем стеке истории: правка и фильтр откатываются по шагам', () => {
+    s().filterByValue(0, 'Иванов')
+    s().clickCell(1, 2)
+    s().beginEdit()
+    s().setEditValue('555')
+    s().commitEdit('none')
+    expect(getCell(s().sheet, 1, 2)).toBe('555')
+    s().undo() // правка
+    expect(getCell(s().sheet, 1, 2)).toBe('10000')
+    expect(s().filters).toHaveLength(1) // фильтр ещё стоит
+    s().undo() // фильтр
+    expect(s().filters).toEqual([])
+    s().redo() // фильтр снова
+    expect(s().filters).toEqual([{ col: 0, mode: 'include', values: ['Иванов'] }])
+    expect(getCell(s().sheet, 1, 2)).toBe('10000') // данные не тронуты
+  })
+
+  it('повторная установка того же фильтра не пишет историю и не делает файл грязным', () => {
+    s().filterByValue(0, 'Иванов')
+    const dirtyAfterFilter = s().dirty
+    s().setColumnFilter({ col: 0, mode: 'include', values: ['Иванов'] }) // то же самое
+    s().undo() // единственная запись — первая установка
+    expect(s().filters).toEqual([])
+    expect(s().dirty).toBe(dirtyAfterFilter) // undo фильтра файл не пачкает
+  })
+
   it('фильтры изолированы по вкладкам', () => {
     s().filterByValue(0, 'Иванов')
     s().addTab()
