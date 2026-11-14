@@ -38,9 +38,13 @@ export function SettingsDialog(props: { onClose: () => void }) {
     gridStore.getState().setCsvDelimiter(d)
   }
 
+  // подписи — самоназвания языков (novagrid-070: +ro/sk/ar)
   const langs: readonly { value: Lang; label: string }[] = [
     { value: 'ru', label: 'Русский' },
     { value: 'en', label: 'English' },
+    { value: 'ro', label: 'Română' },
+    { value: 'sk', label: 'Slovenčina' },
+    { value: 'ar', label: 'العربية' },
   ]
   const themes: readonly { value: ThemePref; label: string }[] = [
     { value: 'system', label: t.settingsThemeSystem },

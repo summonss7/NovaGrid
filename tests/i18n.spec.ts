@@ -68,6 +68,50 @@ test.describe('локализация и настройки (6.3)', () => {
     await page.keyboard.press('Escape')
   })
 
+  test('новые языки novagrid-070: ro/sk/ar переключаются, арабский даёт RTL', async ({ page }) => {
+    await page.goto('/?testui=1&test=1')
+    await page.waitForFunction(() => window.__nv !== undefined)
+
+    // румынский: интерфейс и формат чисел ro-RO (10 000 → «10.000»)
+    await page.click('.toolbar-settings')
+    await page.click('.settings-dialog .settings-seg >> text=Română')
+    await expect(page.getByRole('button', { name: 'Deschide' })).toBeVisible()
+    await expect(page.locator('html')).toHaveAttribute('lang', 'ro')
+    await page.keyboard.press('Escape')
+    // формат чисел: ячейка B2 демо-книги = 10000
+    await page.setInputFiles('#nv-file-input', 'public/fixtures/demo-book.xlsx')
+    await expect
+      .poll(() => page.evaluate(() => window.__nv?.cell(1, 0) ?? ''), { timeout: 5000 })
+      .toBe('Иванов')
+    const ro = await page.evaluate(() => window.__nv!.cellCenter(1, 2))
+    await page.mouse.click(ro.x, ro.y)
+    await expect(page.locator('.status-metric').first()).toContainText('Σ 10.000')
+
+    // словацкий: заголовок справки sk-SK, формат 10 000 (неразрывный пробел)
+    await page.click('.toolbar-settings')
+    await page.click('.settings-dialog .settings-seg >> text=Slovenčina')
+    await page.keyboard.press('Escape')
+    await expect(page.getByRole('button', { name: 'Otvoriť' })).toBeVisible()
+    await expect(page.locator('.status-metric').first()).toContainText(/Σ 10\s000/)
+
+    // арабский: html dir=rtl (интерфейс справа налево), грид остаётся LTR
+    await page.click('.toolbar-settings')
+    await page.click('.settings-dialog .settings-seg >> text=العربية')
+    await page.keyboard.press('Escape')
+    await expect(page.getByRole('button', { name: 'فتح' })).toBeVisible()
+    await expect(page.locator('html')).toHaveAttribute('lang', 'ar')
+    await expect(page.locator('html')).toHaveAttribute('dir', 'rtl')
+    await expect(page.locator('.grid-area')).toHaveAttribute('dir', 'ltr')
+
+    // назад в русский: dir возвращается в ltr
+    await page.click('.toolbar-settings')
+    await page.click('.settings-dialog .settings-seg >> text=Русский')
+    await page.keyboard.press('Escape')
+    await expect(page.locator('html')).toHaveAttribute('dir', 'ltr')
+    // мы в режиме книги — тулбарный «Открыть» снова по-русски
+    await expect(page.getByRole('button', { name: 'Открыть' })).toBeVisible()
+  })
+
   test('разделитель CSV из настроек предвыбран в «Сохранить как…»', async ({ page }) => {
     await page.goto('/?testui=1&test=1')
     await page.waitForFunction(() => window.__nv !== undefined)

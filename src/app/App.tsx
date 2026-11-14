@@ -43,6 +43,7 @@ import {
   desktopPickBookPaths,
   desktopPickSavePath,
   desktopSetDirty,
+  desktopSetMenuLang,
   desktopStageBookBytes,
   desktopStartupBooks,
   desktopTakeStagedBook,
@@ -764,6 +765,12 @@ export default function App() {
   // тема (7.2) применяется живьём (data-theme + PWA theme-color)
   useDocumentLang()
   useThemeSync()
+  // язык нативного меню/диалогов обёртки — за языком интерфейса (novagrid-070):
+  // каждое окно шлёт при старте и смене, обёртка пересобирает меню идемпотентно
+  const menuLang = useSettings((s) => s.lang)
+  useEffect(() => {
+    if (isDesktop()) void desktopSetMenuLang(menuLang).catch(() => undefined)
+  }, [menuLang])
   useEffect(() => {
     const { tableSize, csvDelimiter } = useSettings.getState()
     zoomStore.getState().setZoom(TABLE_SIZE_SCALE[tableSize])

@@ -62,6 +62,117 @@ struct StagedBooks(Mutex<HashMap<u64, Vec<u8>>>);
 /// перехватывается — чистые окна закрываются мгновенно, без опроса фронтенда.
 struct DirtyWindows(Mutex<HashSet<String>>);
 
+/// Текущий язык нативного меню/диалогов (novagrid-070): фронтенд шлёт
+/// set_menu_lang при старте и смене языка; новые окна книг наследуют его.
+struct MenuLang(Mutex<String>);
+
+/// Строки нативного меню и файловых диалогов (novagrid-070: ru/en/ro/sk/ar).
+struct MenuStrings {
+    file: &'static str,
+    open: &'static str,
+    save: &'static str,
+    save_as: &'static str,
+    print: &'static str,
+    help: &'static str,
+    site: &'static str,
+    check_update: &'static str,
+    about: &'static str,
+    open_dialog_title: &'static str,
+    open_filter_label: &'static str,
+    save_dialog_title: &'static str,
+    snapshot_filter: &'static str,
+}
+
+const MENU_RU: MenuStrings = MenuStrings {
+    file: "Файл",
+    open: "Открыть…",
+    save: "Сохранить",
+    save_as: "Сохранить как…",
+    print: "Печать…",
+    help: "Справка",
+    site: "Открыть сайт NovaGrid",
+    check_update: "Проверить обновления…",
+    about: "О программе",
+    open_dialog_title: "Открыть книги",
+    open_filter_label: "Таблицы и документы",
+    save_dialog_title: "Сохранить книгу",
+    snapshot_filter: "Снапшот NovaGrid",
+};
+
+const MENU_EN: MenuStrings = MenuStrings {
+    file: "File",
+    open: "Open…",
+    save: "Save",
+    save_as: "Save as…",
+    print: "Print…",
+    help: "Help",
+    site: "Open NovaGrid website",
+    check_update: "Check for updates…",
+    about: "About",
+    open_dialog_title: "Open books",
+    open_filter_label: "Spreadsheets and documents",
+    save_dialog_title: "Save book",
+    snapshot_filter: "NovaGrid snapshot",
+};
+
+const MENU_RO: MenuStrings = MenuStrings {
+    file: "Fișier",
+    open: "Deschide…",
+    save: "Salvează",
+    save_as: "Salvează ca…",
+    print: "Tipărește…",
+    help: "Ajutor",
+    site: "Deschide site-ul NovaGrid",
+    check_update: "Verifică actualizări…",
+    about: "Despre",
+    open_dialog_title: "Deschide cărți",
+    open_filter_label: "Foi de calcul și documente",
+    save_dialog_title: "Salvează cartea",
+    snapshot_filter: "Instantaneu NovaGrid",
+};
+
+const MENU_SK: MenuStrings = MenuStrings {
+    file: "Súbor",
+    open: "Otvoriť…",
+    save: "Uložiť",
+    save_as: "Uložiť ako…",
+    print: "Tlačiť…",
+    help: "Pomocník",
+    site: "Otvoriť stránku NovaGrid",
+    check_update: "Skontrolovať aktualizácie…",
+    about: "O aplikácii",
+    open_dialog_title: "Otvoriť knihy",
+    open_filter_label: "Tabuľky a dokumenty",
+    save_dialog_title: "Uložiť knihu",
+    snapshot_filter: "Snímok NovaGrid",
+};
+
+const MENU_AR: MenuStrings = MenuStrings {
+    file: "ملف",
+    open: "فتح…",
+    save: "حفظ",
+    save_as: "حفظ باسم…",
+    print: "طباعة…",
+    help: "مساعدة",
+    site: "فتح موقع NovaGrid",
+    check_update: "التحقق من التحديثات…",
+    about: "حول",
+    open_dialog_title: "فتح الكتب",
+    open_filter_label: "جداول ومستندات",
+    save_dialog_title: "حفظ الكتاب",
+    snapshot_filter: "لقطة NovaGrid",
+};
+
+fn menu_strings(lang: &str) -> &'static MenuStrings {
+    match lang {
+        "en" => &MENU_EN,
+        "ro" => &MENU_RO,
+        "sk" => &MENU_SK,
+        "ar" => &MENU_AR,
+        _ => &MENU_RU,
+    }
+}
+
 /// Флаг dirty книги в этом окне: фронтенд шлёт при каждой смене (novagrid-033).
 #[tauri::command]
 fn set_window_dirty(window: tauri::WebviewWindow, state: tauri::State<DirtyWindows>, dirty: bool) {
@@ -93,11 +204,12 @@ fn confirm_close(window: tauri::WebviewWindow) -> Result<(), String> {
 /// конвейером, фразу спросит веб-диалог. .docx/.doc — документы Word
 /// (novagrid-068): таблицы документа тем же конвейером, без формул.
 #[tauri::command]
-fn pick_open_books() -> Vec<String> {
+fn pick_open_books(state: tauri::State<MenuLang>) -> Vec<String> {
+    let s = menu_strings(&state.0.lock().map(|l| l.clone()).unwrap_or_default());
     rfd::FileDialog::new()
-        .set_title("Открыть книги")
+        .set_title(s.open_dialog_title)
         .add_filter(
-            "Таблицы и документы",
+            s.open_filter_label,
             &["xlsx", "xlsm", "xls", "ods", "csv", "tsv", "docx", "doc", "nvgridx"],
         )
         .pick_files()
@@ -107,15 +219,16 @@ fn pick_open_books() -> Vec<String> {
 
 /// Нативный диалог «Сохранить книгу»: путь к файлу (null — отмена).
 #[tauri::command]
-fn pick_save_book(default_name: String, format: String) -> Option<String> {
+fn pick_save_book(state: tauri::State<MenuLang>, default_name: String, format: String) -> Option<String> {
+    let s = menu_strings(&state.0.lock().map(|l| l.clone()).unwrap_or_default());
     let (label, ext) = match format.as_str() {
         "csv" => ("CSV", "csv"),
         "ods" => ("OpenDocument", "ods"),
-        "nvgridx" => ("Снапшот NovaGrid", "nvgridx"),
+        "nvgridx" => (s.snapshot_filter, "nvgridx"),
         _ => ("Excel", "xlsx"),
     };
     rfd::FileDialog::new()
-        .set_title("Сохранить книгу")
+        .set_title(s.save_dialog_title)
         .add_filter(label, &[ext])
         .set_file_name(&default_name)
         .save_file()
@@ -153,9 +266,10 @@ fn startup_books(state: tauri::State<StartupBooks>) -> Vec<String> {
 /// Доп. окно с книгой: query уже закодирован фронтендом (encodeURIComponent)
 /// и различается по источнику — file=<путь> или staged=<id>&name=<имя>.
 #[tauri::command]
-async fn open_book_window(app: tauri::AppHandle, query: String) -> Result<(), String> {
+async fn open_book_window(app: tauri::AppHandle, state: tauri::State<MenuLang>, query: String) -> Result<(), String> {
     let label = format!("book-{}", WINDOW_SEQ.fetch_add(1, Ordering::Relaxed));
     let url = format!("index.html?{query}");
+    let strings = menu_strings(&state.0.lock().map(|l| l.clone()).unwrap_or_default());
     WebviewWindowBuilder::new(
         &app,
         &label,
@@ -167,7 +281,7 @@ async fn open_book_window(app: tauri::AppHandle, query: String) -> Result<(), St
     .center()
     // как у главного окна конфига: HTML5 drag&drop вместо событий Tauri
     .drag_and_drop(false)
-    .menu(build_menu(&app).map_err(|e| e.to_string())?)
+    .menu(build_menu(&app, strings).map_err(|e| e.to_string())?)
     .build()
     .map(|_| ())
     .map_err(|e| e.to_string())
@@ -223,12 +337,13 @@ fn path_string(path: PathBuf) -> String {
 /// Нативное меню окна ( акселераторы перехватывают Ctrl+O/S/P до webview).
 /// Строится для каждого окна отдельно: событие novagrid:menu уходит только
 /// в окно, чьё меню нажали (иначе все окна открыли бы диалог разом).
-fn build_menu<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<Menu<R>> {
-    let open = MenuItem::with_id(app, "open", "Открыть…", true, Some("Ctrl+O"))?;
-    let save = MenuItem::with_id(app, "save", "Сохранить", true, Some("Ctrl+S"))?;
-    let save_as = MenuItem::with_id(app, "save-as", "Сохранить как…", true, Some("Ctrl+Shift+S"))?;
-    let print = MenuItem::with_id(app, "print", "Печать…", true, Some("Ctrl+P"))?;
-    let file_menu = SubmenuBuilder::new(app, "Файл")
+/// Строки — по языку интерфейса (novagrid-070), по умолчанию русский.
+fn build_menu<R: tauri::Runtime>(app: &tauri::AppHandle<R>, s: &MenuStrings) -> tauri::Result<Menu<R>> {
+    let open = MenuItem::with_id(app, "open", s.open, true, Some("Ctrl+O"))?;
+    let save = MenuItem::with_id(app, "save", s.save, true, Some("Ctrl+S"))?;
+    let save_as = MenuItem::with_id(app, "save-as", s.save_as, true, Some("Ctrl+Shift+S"))?;
+    let print = MenuItem::with_id(app, "print", s.print, true, Some("Ctrl+P"))?;
+    let file_menu = SubmenuBuilder::new(app, s.file)
         .item(&open)
         .item(&save)
         .item(&save_as)
@@ -236,21 +351,20 @@ fn build_menu<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<Men
         .item(&print)
         .build()?;
 
-    let site = MenuItem::with_id(app, "site", "Открыть сайт NovaGrid", true, None::<&str>)?;
+    let site = MenuItem::with_id(app, "site", s.site, true, None::<&str>)?;
     // novagrid-036: проверка обновлений из центра Aila — диалог открывает
     // окно, чьё меню нажали (событие уходит как у «Файл», адресно)
-    let check_update =
-        MenuItem::with_id(app, "check-update", "Проверить обновления…", true, None::<&str>)?;
+    let check_update = MenuItem::with_id(app, "check-update", s.check_update, true, None::<&str>)?;
     let about = PredefinedMenuItem::about(
         app,
-        Some("О программе"),
+        Some(s.about),
         Some(AboutMetadata {
             name: Some("NovaGrid".to_string()),
             version: Some(env!("CARGO_PKG_VERSION").to_string()),
             ..Default::default()
         }),
     )?;
-    let help_menu = SubmenuBuilder::new(app, "Справка")
+    let help_menu = SubmenuBuilder::new(app, s.help)
         .item(&site)
         .item(&check_update)
         .separator()
@@ -258,6 +372,26 @@ fn build_menu<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<Men
         .build()?;
 
     Menu::with_items(app, &[&file_menu, &help_menu])
+}
+
+/// Смена языка меню/диалогов (novagrid-070): фронтенд вызывает при старте
+/// и каждой смене языка. Меню пересобирается целиком (идентификаторы те же);
+/// app.set_menu меняет меню по умолчанию, а окна книг имеют своё — обновляем
+/// каждое явно, чтобы язык сменился везде сразу.
+#[tauri::command]
+fn set_menu_lang(app: tauri::AppHandle, state: tauri::State<MenuLang>, lang: String) -> Result<(), String> {
+    if !matches!(lang.as_str(), "ru" | "en" | "ro" | "sk" | "ar") {
+        return Err(format!("Неизвестный язык меню: {lang}"));
+    }
+    if let Ok(mut cur) = state.0.lock() {
+        *cur = lang.clone();
+    }
+    let menu = build_menu(&app, menu_strings(&lang)).map_err(|e| e.to_string())?;
+    app.set_menu(menu.clone()).map_err(|e| e.to_string())?;
+    for win in app.webview_windows().into_values() {
+        let _ = win.set_menu(menu.clone());
+    }
+    Ok(())
 }
 
 /// Запуск десктоп-обёртки (вызов из novagrid_lib::run, lib.rs).
@@ -275,6 +409,7 @@ pub fn run() {
             open_external,
             set_window_dirty,
             set_window_title,
+            set_menu_lang,
             confirm_close,
             updater::updater_check,
             updater::updater_download,
@@ -290,12 +425,14 @@ pub fn run() {
             app.manage(StartupBooks(Mutex::new(startup)));
             app.manage(StagedBooks(Mutex::new(HashMap::new())));
             app.manage(DirtyWindows(Mutex::new(HashSet::new())));
+            // язык меню по умолчанию — русский; фронтенд пришлёт set_menu_lang
+            app.manage(MenuLang(Mutex::new("ru".to_string())));
 
             // novagrid-036: .old от прошлого самообновления больше не запущен —
             // можно удалить (см. updater::updater_apply)
             updater::cleanup_old();
 
-            app.set_menu(build_menu(app.handle())?)?;
+            app.set_menu(build_menu(app.handle(), menu_strings("ru"))?)?;
             Ok(())
         })
         // novagrid-033: крестик у «грязного» окна не закрывает его молча —

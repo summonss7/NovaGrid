@@ -1366,6 +1366,9 @@ export function GridCanvas() {
     <main
       ref={mainRef}
       className="grid-area"
+      /* арабский RTL (novagrid-070): интерфейс зеркалится, грид — нет:
+         колонки A1+ и hit-тест указателя остаются слева направо */
+      dir="ltr"
       role="grid"
       aria-label={t.gridArea}
       aria-rowcount={rows}

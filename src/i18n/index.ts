@@ -15,8 +15,12 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { ru, type RuDict } from './ru'
 import { en } from './en'
+import { ro } from './ro'
+import { sk } from './sk'
+import { ar } from './ar'
 
-export type Lang = 'ru' | 'en'
+/** ru/en — Этап 6.3; ro/sk/ar — novagrid-070 */
+export type Lang = 'ru' | 'en' | 'ro' | 'sk' | 'ar'
 export type CsvDelimiter = ';' | ',' | '\t'
 /** масштаб таблицы: применяется к зуму (5.3) при старте и смене настройки */
 export type TableSize = 's' | 'm' | 'l' | 'xl'
@@ -93,7 +97,7 @@ export const useSettings = create<SettingsState>()(
   ),
 )
 
-const DICTS: Record<Lang, RuDict> = { ru, en }
+const DICTS: Record<Lang, RuDict> = { ru, en, ro, sk, ar }
 
 /** Словарь текущего языка (вне React — по текущему состоянию стора). */
 export function dict(): RuDict {
@@ -106,10 +110,14 @@ export function useT(): RuDict {
   return DICTS[lang]
 }
 
-/** document.lang для скринридеров/IME вслед за языком интерфейса. */
+/** document.lang/dir для скринридеров/IME вслед за языком интерфейса;
+ *  арабский разворачивает интерфейс справа налево (novagrid-070) —
+ *  канвас-грид остаётся LTR (dir="ltr" на .grid-area): координаты мыши
+ *  и колонки A1+ в RTL не переезжают. */
 export function useDocumentLang(): void {
   const lang = useSettings((s) => s.lang)
   useEffect(() => {
     document.documentElement.lang = lang
+    document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr'
   }, [lang])
 }

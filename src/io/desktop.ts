@@ -186,6 +186,14 @@ export function desktopSetTitle(title: string): Promise<void> {
   return invoke<void>('set_window_title', { title })
 }
 
+/**
+ * Язык нативного меню и файловых диалогов (novagrid-070): вызывается при
+ * старте и смене языка интерфейса; обёртка пересобирает меню всех окон.
+ */
+export function desktopSetMenuLang(lang: string): Promise<void> {
+  return invoke<void>('set_menu_lang', { lang })
+}
+
 /** Закрыть окно, обойдя перехват: решение «сохранить/не сохранять» принято. */
 export function desktopConfirmClose(): Promise<void> {
   return invoke<void>('confirm_close')
