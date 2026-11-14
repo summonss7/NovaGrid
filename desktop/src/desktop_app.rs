@@ -266,10 +266,12 @@ fn startup_books(state: tauri::State<StartupBooks>) -> Vec<String> {
 /// Доп. окно с книгой: query уже закодирован фронтендом (encodeURIComponent)
 /// и различается по источнику — file=<путь> или staged=<id>&name=<имя>.
 #[tauri::command]
-async fn open_book_window(app: tauri::AppHandle, state: tauri::State<MenuLang>, query: String) -> Result<(), String> {
+async fn open_book_window(app: tauri::AppHandle, query: String) -> Result<(), String> {
     let label = format!("book-{}", WINDOW_SEQ.fetch_add(1, Ordering::Relaxed));
     let url = format!("index.html?{query}");
-    let strings = menu_strings(&state.0.lock().map(|l| l.clone()).unwrap_or_default());
+    // язык меню — из состояния приложения: tauri::State в сигнатуре async-команды
+    // не проходит строгий rustc 1.98 сборочного тулчейна (E0726, даже с '_)
+    let strings = menu_strings(&app.state::<MenuLang>().0.lock().map(|l| l.clone()).unwrap_or_default());
     WebviewWindowBuilder::new(
         &app,
         &label,
