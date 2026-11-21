@@ -59,8 +59,11 @@ export function SearchBox() {
       : []
   const moreResults = Math.max(0, search.hits.length - results.length)
 
-  // умный поиск (novagrid-065): подсказка про слова/фразы/исключения
-  const smart = !search.wholeCell && parseQueryTerms(search.query, search.caseSensitive).length > 1
+  // умный поиск (novagrid-065): подсказка про слова/фразы/исключения;
+  // галочка снята (novagrid-072) — подсказка, что слова ищутся подряд
+  const multi = !search.wholeCell && parseQueryTerms(search.query, search.caseSensitive).length > 1
+  const smart = search.smart && multi
+  const literal = !search.smart && multi
 
   return (
     <div className={`search-wrap${search.open ? ' is-open' : ''}`}>
@@ -170,7 +173,20 @@ export function SearchBox() {
             </button>
           </div>
 
+          {/* галочка «Умный поиск» (novagrid-072): включён по умолчанию */}
+          <label className="search-smart-toggle">
+            <input
+              type="checkbox"
+              checked={search.smart}
+              onChange={(e) =>
+                gridStore.getState().setSearchOptions({ smart: e.target.checked })
+              }
+            />
+            {t.searchSmart}
+          </label>
+
           {smart && <div className="search-smart-hint">{t.searchSmartHint}</div>}
+          {literal && <div className="search-smart-hint">{t.searchLiteralHint}</div>}
 
           {optionsOpen && (
             <div className="search-options">

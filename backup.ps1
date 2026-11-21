@@ -31,11 +31,15 @@ New-Item -ItemType Directory -Path $temp | Out-Null
 # build/.gradle — кэши Gradle gen/android (появились с Android-обёрткой,
 # novagrid-058; 1+ ГБ и глубины путей, от которых падает Compress-Archive),
 # builds/test-results — рантайм-артефакты (в git не входят).
+# /XJ — не ходить по симлинкам: Android-сборка кладёт в jniLibs ссылку на
+# desktop\target (исключён), после чистки target она битая и robocopy на ней
+# застревал навсегда (без /R он переспрашивает миллион раз — novagrid-072).
+# /R:1 /W:1 — при реальной ошибке чтения отказываться сразу, а не висеть.
 $excludeDirs = @('.git', 'backups', 'node_modules', 'dist', '.zcode',
     'builds', 'test-results', 'build', '.gradle',
     (Join-Path $PSScriptRoot 'desktop\target'))
-robocopy $PSScriptRoot $temp /E /XD $excludeDirs `
-    /XF '*.log' '.visible-*' /NFL /NDL /NJH /NJS /NC /NS /NP | Out-Null
+robocopy $PSScriptRoot $temp /E /XD $excludeDirs /XJ `
+    /XF '*.log' '.visible-*' /R:1 /W:1 /NFL /NDL /NJH /NJS /NC /NS /NP | Out-Null
 if ($LASTEXITCODE -ge 8) { Write-Host "FAILED: robocopy exit $LASTEXITCODE"; exit 1 }
 
 # Архивируем

@@ -191,6 +191,24 @@ describe('search: умный поиск по словам (novagrid-065)', () =>
       { tab: -1, row: 3, col: 1 },
     ])
   })
+
+  it('галочка выключена (novagrid-072): весь запрос — буквальная подстрока', () => {
+    const dumb = { caseSensitive: false, wholeCell: false, smart: false }
+    // слова в разных ячейках строки — подряд их нет, совпадений нет
+    expect(searchSheet(staff, 'иванов продажи', dumb)).toEqual([])
+    // «менеджер продаж» — подстрока одной ячейки: находится и без разбора
+    const s = sheetOf([['Примечание'], ['Иванов менеджер продаж'], ['Петров продажи']])
+    expect(searchSheet(s, 'менеджер продаж', dumb)).toEqual([{ tab: -1, row: 1, col: 0 }])
+    expect(searchSheet(s, 'менеджер продаж', plain)).toEqual([{ tab: -1, row: 1, col: 0 }])
+  })
+
+  it('выключенный умный поиск не разбирает операторы: «-» и кавычки — просто текст', () => {
+    const dumb = { caseSensitive: false, wholeCell: false, smart: false }
+    const s = sheetOf([['Значение'], ['менеджер -склад'], ['менеджер склад']])
+    expect(searchSheet(s, 'менеджер -склад', dumb)).toEqual([{ tab: -1, row: 1, col: 0 }])
+    // с разбором «-склад» — исключение: строк с «склад» не остаётся
+    expect(searchSheet(s, 'менеджер -склад', plain)).toEqual([])
+  })
 })
 
 describe('search: разбор запроса', () => {

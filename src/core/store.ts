@@ -151,6 +151,8 @@ export interface SearchState {
   scope: SearchScope
   caseSensitive: boolean
   wholeCell: boolean
+  /** умный поиск по словам (novagrid-072): галочка в панели, по умолчанию включён */
+  smart: boolean
   /** все совпадения в рамках scope; текущее — index */
   hits: SearchHit[]
   /** ключи «row:col» совпадений активного листа — подсветка канвасом */
@@ -388,7 +390,7 @@ export interface GridState {
   closeSearch: () => void
   setSearchQuery: (query: string) => void
   setSearchScope: (scope: SearchScope) => void
-  setSearchOptions: (opts: Partial<Pick<SearchOptions, 'caseSensitive' | 'wholeCell'>>) => void
+  setSearchOptions: (opts: Partial<Pick<SearchOptions, 'caseSensitive' | 'wholeCell' | 'smart'>>) => void
   /** шаг навигации по совпадениям (Enter/Shift+Enter/F3/▲▼), циклично */
   searchStep: (dir: 1 | -1) => void
   /** переход на конкретное совпадение (клик в списке «все листы») */
@@ -693,6 +695,7 @@ const EMPTY_SEARCH: SearchState = {
   scope: 'sheet',
   caseSensitive: false,
   wholeCell: false,
+  smart: true,
   hits: [],
   hitSet: new Set(),
   index: 0,
@@ -866,13 +869,13 @@ export const gridStore = createStore<GridState>((set, get) => {
    */
   const refreshSearch = () => {
     const st = get()
-    const { open, query, scope, caseSensitive, wholeCell, index } = st.search
+    const { open, query, scope, caseSensitive, wholeCell, smart, index } = st.search
     if (!open || query === '') {
       if (st.search.hits.length > 0)
         set({ search: { ...st.search, hits: [], hitSet: new Set(), index: 0 } })
       return
     }
-    const opts: SearchOptions = { caseSensitive, wholeCell }
+    const opts: SearchOptions = { caseSensitive, wholeCell, smart }
     const hits =
       scope === 'book'
         ? searchBook(

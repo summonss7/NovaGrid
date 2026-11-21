@@ -10,6 +10,9 @@
  * фраза внутри одной ячейки, «-слово» — исключить строки с этим словом.
  * Без учёта регистра Ё=Е. Одно слово без операторов — прежний поиск
  * подстроки; «ячейка целиком» — буквальное сравнение без разбора.
+ * Галочка «Умный поиск» (novagrid-072, включена по умолчанию): выключена —
+ * весь запрос ищется одна_буквальной_подстрокой, слова подряд, как
+ * набраны; кавычки и «-» операторами не считаются.
  * «Найти и заменить» (core/replace) остаётся буквальным — замене нужен
  * точный текст, счётчики поиска и замены могут расходиться.
  */
@@ -21,6 +24,12 @@ import type { SheetModel } from './sheet'
 export interface SearchOptions {
   caseSensitive: boolean
   wholeCell: boolean
+  /**
+   * Умный поиск по словам (novagrid-072): undefined/true — слова запроса
+   * ищутся по отдельности (режим novagrid-065); false — весь запрос одна
+   * буквальная подстрока. «Ячейка целиком» приоритетнее: разбор отключён.
+   */
+  smart?: boolean
 }
 
 export interface SearchHit {
@@ -156,6 +165,13 @@ export function searchSheet(
       if (visible && visibleIndexOf(visible, row) < 0) continue
       hits.push({ tab: -1, row, col })
     }
+    hits.sort((a, b) => a.row - b.row || a.col - b.col)
+    return hits
+  }
+  // галочка «Умный поиск» снята — слова подряд: весь запрос буквальная
+  // подстрока, без разбора на слова/фразы/исключения
+  if (opts.smart === false) {
+    substringScan(sheet, fold(query, opts.caseSensitive), opts.caseSensitive, visible, hits)
     hits.sort((a, b) => a.row - b.row || a.col - b.col)
     return hits
   }

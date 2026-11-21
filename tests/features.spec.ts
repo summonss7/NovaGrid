@@ -367,6 +367,31 @@ test.describe('поиск (Ф2): инкрементальный, лист/кни
     expect(info.count).toBeLessThan(264)
   })
 
+  test('галочка «Умный поиск» (novagrid-072): включена по умолчанию, снять — слова подряд', async ({
+    page,
+  }) => {
+    const api = nv(page)
+
+    await page.keyboard.press('Control+f')
+    await page.keyboard.type('Иванов 10000')
+
+    // включена по умолчанию: подсказка умного режима, слова в разных колонках
+    const toggle = page.getByLabel('Умный поиск', { exact: true })
+    await expect(toggle).toBeChecked()
+    await expect(page.locator('.search-smart-hint')).toBeVisible()
+    await expect(page.locator('.search-counter')).toHaveText('1 / 264')
+
+    // сняли галочку: «Иванов 10000» подряд нигде не набрано — совпадений нет
+    await toggle.uncheck()
+    await expect(page.locator('.search-counter')).toHaveText('0 / 0')
+    expect((await api.searchInfo()).count).toBe(0)
+    await expect(page.locator('.search-smart-hint')).toContainText('подряд')
+
+    // вернули галочку — совпадения возвращаются
+    await toggle.check()
+    await expect(page.locator('.search-counter')).toHaveText('1 / 264')
+  })
+
   test('поиск по всем листам находит совпадения на втором листе и переключает вкладку', async ({
     page,
   }) => {

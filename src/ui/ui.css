@@ -201,6 +201,18 @@
   cursor: pointer;
 }
 
+/* галочка «Умный поиск» — всегда видна в открытой панели (novagrid-072) */
+.search-smart-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  font-family: var(--nv-font-text);
+  font-size: 13px;
+  color: var(--nv-ink);
+  cursor: pointer;
+}
+
 /* подсказка умного поиска (несколько слов в запросе) */
 .search-smart-hint {
   margin-top: 8px;
